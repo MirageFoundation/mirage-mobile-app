@@ -9,21 +9,28 @@ export function CloudflareErrorToast() {
  const toastIdRef = useRef<string | null>(null);
 
  useEffect(() => {
-  if (hasError) {
-   if (toastIdRef.current) return;
+  if (toastIdRef.current) {
+   toast.dismiss(toastIdRef.current);
+   toastIdRef.current = null;
+  }
 
+  if (hasError) {
    const id = toast.show("error", {
     title: `Cloudflare error (${errorCode})`,
     duration: 0,
    });
    toastIdRef.current = id;
-  } else {
+  }
+ }, [errorCode, hasError, toast]);
+
+ useEffect(() => {
+  return () => {
    if (toastIdRef.current) {
     toast.dismiss(toastIdRef.current);
     toastIdRef.current = null;
    }
-  }
- }, [hasError]);
+  };
+ }, [toast]);
 
  return null;
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useVideoMuteStore } from "@/src/stores";
 import {
-  enableIosAudioPlayback,
   type MediaItem,
   type VideoApi,
 } from "./media-post-detail-media-item";
@@ -50,12 +49,9 @@ export function useMediaPostDetailVideoControls(mediaItems: MediaItem[]) {
     return () => clearInterval(timer);
   }, [activeMedia?.uri, activeVideoApi, isVideoActive]);
 
-  const handleMuteToggle = useCallback(async () => {
+  const handleMuteToggle = useCallback(() => {
     const next = !globalMuted;
     toggleGlobalMute();
-    if (!next) {
-      await enableIosAudioPlayback();
-    }
     activeVideoApi()?.setMuted(next).catch(() => {});
   }, [activeVideoApi, globalMuted, toggleGlobalMute]);
 

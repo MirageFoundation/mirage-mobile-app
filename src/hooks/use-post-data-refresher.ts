@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
-import { getComments, getPosts, getUserPosts } from "@/src/api/read/endpoints/posts";
+import {
+  getComments,
+  getPosts,
+  getUserPosts,
+  normalizeUserPostsQueryParams,
+} from "@/src/api/read/endpoints/posts";
 import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
-import { queryKeys } from "@/src/api/read/query-keys";
+import {
+  getUserPostsQueryParamsFromKey,
+  queryKeys,
+} from "@/src/api/read/query-keys";
 import { getVisiblePostIds } from "@/src/services/seen-posts-tracker";
 import { useAppState } from "./use-app-state";
 
@@ -115,43 +123,57 @@ async function refreshUserPostsQuery(
   queryClient: QueryClient,
   params: UserPostsRefreshParams,
 ) {
-  const queryKey = queryKeys.userPosts(params.owner, params.type);
-
-  const existingData = queryClient.getQueryData<InfiniteData<PostsResponse>>(queryKey);
-  if (!existingData?.pages?.length) return;
-
-  const freshPages = await Promise.all(
-    existingData.pages.map((page, index) =>
-      getUserPosts({
-        ...params,
-        page: existingData.pageParams[index] as number,
-        limit: params.limit,
-      }),
-    ),
+  const queryRoot = queryKeys.userPostsForViewer(
+    params.owner,
+    params.address,
   );
-
-  queryClient.setQueryData<InfiniteData<PostsResponse>>(queryKey, (old) => {
-    if (!old) return old;
-
-    let anyChanged = false;
-    const newPages = old.pages.map((page, pageIndex) => {
-      const freshPage = freshPages[pageIndex];
-      if (!freshPage) return page;
-
-      const freshMap = new Map<string, ApiPost>();
-      for (const post of freshPage.posts) {
-        freshMap.set(post.post_id, post);
-      }
-
-      const { posts, changed } = mergePageMetadata(page.posts, freshMap);
-      if (!changed) return page;
-      anyChanged = true;
-      return { ...page, posts };
-    });
-
-    if (!anyChanged) return old;
-    return { ...old, pages: newPages };
+  const targetParams = normalizeUserPostsQueryParams(params);
+  const queries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
+    queryKey: queryRoot,
   });
+
+  await Promise.all(queries.map(async ([queryKey, existingData]) => {
+    if (!existingData?.pages?.length) return;
+    const queryParams = getUserPostsQueryParamsFromKey(queryKey);
+    if (
+      !queryParams ||
+      queryParams.type !== targetParams.type ||
+      queryParams.limit !== targetParams.limit
+    ) return;
+
+    const freshPages = await Promise.all(
+      existingData.pages.map((page, index) =>
+        getUserPosts({
+          ...params,
+          page: existingData.pageParams[index] as number,
+          ...queryParams,
+        }),
+      ),
+    );
+
+    queryClient.setQueryData<InfiniteData<PostsResponse>>(queryKey, (old) => {
+      if (!old) return old;
+
+      let anyChanged = false;
+      const newPages = old.pages.map((page, pageIndex) => {
+        const freshPage = freshPages[pageIndex];
+        if (!freshPage) return page;
+
+        const freshMap = new Map<string, ApiPost>();
+        for (const post of freshPage.posts) {
+          freshMap.set(post.post_id, post);
+        }
+
+        const { posts, changed } = mergePageMetadata(page.posts, freshMap);
+        if (!changed) return page;
+        anyChanged = true;
+        return { ...page, posts };
+      });
+
+      if (!anyChanged) return old;
+      return { ...old, pages: newPages };
+    });
+  }));
 }
 
 function patchRootMetadataIntoPostQueries(

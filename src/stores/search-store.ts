@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
 
 export type RecentSearch = {
   id: string;
@@ -56,8 +59,14 @@ export const useSearchStore = create<SearchState>()(
     }),
     {
       name: "search-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
     }
   )
 );
 
+registerWalletScopedStore({
+  storageName: "search-storage",
+  reset: () => useSearchStore.getState().clearRecentSearches(),
+  rehydrate: () => useSearchStore.persist.rehydrate(),
+});

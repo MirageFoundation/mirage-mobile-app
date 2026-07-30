@@ -1,0 +1,21 @@
+{
+	"references": {
+		"mirage-node": {
+			"description": "Use this when you want to check backend/node codebase for mirage and it’s web app implementation as well",
+			"enabled": true,
+			"source": {
+				"type": "local",
+				"path": "/Users/bat/dev/mirage/mirage-node"
+			}
+		}
+	},
+	"mcp": {
+		"servers": [
+			{
+				"name": "expo",
+				"transport": "http",
+				"url": "https://mcp.expo.dev/mcp"
+			}
+		]
+	}
+}

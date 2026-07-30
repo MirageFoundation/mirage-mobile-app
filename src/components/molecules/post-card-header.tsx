@@ -2,10 +2,21 @@ import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
+
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import type { PostAuthor } from "./post-card-types";
+import { getUsernameColor } from "@/src/utils/tiers";
 
 const MAX_HEADER_LENGTH = 30;
 
@@ -21,16 +32,6 @@ function getTopicUsernameDisplay(topic?: string, username?: string) {
   }
   return { displayTopic: topic, showUsername: false };
 }
-
-import {
-  Menu,
-  MenuOption,
-  MenuOptions,
-  MenuTrigger,
-} from "react-native-popup-menu";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import type { PostAuthor } from "./post-card-types";
-import { getUsernameColor } from "@/src/utils/tiers";
 
 const NEW_USER_COLOR = "rgb(94,194,106)";
 
@@ -74,6 +75,8 @@ export const PostCardHeader = memo(function PostCardHeader({
   isPostDetail = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const isFollowingAll = topic
     ? !!(isFollowing && isTopicFollowed)
@@ -122,6 +125,12 @@ export const PostCardHeader = memo(function PostCardHeader({
     triggerHaptic("medium");
     onFollowTopic?.();
   }, [disabled, onFollowTopic]);
+
+  const handleAuthRequiredFollow = useCallback(() => {
+    if (disabled) return;
+    triggerHaptic("medium");
+    showAuthSheet();
+  }, [disabled, showAuthSheet]);
 
   const { displayTopic, showUsername } = useMemo(
     () => getTopicUsernameDisplay(topic, author.username),
@@ -204,7 +213,34 @@ export const PostCardHeader = memo(function PostCardHeader({
               </View>
             </Pressable>
           )}
-          {!isOwnPost && showFollowButton && !directFollowUser && (
+          {!isOwnPost && showFollowButton && !directFollowUser && !isLoggedIn && (
+            <Pressable
+              onPress={handleAuthRequiredFollow}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={styles.followPressable}
+            >
+              {isFollowingPartial ? (
+                <LinearGradient
+                  colors={["#FFFFFF", "#C1C1C1"]}
+                  locations={[0.5, 0.5]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.followButton, styles.followButtonPartial]}
+                >
+                  <Text size="sm" weight="bold" style={defaultBgStyle}>
+                    Follow
+                  </Text>
+                </LinearGradient>
+              ) : (
+                <View style={[styles.followButton, followingBgStyle]}>
+                  <Text size="sm" weight="bold" style={followTextStyle}>
+                    {isFollowingAll ? "Unfollow" : "Follow"}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          )}
+          {!isOwnPost && showFollowButton && !directFollowUser && isLoggedIn && (
             <Menu>
               <MenuTrigger
                 customStyles={{
@@ -389,7 +425,34 @@ export const PostCardHeader = memo(function PostCardHeader({
             </View>
           </Pressable>
         )}
-        {!isOwnPost && showFollowButton && !directFollowUser && (
+        {!isOwnPost && showFollowButton && !directFollowUser && !isLoggedIn && (
+          <Pressable
+            onPress={handleAuthRequiredFollow}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.followPressable}
+          >
+            {isFollowingPartial ? (
+              <LinearGradient
+                colors={["#FFFFFF", "#C1C1C1"]}
+                locations={[0.5, 0.5]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.followButton, styles.followButtonPartial]}
+              >
+                <Text size="sm" weight="bold" style={defaultBgStyle}>
+                  Follow
+                </Text>
+              </LinearGradient>
+            ) : (
+              <View style={[styles.followButton, followingBgStyle]}>
+                <Text size="sm" weight="bold" style={followTextStyle}>
+                  {isFollowingAll ? "Unfollow" : "Follow"}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+        {!isOwnPost && showFollowButton && !directFollowUser && isLoggedIn && (
           <Menu>
             <MenuTrigger
               customStyles={{

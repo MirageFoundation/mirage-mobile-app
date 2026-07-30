@@ -8,10 +8,8 @@
 import { bech32 } from "@scure/base";
 
 // Hashing functions
-// @ts-expect-error - bundler resolves this correctly at runtime
-import { sha256 } from "@noble/hashes/sha2";
-// @ts-expect-error - bundler resolves this correctly at runtime
-import { ripemd160 } from "@noble/hashes/legacy";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { ripemd160 } from "@noble/hashes/legacy.js";
 
 // Local imports
 import { derivePrivateKey, getCompressedPublicKey, b64encode, isValidMnemonic } from "./crypto";

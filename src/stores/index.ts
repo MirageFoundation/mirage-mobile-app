@@ -1,7 +1,9 @@
 export { useAuthStore, type User } from "./auth-store";
 export {
   usePreferencesStore,
+  useFeedDensity,
   type FeedType,
+  type FeedDensity,
   type ThemeMode,
   type ShareServer,
   type ApiServer,

@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+ registerWalletScopedStore,
+ walletScopedStorage,
+} from "./wallet-scoped-storage";
 import type { AttachmentType, PostDraft } from "@/src/domain/content";
 
 export type { AttachmentType, Community, PostDraft } from "@/src/domain/content";
@@ -110,7 +113,14 @@ export const useDraftStore = create<DraftState>()(
     }),
     {
       name: "draft-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
     }
   )
 );
+
+registerWalletScopedStore({
+ storageName: "draft-storage",
+ reset: () => useDraftStore.getState().clearDraft(),
+ rehydrate: () => useDraftStore.persist.rehydrate(),
+});

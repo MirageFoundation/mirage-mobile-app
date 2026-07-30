@@ -1,10 +1,8 @@
 import Animated from "react-native-reanimated";
-import {
-  ProfileAboutTab,
-  ProfileEmptyState,
-} from "@/src/components/molecules";
+import { ProfileEmptyState } from "@/src/components/molecules";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
+import { ProfileAboutTab } from "@/src/pages/profile/profile-about-tab";
 import { View } from "react-native";
 import { styles } from "./user-profile-styles";
 

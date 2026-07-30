@@ -3,6 +3,7 @@ import type { Post as UIPost } from "@/src/components/molecules";
 import type { Post as ApiPost } from "../../types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { calculateDisplayPoints } from "../endpoints/posts";
+import { transformOptimisticPostState } from "./transform-optimistic-post-state";
 
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
@@ -38,12 +39,6 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
   if (isYouTubeUrl(url)) return "youtube";
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
-      return "video";
-    }
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      return "video";
-    }
     if (parsedUrl.hostname.includes("redgifs.com")) {
       return "gif";
     }
@@ -54,8 +49,6 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
   } catch {
     const path = url.toLowerCase().split("?")[0];
     const extension = path.split(".").pop() ?? "";
-    if (url.includes("cloudflarestream.com")) return "video";
-    if (url.includes("videodelivery.net")) return "video";
     if (url.includes("redgifs.com")) return "gif";
     if (GIF_EXTENSIONS.has(extension)) return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
@@ -149,13 +142,24 @@ export function transformApiPost(
           const w = meta?.w;
           const h = meta?.h;
           const type = getMediaTypeFromUrl(url);
+          // Fall back to the server-computed post thumbnail for the first
+          // media item so hosted stream providers (Bunny, ...)
+          // always have a poster without client-side provider knowledge.
+          const posterUri =
+            meta?.posterUrl ??
+            meta?.poster_url ??
+            (i === 0 && type === "video" && !editOverride?.media
+              ? apiPost.thumbnail || undefined
+              : undefined);
+          const downloadUri = meta?.downloadUrl ?? meta?.download_url;
           return {
           uri: url,
           type,
             width: w,
             height: h,
             aspectRatio: w && h ? w / h : undefined,
-            posterUri: type === "gif" ? url : undefined,
+            posterUri: posterUri ?? (type === "gif" ? url : undefined),
+            downloadUri,
           };
         })
       : apiPost.thumbnail
@@ -187,11 +191,7 @@ export function transformApiPost(
     awards: apiPost.awards ?? [],
     agentEdited: apiPost.agent_edited ?? false,
     agentEditsMeta: apiPost.agent_edits_meta,
-    optimisticStatus: apiPost.optimistic_status,
-    optimisticError: apiPost.optimistic_error,
-    optimisticActionId: apiPost.optimistic_action_id,
-    optimisticDraft: apiPost.optimistic_draft,
-    optimisticVideoPreviewUntil: apiPost.optimistic_video_preview_until,
+    ...transformOptimisticPostState(apiPost),
     appendices: apiPost.appendices?.map((a) => ({
       agent: a.agent,
       agentUsername: a.agent_username,

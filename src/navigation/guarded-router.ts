@@ -2,9 +2,13 @@ import { useCallback, useMemo } from "react";
 import { router as expoRouter, useRouter as useExpoRouter } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 
-const GUARD_MS = 500;
+import {
+  createNavigationDeduplicator,
+  type NavigationAction,
+  type NavigationHref,
+} from "./navigation-deduplication";
 
-type NavigationAction = "push" | "navigate" | "replace";
+const GUARD_MS = 500;
 
 type BypassOptions = {
   /**
@@ -16,30 +20,7 @@ type BypassOptions = {
   bypassGuard?: boolean;
 };
 
-let lastNavTime = 0;
-let lastNavKey: string | null = null;
-
-function describeNavigationTarget(args: unknown[]): string {
-  const target = args[0];
-  if (typeof target === "string") return target;
-  if (target && typeof target === "object") {
-    const record = target as Record<string, unknown>;
-    if (typeof record.pathname === "string") return record.pathname;
-  }
-  return typeof target;
-}
-
-function buildNavigationKey(action: NavigationAction, args: unknown[]): string {
-  const target = args[0];
-  if (typeof target === "string") return `${action}:${target}`;
-  if (target && typeof target === "object") {
-    const record = target as Record<string, unknown>;
-    const pathname =
-      typeof record.pathname === "string" ? record.pathname : "?";
-    return `${action}:${pathname}`;
-  }
-  return `${action}:${typeof target}`;
-}
+const navigationDeduplicator = createNavigationDeduplicator(GUARD_MS);
 
 function isBypassOptions(value: unknown): value is BypassOptions {
   return (
@@ -63,8 +44,7 @@ function extractBypass(args: unknown[]): { args: unknown[]; bypass: boolean } {
  * Use sparingly — intended for notification/share-intent recovery paths.
  */
 export function resetNavigationGuard(reason: string): void {
-  lastNavTime = 0;
-  lastNavKey = null;
+  navigationDeduplicator.reset();
   Sentry.addBreadcrumb({
     category: "navigation",
     message: "Navigation guard reset",
@@ -80,25 +60,27 @@ function guard<T extends (...args: any[]) => any>(
   return ((...rawArgs: Parameters<T>) => {
     const { args, bypass } = extractBypass(rawArgs as unknown[]);
     const now = Date.now();
-    const target = describeNavigationTarget(args);
-    const key = buildNavigationKey(action, args);
 
     // Only suppress when the SAME navigation target is repeated within the
     // guard window. Different targets must never suppress each other, e.g. a
     // notification's `navigate("/(tabs)/inbox")` should never be dropped just
     // because a share-intent `replace("/(tabs)/create")` just fired.
-    if (!bypass && now - lastNavTime < GUARD_MS && lastNavKey === key) {
+    if (
+      navigationDeduplicator.shouldSuppress(
+        action,
+        args[0] as NavigationHref,
+        now,
+        bypass,
+      )
+    ) {
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Duplicate navigation suppressed",
-        data: { action, target, guardMs: GUARD_MS, key },
+        data: { action, guardMs: GUARD_MS },
         level: "info",
       });
       return;
     }
-
-    lastNavTime = now;
-    lastNavKey = key;
 
     try {
       Sentry.addBreadcrumb({
@@ -106,16 +88,14 @@ function guard<T extends (...args: any[]) => any>(
         message: bypass
           ? "Navigation dispatched (guard bypassed)"
           : "Navigation dispatched",
-        data: { action, target, key, bypass },
+        data: { action, bypass },
         level: "info",
       });
       return (fn as (...a: unknown[]) => unknown)(...args);
     } catch (error) {
-      lastNavTime = 0;
-      lastNavKey = null;
+      navigationDeduplicator.reset();
       Sentry.captureException(error, {
         tags: { feature: "navigation", action },
-        extra: { target, args },
       });
       throw error;
     }

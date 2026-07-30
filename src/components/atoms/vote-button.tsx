@@ -4,9 +4,16 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useEffect, useRef } from "react";
-import { Animated, Pressable } from "react-native";
+import { Pressable } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { getVoteColor } from "./vote-button-state";
 
 type VoteButtonProps = {
   /** Vote type: like (upvote) or dislike (downvote) */
@@ -41,59 +48,36 @@ export const VoteButton = ({
   disabled = false,
 }: VoteButtonProps) => {
   const { theme } = useUnistyles();
-  const scale = useRef(new Animated.Value(1)).current;
-  const colorAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const scale = useSharedValue(1);
+  const reducedMotion = useReducedMotion();
 
   const { icon: iconSize, gap } = SIZE_CONFIG[size];
-
-  // Animate color change when active state changes
-  useEffect(() => {
-    Animated.spring(colorAnim, {
-      toValue: isActive ? 1 : 0,
-      useNativeDriver: false,
-      friction: 8,
-    }).start();
-  }, [isActive, colorAnim]);
-
-  const getActiveColor = () => {
-    return type === "like"
-      ? theme.colors.success[500]
-      : theme.colors.error[500];
-  };
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   const handlePressIn = () => {
     triggerHaptic("light", disabled);
-    Animated.spring(scale, {
-      toValue: 0.8,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
+    scale.value = reducedMotion
+      ? 0.8
+      : withSpring(0.8, { damping: 12, stiffness: 220 });
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
+    scale.value = reducedMotion
+      ? 1
+      : withSpring(1, { damping: 12, stiffness: 220 });
   };
 
   const handlePress = () => {
     if (disabled) return;
 
-    // Bounce animation
-    Animated.sequence([
-      Animated.spring(scale, {
-        toValue: 1.2,
-        useNativeDriver: true,
-        friction: 3,
-      }),
-      Animated.spring(scale, {
-        toValue: 1,
-        useNativeDriver: true,
-        friction: 5,
-      }),
-    ]).start();
+    scale.value = reducedMotion
+      ? 1
+      : withSequence(
+          withSpring(1.2, { damping: 9, stiffness: 220 }),
+          withSpring(1, { damping: 12, stiffness: 220 }),
+        );
 
     triggerHaptic(isActive ? "light" : "medium");
     onPress?.();
@@ -110,18 +94,24 @@ export const VoteButton = ({
     return num.toString();
   };
 
-  const iconColor = isActive ? getActiveColor() : theme.colors.text.subtle;
-  const textColor = isActive ? getActiveColor() : theme.colors.text.subtle;
+  // Keep SVG and text colors atomic; custom icon props are not safe UI-thread targets.
+  const color = getVoteColor(type, isActive, {
+    inactive: theme.colors.text.subtle,
+    like: theme.colors.success[500],
+    dislike: theme.colors.error[500],
+  });
 
   const renderIcon = () => {
     if (type === "like") {
-      return <UpvoteFilledIcon size={iconSize} color={iconColor} />;
+      return <UpvoteFilledIcon size={iconSize} color={color} />;
     }
-    return <DownvoteFilledIcon size={iconSize} color={iconColor} />;
+    return <DownvoteFilledIcon size={iconSize} color={color} />;
   };
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected: isActive }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={handlePress}
@@ -131,7 +121,8 @@ export const VoteButton = ({
       <Animated.View
         style={[
           styles.container,
-          { gap, transform: [{ scale }] },
+          { gap },
+          scaleStyle,
           disabled && styles.disabled,
         ]}
       >
@@ -140,7 +131,7 @@ export const VoteButton = ({
           <Text
             size={size === "lg" ? "md" : size === "md" ? "sm" : "xs"}
             weight="bold"
-            style={{ color: textColor }}
+            style={{ color }}
           >
             {formatCount(count)}
           </Text>

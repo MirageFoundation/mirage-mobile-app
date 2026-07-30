@@ -12,7 +12,9 @@ const BUTTON_SIZES: Record<IconButtonSize, { button: number; icon: number }> = {
   lg: { button: 48, icon: 26 },
 };
 
-type IconButtonProps = Omit<PressableProps, "style"> & {
+type IconButtonProps = Omit<PressableProps, "accessibilityLabel" | "style"> & {
+  /** Concise description announced by assistive technologies */
+  accessibilityLabel: string;
   /** Ionicons icon name */
   name: keyof typeof Ionicons.glyphMap;
   /** Size preset */
@@ -40,6 +42,9 @@ export const IconButton = ({
   color,
   haptics = "selection",
   disabled,
+  accessibilityRole = "button",
+  accessibilityState,
+  hitSlop,
   onPress,
   style,
   ...props
@@ -108,10 +113,17 @@ export const IconButton = ({
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
       <Pressable
+        accessibilityRole={accessibilityRole}
+        accessibilityState={{
+          ...accessibilityState,
+          disabled: Boolean(disabled) || accessibilityState?.disabled,
+          selected: active || accessibilityState?.selected,
+        }}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
         disabled={Boolean(disabled)}
+        hitSlop={hitSlop ?? Math.max(0, (44 - buttonSize) / 2)}
         style={[
           styles.container,
           { width: buttonSize, height: buttonSize },

@@ -11,11 +11,12 @@ import {
 import {
   ScrollAnimationProvider,
   TAB_BAR_HEIGHT,
+  type RefreshTargetKey,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
-import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
@@ -52,14 +53,35 @@ import { getPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
+const REFRESH_TARGET_BY_ROUTE: Partial<Record<string, RefreshTargetKey>> = {
+  index: "home",
+  following: "following",
+  profile: "profile",
+};
+
+function getPendingShareIntentDiagnostics() {
+  const pending = getPendingShareIntent();
+  if (!pending) {
+    return { hasPendingShareIntent: false };
+  }
+
+  return {
+    hasPendingShareIntent: true,
+    pendingShareIntentAgeMs: Date.now() - pending.receivedAt,
+    pendingShareIntentSource: pending.source,
+    pendingShareIntentType: pending.type,
+    pendingHasText: !!pending.text,
+    pendingHasWebUrl: !!pending.webUrl,
+    pendingFileCount: pending.files?.length ?? 0,
+    pendingHasLaunchPath: !!pending.launchPath,
+  };
+}
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const {
     tabBarAnimatedStyle,
     scrollToTopAndRefresh,
-    scrollToTopAndRefreshFollowing,
-    scrollToTopAndRefreshProfile,
   } = useScrollAnimationContext();
 
   // Auth state
@@ -94,21 +116,14 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               canPreventDefault: true,
             });
 
-            // If already on home tab, scroll to top and refresh
-            if (isFocused && route.name === "index") {
-              scrollToTopAndRefresh();
-              return;
-            }
-
-            // If already on following tab, scroll to top and refresh
-            if (isFocused && route.name === "following") {
-              scrollToTopAndRefreshFollowing();
-              return;
-            }
-
-            // If already on profile tab, scroll to top and refresh
-            if (isFocused && route.name === "profile") {
-              scrollToTopAndRefreshProfile();
+            const refreshTarget = REFRESH_TARGET_BY_ROUTE[route.name];
+            if (isFocused && refreshTarget) {
+              void scrollToTopAndRefresh(refreshTarget).catch((error) => {
+                Sentry.captureException(error, {
+                  tags: { feature: "tab-bar", operation: "refresh-target" },
+                  extra: { refreshTarget },
+                });
+              });
               return;
             }
 
@@ -269,11 +284,7 @@ function TabNavigationVisibilityReset() {
 
   useEffect(() => {
     showBars();
-    const homePostCardStore = useHomePostCardStore.getState();
     if (pathname === "/" || pathname.endsWith("/(tabs)") || pathname.endsWith("/(tabs)/") || pathname.endsWith("/index")) {
-      homePostCardStore.setActiveFeedScreen("home");
-      homePostCardStore.setVideoViewability("following:magic", new Set(), null);
-      homePostCardStore.setVideoViewability("following:latest", new Set(), null);
       Sentry.addBreadcrumb({
         category: "feed-video",
         message: "Activated home feed playback",
@@ -281,9 +292,6 @@ function TabNavigationVisibilityReset() {
         data: { pathname },
       });
     } else if (pathname.endsWith("/following")) {
-      homePostCardStore.setActiveFeedScreen("following");
-      homePostCardStore.setVideoViewability("home:magic", new Set(), null);
-      homePostCardStore.setVideoViewability("home:latest", new Set(), null);
       Sentry.addBreadcrumb({
         category: "feed-video",
         message: "Activated following feed playback",
@@ -291,7 +299,6 @@ function TabNavigationVisibilityReset() {
         data: { pathname },
       });
     } else if (!pathname.startsWith("/topic/")) {
-      homePostCardStore.setActiveFeedScreen(null);
       Sentry.addBreadcrumb({
         category: "feed-video",
         message: "Disabled tab feed playback",
@@ -405,18 +412,53 @@ export default function TabLayout() {
       return;
     }
     if (!hasForcedShareIntentRouteRef.current) {
+      const hasRecentInitialTabDeepLink = isRecentInitialTabDeepLink();
+      const isPostPath = pathname.startsWith("/post/");
+      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
+      const activeShareRedirectDiagnostics = {
+        pathname,
+        hadPreviousShareIntent: prev,
+        hasHandledInitialRoute: hasHandledInitialRouteRef.current,
+        isNotificationNavigationActive,
+        hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
+        hasRecentInitialTabDeepLink,
+        isPostPath,
+        detectedRecentSharePath: isRecentSharePath(10_000),
+        ...getPendingShareIntentDiagnostics(),
+      };
+      // Notification navigation owns the route while it is in flight. A share
+      // intent replayed by Android (cold start, activity recreation) must not
+      // steal the screen and strand the user on Create.
+      if (isNotificationNavigationActive) {
+        Sentry.captureMessage("Share intent create redirect blocked during notification navigation", {
+          level: "warning",
+          tags: {
+            feature: "share-intent",
+            operation: "create-redirect-blocked",
+          },
+          extra: activeShareRedirectDiagnostics,
+        });
+        return;
+      }
+      // An active post deep link also outranks a replayed share intent.
+      if (isPostPath || hasRecentInitialTabDeepLink) {
+        Sentry.captureMessage("Share intent create redirect blocked by active deep link", {
+          level: "warning",
+          tags: {
+            feature: "share-intent",
+            operation: "create-redirect-blocked",
+            route_kind: isPostPath ? "post" : "tab",
+          },
+          extra: activeShareRedirectDiagnostics,
+        });
+        return;
+      }
       hasForcedShareIntentRouteRef.current = true;
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Forcing share intent to create tab",
         level: "info",
-        data: {
-          pathname,
-          hadPreviousShareIntent: prev,
-          hasHandledInitialRoute: hasHandledInitialRouteRef.current,
-          isNotificationNavigationActive: isInboxNotificationNavigationActive(),
-          hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
-        },
+        data: activeShareRedirectDiagnostics,
       });
       replaceBypass("/(tabs)/create");
     } else {
@@ -436,7 +478,8 @@ export default function TabLayout() {
       if (hasHandledInitialRouteRef.current) return;
       hasHandledInitialRouteRef.current = true;
 
-      const hasPendingShareIntent = !!getPendingShareIntent();
+      const pendingShareIntentDiagnostics = getPendingShareIntentDiagnostics();
+      const hasPendingShareIntent = pendingShareIntentDiagnostics.hasPendingShareIntent;
       const hasInitialShareIntent =
         initialShareIntentRef.current ||
         hasShareIntent ||
@@ -453,6 +496,8 @@ export default function TabLayout() {
       const isOnCreate = currentPathname.endsWith("/create");
       const isOnInbox = currentPathname.endsWith("/inbox");
       const isOnPostDetail = currentPathname.startsWith("/post/");
+      const pendingDeepLinkRoute = useDeepLinkStore.getState().pendingRoute;
+      const pendingDeepLinkIsPost = pendingDeepLinkRoute?.startsWith("/post/") ?? false;
       const isOnNonHomeTab =
         isOnCreate ||
         isOnInbox ||
@@ -464,18 +509,20 @@ export default function TabLayout() {
         pathname: currentPathname,
         hasInitialCreateIntent,
         hasInitialShareIntent,
-        hasPendingShareIntent,
         hasInitialTabDeepLink,
         isOnHomeTab,
         isOnCreate,
         isOnInbox,
         isOnPostDetail,
+        hasPendingDeepLinkRoute: !!pendingDeepLinkRoute,
+        pendingDeepLinkIsPost,
         isOnNonHomeTab,
         isNotificationNavigationActive,
         isShareNavigationActive,
         hasShareIntent,
         hadInitialShareIntent: initialShareIntentRef.current,
         detectedRecentSharePath: isRecentSharePath(10_000),
+        ...pendingShareIntentDiagnostics,
       };
 
       Sentry.addBreadcrumb({
@@ -487,13 +534,11 @@ export default function TabLayout() {
       console.log("[InboxNotifFlow] tab initial route check", initialRouteDiagnostics);
 
       if (isNotificationNavigationActive && isOnPostDetail) {
-        Sentry.captureMessage("Tab initial route recovery skipped on notification post detail", {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Tab initial route recovery skipped on notification post detail",
           level: "info",
-          tags: {
-            feature: "inbox-notifications",
-            operation: "tab-route-recovery-skip-post-detail",
-          },
-          extra: initialRouteDiagnostics,
+          data: initialRouteDiagnostics,
         });
       }
 
@@ -543,6 +588,17 @@ export default function TabLayout() {
           },
           level: "info",
         });
+        if (isOnPostDetail || pendingDeepLinkIsPost || hasInitialTabDeepLink) {
+          Sentry.captureMessage("Stale share intent may override initial deep link", {
+            level: "warning",
+            tags: {
+              feature: "share-intent",
+              operation: "initial-deep-link-overridden",
+              route_kind: isOnPostDetail || pendingDeepLinkIsPost ? "post" : "tab",
+            },
+            extra: initialRouteDiagnostics,
+          });
+        }
         Sentry.captureMessage("Android share intent initial route recovery", {
           level: "info",
           tags: { feature: "share-intent", operation: "initial-route-recovery" },

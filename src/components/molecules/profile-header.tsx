@@ -13,13 +13,11 @@ import {
 } from "react-native";
 import Animated, {
   interpolate,
-  interpolateColor,
   SharedValue,
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -152,6 +150,7 @@ export const ProfileHeaderBar = ({
       <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
         <Box direction="row" center gap="xs">
           <IconButton
+            accessibilityLabel="Go back"
             name="arrow-back"
             size="md"
             color="#FFFFFF"
@@ -243,6 +242,7 @@ export const ProfileHeaderBar = ({
           )}
           {!isOwnProfile && (
             <IconButton
+              accessibilityLabel="Open profile menu"
               name="ellipsis-horizontal"
               size="md"
               color="#FFFFFF"

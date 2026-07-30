@@ -59,8 +59,6 @@ export async function setUsername(
 
    const body = { ...payload, ...(invite_code && { invite_code }), ...(referrer_username && { referrer_username }) };
 
-    console.log("[setUsername] POST body:", JSON.stringify({ invite_code: (body as any).invite_code, referrer_username: (body as any).referrer_username }));
-
     return api.post<WriteResponse>("/core/set_username", body);
   }, "setUsername");
 }

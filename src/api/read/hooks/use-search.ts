@@ -21,7 +21,7 @@ export function useSearch(
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
-    queryKey: queryKeys.search(query!, params?.type, params?.limit, allowedTags),
+    queryKey: queryKeys.search(query!, params?.type, params?.limit, allowedTags, walletAddress),
     queryFn: () =>
       search({
         q: query!,

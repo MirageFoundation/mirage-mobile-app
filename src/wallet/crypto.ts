@@ -10,8 +10,7 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 import { HDKey } from "@scure/bip32";
 
 // Crypto curves & signing
-// @ts-expect-error - bundler resolves this correctly at runtime
-import { secp256k1 } from "@noble/curves/secp256k1";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 
 import * as Sentry from "@sentry/react-native";
 

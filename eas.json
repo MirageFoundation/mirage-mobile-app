@@ -9,7 +9,7 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "image": "sdk-54"
+        "image": "sdk-56"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "dev",
@@ -50,7 +50,7 @@
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
       },
       "ios": {
-        "image": "sdk-54",
+        "image": "sdk-56",
         "node": "24.4.0"
       },
       "android": {

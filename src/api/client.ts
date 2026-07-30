@@ -5,6 +5,12 @@ import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import { isRetryable, isMaybeRetryable } from "@/src/utils/error-messages";
+import {
+  ServerRequestCoordinator,
+  StaleServerResponseError,
+  type ServerRequestContext,
+  type ServerSwitchHooks,
+} from "@/src/api/server-runtime";
 
 const DEFAULT_NODE = "https://mirage.talk";
 
@@ -26,14 +32,12 @@ function getNetworkDiagnostics(networkState: Network.NetworkState) {
 
 class ApiClient {
   private client: AxiosInstance;
-  private nodeList: string[];
-  private currentNodeIndex: number;
+  private coordinator: ServerRequestCoordinator;
   private activeRequests: number;
   private requestQueue: (() => void)[];
 
   constructor() {
-    this.nodeList = [DEFAULT_NODE];
-    this.currentNodeIndex = 0;
+    this.coordinator = new ServerRequestCoordinator(DEFAULT_NODE);
     this.activeRequests = 0;
     this.requestQueue = [];
 
@@ -48,6 +52,12 @@ class ApiClient {
     // Response interceptor for error handling and failover
     this.client.interceptors.response.use(
       (response) => {
+        const serverContext = (response.config as typeof response.config & {
+          serverContext?: ServerRequestContext;
+        }).serverContext;
+        if (serverContext) {
+          this.coordinator.assertCurrent(serverContext);
+        }
         const data = response.data;
         if (data && typeof data === "object") {
           const currentAddress = this.getCurrentAddress();
@@ -78,13 +88,24 @@ class ApiClient {
         return response;
       },
       async (error: AxiosError) => {
+        const serverContext = (error.config as (typeof error.config & {
+          serverContext?: ServerRequestContext;
+        }) | undefined)?.serverContext;
+        if (serverContext) {
+          try {
+            this.coordinator.assertCurrent(serverContext);
+          } catch (staleError) {
+            return Promise.reject(staleError);
+          }
+        }
         // On network error, retry only against the currently selected node.
         // Do not silently fail over to another Mirage node; the selected API
         // server is user-visible state and must stay authoritative.
         if (
-          error.code === "ECONNABORTED" ||
-          error.code === "ERR_NETWORK" ||
-          !error.response
+          error.code !== "ERR_CANCELED" &&
+          (error.code === "ECONNABORTED" ||
+            error.code === "ERR_NETWORK" ||
+            !error.response)
         ) {
           const originalRequest = error.config;
           if (originalRequest && !originalRequest.headers["X-Retry"]) {
@@ -99,7 +120,6 @@ class ApiClient {
               },
               level: "warning",
             });
-            originalRequest.baseURL = this.getBaseUrl();
             originalRequest.headers["X-Retry"] = "true";
             return this.client(originalRequest);
           }
@@ -110,7 +130,11 @@ class ApiClient {
   }
 
   private getBaseUrl(): string {
-    return this.nodeList[this.currentNodeIndex];
+    return this.coordinator.getContext().baseUrl;
+  }
+
+  getCurrentServerContext(): ServerRequestContext {
+    return this.coordinator.getContext();
   }
 
   /**
@@ -120,32 +144,27 @@ class ApiClient {
    * the user's selected API server.
    */
   async failover(): Promise<void> {
-    if (this.nodeList.length <= 1) {
-      Sentry.addBreadcrumb({
-        category: "api",
-        message: "Skipped node failover; only selected node is configured",
-        level: "warning",
-      });
-      return;
-    }
-
-    this.currentNodeIndex = (this.currentNodeIndex + 1) % this.nodeList.length;
-    this.client.defaults.baseURL = this.getBaseUrl();
     Sentry.addBreadcrumb({
       category: "api",
-      message: `Failover to node: ${this.getBaseUrl()}`,
+      message: "Skipped node failover; only selected node is configured",
       level: "warning",
     });
-    console.log(`[ApiClient] Failover to: ${this.getBaseUrl()}`);
   }
 
   /**
    * Allow runtime URL change
    */
   setBaseUrl(url: string): void {
-    this.nodeList = [url];
-    this.currentNodeIndex = 0;
-    this.client.defaults.baseURL = url;
+    const context = this.coordinator.replaceImmediately(url);
+    this.client.defaults.baseURL = context.baseUrl;
+  }
+
+  async switchBaseUrl(url: string, hooks: ServerSwitchHooks): Promise<void> {
+    try {
+      await this.coordinator.switchServer(url, hooks);
+    } finally {
+      this.client.defaults.baseURL = this.getBaseUrl();
+    }
   }
 
   getCurrentBaseUrl(): string {
@@ -202,8 +221,18 @@ class ApiClient {
   /**
    * GET request
    */
-  async get<T, P = unknown>(path: string, params?: P): Promise<T> {
-    return this.withConcurrencyLimit(() => this.executeGet<T, P>(path, params));
+  get<T, P = unknown>(
+    path: string,
+    params?: P,
+    options?: { signal?: AbortSignal },
+  ): Promise<T> {
+    return this.coordinator.runRead(
+      (serverContext, signal) =>
+        this.withConcurrencyLimit(() =>
+          this.executeGet<T, P>(path, params, serverContext, signal),
+        ),
+      options?.signal,
+    );
   }
 
   private async withConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
@@ -226,27 +255,35 @@ class ApiClient {
 
   private async executeGet<T, P = unknown>(
     path: string,
-    params?: P,
+    params: P | undefined,
+    serverContext: ServerRequestContext,
+    signal: AbortSignal,
     retryCount = 0,
   ): Promise<T> {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
       throw new AxiosError("Network Error", "ERR_NETWORK");
     }
-    console.log(
-      `[ApiClient] GET ${path}`,
-      params ? `with params: ${JSON.stringify(params)}` : "no params"
-    );
+    console.log(`[ApiClient] GET ${path}`, params ? "with params" : "no params");
     try {
       const response = await this.client.get<T>(`/api${path}`, {
+        baseURL: serverContext.baseUrl,
+        signal,
         params: this.withInboxLastViewed(
           params as Record<string, unknown> | undefined
         ),
-      });
+        serverContext,
+      } as any);
       console.log(`[ApiClient] GET ${path} success`);
       useCloudflareErrorStore.getState().clearError();
       return response.data;
     } catch (error: any) {
+      if (
+        error instanceof StaleServerResponseError ||
+        error?.code === "ERR_CANCELED"
+      ) {
+        throw error;
+      }
       const errorData = error?.response?.data;
       const errorMessage = error?.message;
       const status = error?.response?.status;
@@ -264,7 +301,7 @@ class ApiClient {
             code: error?.code,
             errorMessage,
             retryCount,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
           level: "warning",
@@ -280,7 +317,7 @@ class ApiClient {
           extra: {
             path,
             retryCount,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
         });
@@ -293,7 +330,13 @@ class ApiClient {
           `[ApiClient] Rate limited on ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.executeGet<T, P>(path, params, retryCount + 1);
+        return this.executeGet<T, P>(
+          path,
+          params,
+          serverContext,
+          signal,
+          retryCount + 1,
+        );
       }
 
       const errorCode = errorData?.error_code;
@@ -303,7 +346,13 @@ class ApiClient {
           `[ApiClient] Retryable error_code "${errorCode}" on GET ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRYABLE_ERROR_RETRIES})`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.executeGet<T, P>(path, params, retryCount + 1);
+        return this.executeGet<T, P>(
+          path,
+          params,
+          serverContext,
+          signal,
+          retryCount + 1,
+        );
       }
 
       if (errorCode && isMaybeRetryable(errorCode) && retryCount < MAX_SERVER_ERROR_RETRIES) {
@@ -312,7 +361,13 @@ class ApiClient {
           `[ApiClient] Server error "${errorCode}" on GET ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_SERVER_ERROR_RETRIES})`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.executeGet<T, P>(path, params, retryCount + 1);
+        return this.executeGet<T, P>(
+          path,
+          params,
+          serverContext,
+          signal,
+          retryCount + 1,
+        );
       }
 
       Sentry.addBreadcrumb({
@@ -331,7 +386,7 @@ class ApiClient {
             status,
             errorData,
             retryCount,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
         });
@@ -352,14 +407,18 @@ class ApiClient {
     }
   }
 
-  async post<T, D = unknown>(path: string, data?: D): Promise<T> {
+  post<T, D = unknown>(path: string, data?: D): Promise<T> {
+    return this.coordinator.runWrite(async (serverContext) => {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
       throw new AxiosError("Network Error", "ERR_NETWORK");
     }
     console.log(`[ApiClient] POST ${path}`, data ? "with data" : "no data");
     try {
-      const response = await this.client.post<T>(`/api${path}`, data);
+      const response = await this.client.post<T>(`/api${path}`, data, {
+        baseURL: serverContext.baseUrl,
+        serverContext,
+      } as any);
       console.log(`[ApiClient] POST ${path} success:`, response.data);
       useCloudflareErrorStore.getState().clearError();
       return response.data;
@@ -378,7 +437,7 @@ class ApiClient {
           data: {
             code: error?.code,
             errorMessage: error?.message,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
           level: "warning",
@@ -393,7 +452,7 @@ class ApiClient {
           },
           extra: {
             path,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
         });
@@ -438,7 +497,7 @@ class ApiClient {
           extra: {
             status,
             errorData,
-            baseUrl: this.getBaseUrl(),
+            baseUrl: serverContext.baseUrl,
             network: getNetworkDiagnostics(networkState),
           },
         });
@@ -449,6 +508,7 @@ class ApiClient {
       );
       throw error;
     }
+    });
   }
 
   /**
@@ -464,8 +524,11 @@ export const apiClient = new ApiClient();
 
 // Direct access functions for simpler usage
 export const api = {
-  get: <T, P = unknown>(path: string, params?: P) =>
-    apiClient.get<T, P>(path, params),
+  get: <T, P = unknown>(
+    path: string,
+    params?: P,
+    options?: { signal?: AbortSignal },
+  ) => apiClient.get<T, P>(path, params, options),
   post: <T, D = unknown>(path: string, data?: D) =>
     apiClient.post<T, D>(path, data),
 };

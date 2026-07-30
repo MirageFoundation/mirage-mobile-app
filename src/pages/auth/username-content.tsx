@@ -10,6 +10,7 @@ import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
 import { trackEvent } from "@/src/services/analytics";
+import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
@@ -87,6 +88,7 @@ export default function UsernameScreen() {
   const { servers } = useServerList();
 
   const walletConfirmedRef = useRef(false);
+  const recoveryNavigationStartedRef = useRef(false);
   const txProgress = useTransactionProgress();
 
   useEffect(() => {
@@ -288,9 +290,7 @@ export default function UsernameScreen() {
     try {
       if (inviteCodeRequired && !isReferralMode) {
         const rawCode = inviteCode.trim();
-        console.log("[InviteCode] raw input:", JSON.stringify(inviteCode), "code:", JSON.stringify(rawCode), "length:", rawCode.length);
         const result = await validateInviteCode({ code: rawCode });
-        console.log("[InviteCode] validateInviteCode result:", JSON.stringify(result));
 
         if (!result.valid) {
           if (result.error === "already_used") {
@@ -331,7 +331,6 @@ export default function UsernameScreen() {
           const usernamePayload = isReferralMode
             ? { username, referrer_username: referrerUsername! }
             : { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
-          console.log("[setUsername] payload:", JSON.stringify(usernamePayload));
           const response = await setUsernameOnChain(
             wallet,
             usernamePayload,
@@ -360,7 +359,8 @@ export default function UsernameScreen() {
         return;
       }
 
-      setHasUsername(true, `anon-${username}`);
+      if (!isCurrentAuthWallet(wallet.address)) return;
+      setHasUsername(true, `anon-${username}`, wallet.address);
 
       trackEvent("username_set", {
         sign_up_path: isReferralMode
@@ -371,14 +371,6 @@ export default function UsernameScreen() {
       });
 
       triggerHaptic("success");
-
-      setTimeout(() => {
-        txProgress.hideModal();
-        router.push({
-          pathname: "/(auth)/recovery-phrase",
-          params: { username: `anon-${username}` },
-        });
-      }, 1500);
     } catch (error) {
       console.error("[Username] Failed to create account:", error);
       triggerHaptic("error");
@@ -407,8 +399,17 @@ export default function UsernameScreen() {
     createNewWallet,
     setHasUsername,
     txProgress,
-    router,
   ]);
+
+  const handleRecoveryPhraseNavigation = useCallback(() => {
+    if (recoveryNavigationStartedRef.current) return;
+    recoveryNavigationStartedRef.current = true;
+    txProgress.hideModal();
+    router.push({
+      pathname: "/(auth)/recovery-phrase",
+      params: { username: `anon-${username}` },
+    });
+  }, [router, txProgress, username]);
 
   const handleRetry = useCallback(() => {
     txProgress.reset();
@@ -605,16 +606,11 @@ export default function UsernameScreen() {
         description={`Registering @${username} on the blockchain`}
         onDismiss={
           txProgress.progress.phase === "success"
-            ? () => {
-                txProgress.hideModal();
-                router.push({
-                  pathname: "/(auth)/recovery-phrase",
-                params: { username: `anon-${username}` },
-                });
-              }
+            ? handleRecoveryPhraseNavigation
             : handleDismissError
         }
         onRetry={handleRetry}
+        autoDismissDelay={1500}
         dismissible={
           txProgress.progress.phase === "success" ||
           txProgress.progress.phase === "error"

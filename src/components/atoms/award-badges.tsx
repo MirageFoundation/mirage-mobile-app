@@ -17,12 +17,12 @@ export const AwardBadges = memo(function AwardBadges({
 }: AwardBadgesProps) {
   if (!awards || awards.length === 0) return null;
 
-  const textSize = size === "sm" ? "sm" : "md";
-  const iconSize = size === "sm" ? 14 : 18;
+  const textSize = size === "sm" ? "xs" : "md";
+  const iconSize = size === "sm" ? 11 : 14;
 
   return (
     <View style={styles.container}>
-      <Text size="md" mode="subtle" weight="semibold">
+      <Text size={textSize} weight="medium" style={styles.label}>
         Awards received:
       </Text>
       {awards.map((award) => {
@@ -30,11 +30,11 @@ export const AwardBadges = memo(function AwardBadges({
         if (!info) return null;
         return (
           <View key={award.type} style={styles.badge}>
-            <Text style={{ fontSize: iconSize, lineHeight: iconSize + 4 }}>
+            <Text style={{ fontSize: iconSize, lineHeight: iconSize + 2, textAlignVertical: "center", includeFontPadding: false }}>
               {info.icon}
             </Text>
             {award.count > 1 && (
-              <Text size={textSize} mode="subtle" weight="medium">
+              <Text size={textSize} weight="medium" style={styles.label}>
                 {award.count}
               </Text>
             )}
@@ -55,5 +55,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
+  },
+  label: {
+    color: theme.colors.primary[500],
+    includeFontPadding: false,
   },
 }));

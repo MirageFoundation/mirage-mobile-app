@@ -109,7 +109,7 @@ src/wallet/          Wallet, address, crypto, and proof-of-work logic
 assets/              Images and static app assets
 docs/                Architecture notes, implementation plans, deep-link and release docs
 tools/               Guardrail scripts and project checks
-patches/             patch-package patches applied after install
+patches/             bun patch files applied via patchedDependencies
 ```
 
 ## Architecture notes

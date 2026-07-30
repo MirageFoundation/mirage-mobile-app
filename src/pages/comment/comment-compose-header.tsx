@@ -22,7 +22,13 @@ export function CommentComposeHeader({
 
   return (
     <View style={styles.header}>
-      <Pressable onPress={onClose} style={styles.headerButton}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close comment composer"
+        onPress={onClose}
+        style={styles.headerButton}
+        hitSlop={8}
+      >
         <Ionicons
           name="close"
           size={28}

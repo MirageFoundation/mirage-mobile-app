@@ -1,28 +1,44 @@
 import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
+import {
+  cancelConfettiAnimationChannels,
+  CONFETTI_PARTICLE_COUNT,
+  getConfettiParticleDelay,
+  getConfettiTimingPolicy,
+} from "./quests-confetti-policy";
 import {
   CONFETTI_COLORS,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
 } from "./quests-ui-constants";
 
-function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
+function ConfettiPiece({
+  delay,
+  index,
+  reducedMotion,
+}: {
+  delay: number;
+  index: number;
+  reducedMotion: boolean;
+}) {
   const translateY = useSharedValue(-50);
   const translateX = useSharedValue(0);
   const rotate = useSharedValue(0);
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
+  const timing = getConfettiTimingPolicy(reducedMotion);
 
   const startX = Math.random() * SCREEN_WIDTH;
   const color = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
@@ -31,11 +47,25 @@ function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
 
   useEffect(() => {
     const drift = (Math.random() - 0.5) * 100;
+    const animationChannels = {
+      opacity,
+      rotate,
+      scale,
+      translateX,
+      translateY,
+    };
+
+    cancelConfettiAnimationChannels(animationChannels, cancelAnimation);
+    opacity.value = 1;
+    rotate.value = 0;
+    scale.value = 1;
+    translateX.value = 0;
+    translateY.value = -50;
 
     translateY.value = withDelay(
       delay,
       withTiming(SCREEN_HEIGHT + 100, {
-        duration: 3000 + Math.random() * 2000,
+        duration: timing.movementDurationMs,
         easing: Easing.out(Easing.quad),
       }),
     );
@@ -44,33 +74,38 @@ function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
       delay,
       withRepeat(
         withSequence(
-          withTiming(drift, { duration: 500 }),
-          withTiming(-drift, { duration: 500 }),
+          withTiming(drift, { duration: timing.driftLegDurationMs }),
+          withTiming(-drift, { duration: timing.driftLegDurationMs }),
         ),
-        -1,
+        timing.driftRepeatCount,
         true,
       ),
     );
 
     rotate.value = withDelay(
       delay,
-      withRepeat(
-        withTiming(360, { duration: 1000 + Math.random() * 1000 }),
-        -1,
-        false,
-      ),
+      withTiming(timing.rotationDegrees, {
+        duration: timing.movementDurationMs,
+      }),
     );
 
-    opacity.value = withDelay(delay + 2000, withTiming(0, { duration: 1000 }));
+    opacity.value = withDelay(
+      delay + timing.fadeDelayMs,
+      withTiming(0, { duration: timing.fadeDurationMs }),
+    );
 
     scale.value = withDelay(
       delay,
       withSequence(
-        withSpring(1.2, { damping: 8 }),
-        withSpring(1, { damping: 10 }),
+        withTiming(1.2, { duration: timing.scaleLegDurationMs }),
+        withTiming(1, { duration: timing.scaleLegDurationMs }),
       ),
     );
-  }, []);
+
+    return () => {
+      cancelConfettiAnimationChannels(animationChannels, cancelAnimation);
+    };
+  }, [delay, opacity, rotate, scale, timing, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -101,6 +136,8 @@ function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
 }
 
 export function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
+  const reducedMotion = useReducedMotion();
+
   if (!isVisible) return null;
 
   return (
@@ -115,10 +152,14 @@ export function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
         zIndex: 1000,
       }}
     >
-      {Array.from({ length: 50 }).map((_, i) => (
-        <ConfettiPiece key={i} index={i} delay={i * 30} />
+      {Array.from({ length: CONFETTI_PARTICLE_COUNT }).map((_, i) => (
+        <ConfettiPiece
+          key={i}
+          index={i}
+          delay={getConfettiParticleDelay(i, reducedMotion)}
+          reducedMotion={reducedMotion}
+        />
       ))}
     </View>
   );
 }
-

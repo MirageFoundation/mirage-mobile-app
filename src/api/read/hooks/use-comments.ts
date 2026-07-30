@@ -7,6 +7,7 @@ import {
   type GetCommentContextParams,
 } from "../endpoints/posts";
 import { useAuthStore } from "@/src/stores";
+import { POST_DETAIL_QUERY_GC_TIME } from "../infinite-query-policy";
 
 /**
  * Get comment tree for a post
@@ -19,16 +20,16 @@ export function useComments(postId: string | undefined | null, options?: { enabl
 
   return useQuery({
     queryKey: queryKeys.comments(postId!, walletAddress ?? undefined),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       getComments({
         post_id: postId!,
         address: walletAddress ?? undefined,
-      }),
+      }, { signal }),
     enabled: !!postId && (options?.enabled ?? true),
     staleTime: 1000 * 30, // 30 seconds
-    gcTime: 1000 * 60 * 60, // 1 hour
+    gcTime: POST_DETAIL_QUERY_GC_TIME,
     retry: (failureCount, error) => {
-      const status = (error as any)?.response?.status;
+      const status = (error as any)?.status ?? (error as any)?.response?.status;
       if (status === 404) return false;
       return failureCount < 2;
     },
@@ -71,7 +72,7 @@ export function useCommentContext(
   };
 
   return useQuery({
-    queryKey: queryKeys.commentContext(commentId!, maxDepth),
+    queryKey: queryKeys.commentContext(commentId!, maxDepth, walletAddress),
     queryFn: () => getCommentContext(params),
     enabled: !!commentId,
     staleTime: 1000 * 60, // 1 minute

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as Network from "expo-network";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -8,9 +7,11 @@ import {
 } from "@/src/api/read/hooks/use-upload-media";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
+import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 import { useDraftStore } from "@/src/stores/draft-store";
-import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { getMediaUploadErrorDetails } from "@/src/utils/media-upload-error";
 import { IMAGE_UPLOADS, VIDEO_UPLOADS } from "./create-upload-state";
+import { useUploadNetworkRetry } from "./use-upload-network-retry";
 
 export type CreateVideoUploadState = Record<
   string,
@@ -19,7 +20,7 @@ export type CreateVideoUploadState = Record<
 
 export type CreateImageUploadState = Record<
   string,
-  { uploading: boolean; done: boolean; error: string | null }
+  { progress: number; uploading: boolean; done: boolean; error: string | null }
 >;
 
 export function useCreateMediaUploads() {
@@ -44,6 +45,7 @@ export function useCreateMediaUploads() {
     const init: CreateImageUploadState = {};
     for (const [uri, entry] of IMAGE_UPLOADS) {
       init[uri] = {
+        progress: entry.progress,
         uploading: entry.uploading,
         done: !!entry.url,
         error: entry.error,
@@ -95,8 +97,8 @@ export function useCreateMediaUploads() {
     if (draft.attachmentType !== "image") return true;
     if (draft.mediaUris.length === 0) return true;
     return draft.mediaUris.every((uri) => {
-      const entry = IMAGE_UPLOADS.get(uri);
-      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+      const entry = imageUploadState[uri];
+      return !!entry && entry.done && !entry.uploading && !entry.error;
     });
   }, [draft.attachmentType, draft.mediaUris, imageUploadState]);
 
@@ -104,8 +106,8 @@ export function useCreateMediaUploads() {
     if (draft.attachmentType !== "video") return true;
     if (draft.mediaUris.length === 0) return true;
     return draft.mediaUris.every((uri) => {
-      const entry = VIDEO_UPLOADS.get(uri);
-      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+      const entry = videoUploadState[uri];
+      return !!entry && entry.done && !entry.uploading && !entry.error;
     });
   }, [draft.attachmentType, draft.mediaUris, videoUploadState]);
 
@@ -117,7 +119,6 @@ export function useCreateMediaUploads() {
         message: existing.uploading ? "Reusing in-flight image upload" : "Using completed image upload",
         level: "info",
         data: {
-          fileName: uri.split("/").pop() ?? uri,
           hasUrl: !!existing.url,
           silent,
         },
@@ -130,28 +131,36 @@ export function useCreateMediaUploads() {
       message: "Starting create image upload",
       level: "info",
       data: {
-        fileName: uri.split("/").pop() ?? uri,
         silent,
         isCurrentDraftMedia: draft.mediaUris.includes(uri),
         attachmentType: draft.attachmentType,
       },
     });
 
-    const promise = uploadImageAndGetUrl(uri)
+    const promise = uploadImageAndGetUrl(uri, (progress) => {
+      const clamped = Math.min(100, Math.max(0, progress));
+      const entry = IMAGE_UPLOADS.get(uri);
+      if (entry) {
+        IMAGE_UPLOADS.set(uri, { ...entry, progress: clamped });
+      }
+      imageUploadStateRef.current((prev) => ({
+        ...prev,
+        [uri]: { ...prev[uri], progress: clamped },
+      }));
+    })
       .then((url) => {
         Sentry.addBreadcrumb({
           category: "image-upload",
           message: "Create image upload succeeded",
           level: "info",
           data: {
-            fileName: uri.split("/").pop() ?? uri,
             hasUrl: !!url,
           },
         });
-        IMAGE_UPLOADS.set(uri, { url, uploading: false, error: null });
+        IMAGE_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { uploading: false, done: true, error: null },
+          [uri]: { progress: 100, uploading: false, done: true, error: null },
         }));
         imageUploadToastShownRef.current = false;
         return url;
@@ -160,11 +169,15 @@ export function useCreateMediaUploads() {
         const status = (error as any)?.response?.status ?? (error as any)?.status;
         const responseText = (error as any)?.responseText ?? (error as any)?.response?.data?.error ?? "";
         const isUnsupportedFormat = status === 422 && String(responseText).includes("decoding");
+        const uploadError = getMediaUploadErrorDetails(error);
         const msg = isUnsupportedFormat
           ? "This image format isn't supported. Try a different photo."
-          : error instanceof Error ? error.message : "Upload failed";
-        const isServerError = !!status && status >= 400;
-        Sentry.captureException(error, {
+          : uploadError.message;
+        const isServerError = uploadError.kind === "server";
+        Sentry.captureException(sanitizedTelemetryError("media-upload", {
+          error_class: typeof status === "number" ? "http" : "unexpected",
+          status: typeof status === "number" ? status : undefined,
+        }), {
           tags: {
             feature: "create-post",
             operation: "image-upload",
@@ -172,18 +185,16 @@ export function useCreateMediaUploads() {
             unsupportedFormat: String(isUnsupportedFormat),
           },
           extra: {
-            fileName: uri.split("/").pop() ?? uri,
             status,
-            responseText,
             silent,
             isCurrentDraftMedia: draft.mediaUris.includes(uri),
             attachmentType: draft.attachmentType,
           },
         });
-        IMAGE_UPLOADS.set(uri, { url: null, uploading: false, error: msg, isServerError });
+        IMAGE_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { uploading: false, done: false, error: msg },
+          [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
         if (!silent && !imageUploadToastShownRef.current) {
           imageUploadToastShownRef.current = true;
@@ -192,10 +203,10 @@ export function useCreateMediaUploads() {
         throw error;
       });
 
-    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, error: null, isServerError: false, promise });
+    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null, isServerError: false, promise });
     imageUploadStateRef.current((prev) => ({
       ...prev,
-      [uri]: { uploading: true, done: false, error: null },
+      [uri]: { progress: 0, uploading: true, done: false, error: null },
     }));
     return promise;
   }, [draft.attachmentType, draft.mediaUris, toast]);
@@ -228,7 +239,6 @@ export function useCreateMediaUploads() {
   }, []);
 
   const getVideoUploadDebugData = useCallback((uri: string, sessionId?: number) => ({
-    fileName: uri.split("/").pop() ?? uri,
     sessionId,
     activeSessionId: videoUploadSessionRef.current,
     isCurrentDraftMedia: videoUploadDraftDebugRef.current.mediaUris.includes(uri),
@@ -312,18 +322,6 @@ export function useCreateMediaUploads() {
       }));
     }, controller.signal)
       .then((url) => {
-        if (videoUploadSessionRef.current !== sessionId) {
-          Sentry.addBreadcrumb({
-            category: "video-upload",
-            message: "Ignored stale video upload success",
-            level: "info",
-            data: {
-              ...getVideoUploadDebugData(uri, sessionId),
-              hasUrl: !!url,
-            },
-          });
-          return;
-        }
         if (videoUploadSessionRef.current !== sessionId || controller.signal.aborted) {
           Sentry.addBreadcrumb({
             category: "video-upload",
@@ -372,8 +370,9 @@ export function useCreateMediaUploads() {
         videoUploadControllersRef.current.delete(uri);
         const status = err?.response?.status ?? err?.status;
         const serverError = err?.response?.data?.error ?? err?.responseText;
-        const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
-        const isServerError = !!status && status >= 400;
+        const uploadError = getMediaUploadErrorDetails(err);
+        const msg = uploadError.message;
+        const isServerError = uploadError.kind === "server";
         Sentry.addBreadcrumb({
           category: "video-upload",
           message: "Create video upload failed",
@@ -409,8 +408,7 @@ export function useCreateMediaUploads() {
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;
-          const title = serverError ? `${serverError} (${status})` : "Video upload failed";
-          toast.error(title, serverError ? "Please try again" : msg);
+          toast.error("Video upload failed", msg);
         }
         triggerHaptic("error");
       });
@@ -423,69 +421,51 @@ export function useCreateMediaUploads() {
     };
   }, [resetVideoUploads, resetImageUploads]);
 
-  useEffect(() => {
-    if (!hasFailedUploads) return;
-    let retryScheduled = false;
-    const sub = Network.addNetworkStateListener((event) => {
-      if (retryScheduled) return;
-      if (event.isConnected && event.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(() => {
-          const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, entry]) => !!entry.error && !entry.isServerError)
-            .map(([uri]) => uri);
-          toRetry.forEach((uri) => startVideoUpload(uri, true));
-        }, 1500);
-      }
-    });
-    Network.getNetworkStateAsync().then((state) => {
-      if (retryScheduled) return;
-      if (state.isConnected && state.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(() => {
-          const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, entry]) => !!entry.error && !entry.isServerError)
-            .map(([uri]) => uri);
-          toRetry.forEach((uri) => startVideoUpload(uri, true));
-        }, 3000);
-      }
-    });
-    return () => sub.remove();
-  }, [hasFailedUploads, startVideoUpload]);
-
-  useEffect(() => {
-    if (!hasFailedImageUploads) return;
-    let retryScheduled = false;
-    const retryImages = () => {
-      const toRetry = [...IMAGE_UPLOADS.entries()]
+  const getRetryableVideoUris = useCallback(
+    () =>
+      [...VIDEO_UPLOADS.entries()]
         .filter(([, entry]) => !!entry.error && !entry.isServerError)
-        .map(([uri]) => uri);
-      if (toRetry.length > 0) {
+        .map(([uri]) => uri),
+    [],
+  );
+  const retryVideoUpload = useCallback(
+    (uri: string) => startVideoUpload(uri, true),
+    [startVideoUpload],
+  );
+  useUploadNetworkRetry({
+    kind: "video",
+    hasFailures: hasFailedUploads,
+    getRetryableUris: getRetryableVideoUris,
+    retryUpload: retryVideoUpload,
+  });
+
+  const getRetryableImageUris = useCallback(
+    () =>
+      [...IMAGE_UPLOADS.entries()]
+        .filter(([, entry]) => !!entry.error && !entry.isServerError)
+        .map(([uri]) => uri),
+    [],
+  );
+  const retryImageUpload = useCallback(
+    (uri: string) => {
+      startImageUpload(uri, true)?.catch(() => {
+        // Failure state and Sentry reporting are handled inside
+        // startImageUpload; this only prevents an unhandled rejection.
         Sentry.addBreadcrumb({
           category: "image-upload",
-          message: "Retrying failed image uploads after network recovery",
-          level: "info",
-          data: { retryCount: toRetry.length },
+          message: "Network-recovery image retry failed",
+          level: "warning",
         });
-      }
-      toRetry.forEach((uri) => startImageUpload(uri, true)?.catch(() => {}));
-    };
-    const sub = Network.addNetworkStateListener((event) => {
-      if (retryScheduled) return;
-      if (event.isConnected && event.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(retryImages, 1500);
-      }
-    });
-    Network.getNetworkStateAsync().then((state) => {
-      if (retryScheduled) return;
-      if (state.isConnected && state.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(retryImages, 3000);
-      }
-    });
-    return () => sub.remove();
-  }, [hasFailedImageUploads, startImageUpload]);
+      });
+    },
+    [startImageUpload],
+  );
+  useUploadNetworkRetry({
+    kind: "image",
+    hasFailures: hasFailedImageUploads,
+    getRetryableUris: getRetryableImageUris,
+    retryUpload: retryImageUpload,
+  });
 
   return {
     getUploadedImageUrls,

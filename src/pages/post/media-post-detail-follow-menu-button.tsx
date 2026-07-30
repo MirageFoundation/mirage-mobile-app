@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Menu,
@@ -9,8 +9,11 @@ import {
   MenuTrigger,
 } from "react-native-popup-menu";
 import { useUnistyles } from "react-native-unistyles";
+import * as Sentry from "@sentry/react-native";
 
 import { Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
 
 import { styles } from "./media-post-detail-styles";
 
@@ -32,6 +35,8 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
   onFollowTopic,
 }: FollowMenuButtonProps) {
   const { theme } = useUnistyles();
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const isFollowingAll = topic
     ? !!(isFollowing && isTopicFollowed)
     : !!isFollowing;
@@ -49,6 +54,70 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
       60,
   );
 
+  const followButton = isFollowingPartial ? (
+    <LinearGradient
+      colors={["#FFFFFF", "#C1C1C1"]}
+      locations={[0.5, 0.5]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.followBtn,
+        { borderColor: theme.colors.border.default },
+      ]}
+    >
+      <Text size="sm" weight="bold" style={{ color: "#000000" }}>
+        Follow
+      </Text>
+    </LinearGradient>
+  ) : (
+    <View
+      style={[
+        styles.followBtn,
+        {
+          backgroundColor: isFollowingAll
+            ? "transparent"
+            : theme.colors.primary[500],
+          borderColor: isFollowingAll
+            ? theme.colors.border.default
+            : theme.colors.primary[500],
+        },
+      ]}
+    >
+      <Text
+        size="sm"
+        weight="bold"
+        style={{
+          color: isFollowingAll
+            ? theme.colors.text.default
+            : theme.colors.background.default,
+        }}
+      >
+        {isFollowingAll ? "Unfollow" : "Follow"}
+      </Text>
+    </View>
+  );
+
+  if (!isLoggedIn) {
+    return (
+      <Pressable
+        onPress={() => {
+          triggerHaptic("medium");
+          Sentry.addBreadcrumb({
+            category: "auth-gate",
+            message: "Auth required for media detail follow action",
+            level: "info",
+            data: { hasTopic: !!topic },
+          });
+          showAuthSheet();
+        }}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        style={{ padding: 4 }}
+      >
+        {followButton}
+      </Pressable>
+    );
+  }
+
   return (
     <Menu>
       <MenuTrigger
@@ -59,48 +128,7 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
           },
         }}
       >
-        {isFollowingPartial ? (
-          <LinearGradient
-            colors={["#FFFFFF", "#C1C1C1"]}
-            locations={[0.5, 0.5]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[
-              styles.followBtn,
-              { borderColor: theme.colors.border.default },
-            ]}
-          >
-            <Text size="sm" weight="bold" style={{ color: "#000000" }}>
-              Follow
-            </Text>
-          </LinearGradient>
-        ) : (
-          <View
-            style={[
-              styles.followBtn,
-              {
-                backgroundColor: isFollowingAll
-                  ? "transparent"
-                  : theme.colors.primary[500],
-                borderColor: isFollowingAll
-                  ? theme.colors.border.default
-                  : theme.colors.primary[500],
-              },
-            ]}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: isFollowingAll
-                  ? theme.colors.text.default
-                  : theme.colors.background.default,
-              }}
-            >
-              {isFollowingAll ? "Unfollow" : "Follow"}
-            </Text>
-          </View>
-        )}
+        {followButton}
       </MenuTrigger>
       <MenuOptions
         customStyles={{

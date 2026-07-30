@@ -1,9 +1,18 @@
 import * as Sentry from "@sentry/react-native";
-import { useQuery, useInfiniteQuery, useQueryClient, useIsRestoring } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useIsRestoring } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
+import { getInfinitePostsQueryPolicy } from "../infinite-posts-policy";
+import {
+  FEED_MAX_PAGES,
+  FEED_QUERY_GC_TIME,
+  USER_POSTS_MAX_PAGES,
+  USER_POSTS_QUERY_GC_TIME,
+  getPreviousNumberedPageParam,
+} from "../infinite-query-policy";
 import {
   getPosts,
   getUserPosts,
+  normalizeUserPostsQueryParams,
   type GetPostsParams,
   type GetUserPostsParams,
 } from "../endpoints/posts";
@@ -124,9 +133,8 @@ function getNextPostsPageParam(
  */
 export function useInfinitePosts(
   params?: Omit<GetPostsParams, "page" | "address">,
-  options?: { enabled?: boolean; pageLimit?: number; disableAutoFetchWhenCached?: boolean }
+  options?: { enabled?: boolean; pageLimit?: number }
 ) {
-  const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -138,8 +146,11 @@ export function useInfinitePosts(
 
   const pageLimit = options?.pageLimit;
   const queryKey = queryKeys.posts({ ...baseParams, page: undefined });
-  const hasCachedData = !!queryClient.getQueryData(queryKey);
-  const shouldDisableAutoFetch = !!options?.disableAutoFetchWhenCached && hasCachedData;
+  const queryPolicy = getInfinitePostsQueryPolicy({
+    isInitializing,
+    isRestoring,
+    enabled: options?.enabled,
+  });
 
   return useInfiniteQuery({
     queryKey,
@@ -148,12 +159,10 @@ export function useInfinitePosts(
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) =>
       getNextPostsPageParam(lastPage, allPages, baseParams),
-    enabled: !isInitializing && !isRestoring && !shouldDisableAutoFetch && (options?.enabled ?? true),
-    staleTime: 1000 * 60 * 2,
-    gcTime: 1000 * 60 * 60 * 4,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: FEED_MAX_PAGES,
+    ...queryPolicy,
+    gcTime: FEED_QUERY_GC_TIME,
   });
 }
 
@@ -171,15 +180,18 @@ export function useUserPosts(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const queryParams = normalizeUserPostsQueryParams({
+    type,
+    allowed_tags: allowedTags || undefined,
+  });
 
   return useQuery({
-    queryKey: queryKeys.userPosts(owner!, type, allowedTags),
+    queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
     queryFn: () =>
       getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
-        type,
-        allowed_tags: allowedTags || undefined,
+        ...queryParams,
       }),
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
@@ -197,16 +209,19 @@ export function useInfiniteUserPosts(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const queryParams = normalizeUserPostsQueryParams({
+    ...params,
+    allowed_tags: params?.allowed_tags ?? (allowedTags || undefined),
+  });
 
   return useInfiniteQuery({
-    queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags),
+    queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
     queryFn: ({ pageParam = 1 }) => {
       return getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         page: pageParam,
-        allowed_tags: allowedTags || undefined,
-        ...params,
+        ...queryParams,
       });
     },
     initialPageParam: 1,
@@ -214,7 +229,10 @@ export function useInfiniteUserPosts(
       if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: USER_POSTS_MAX_PAGES,
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
+    gcTime: USER_POSTS_QUERY_GC_TIME,
   });
 }

@@ -47,15 +47,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
     ],
     "expo-secure-store",
+    [
+      "expo-local-authentication",
+      {
+        faceIDPermission:
+          "Allow $(PRODUCT_NAME) to authenticate before showing your recovery phrase.",
+      },
+    ],
+    "expo-video",
     "expo-web-browser",
     [
       "expo-build-properties",
       {
         ios: {
-          deploymentTarget: "16.0",
-        },
-        android: {
-          compileSdkVersion: 35,
+          deploymentTarget: "16.4",
         },
       },
     ],
@@ -102,12 +107,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.1.0",
+    version: "1.1.6",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     ios: {
       supportsTablet: false,
       requireFullScreen: true,
@@ -127,11 +131,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       package: bundleIdentifier,
-      versionCode: 1013,
+      versionCode: 1014,
       ...(isFdroidBuild
         ? {}
         : { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }),
-      edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",
       intentFilters: [

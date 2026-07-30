@@ -10,6 +10,11 @@ import {
   searchGifs,
   type GifItem,
 } from "@/src/api/giphy";
+import {
+  isAbortError,
+  RequestGenerationCoordinator,
+  type RequestGeneration,
+} from "@/src/utils/request-generation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 
@@ -54,33 +59,49 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
 
   const [query, setQueryState] = useState("");
   const [gifs, setGifs] = useState<GifItem[]>([]);
-  // Start as true if configured, false otherwise
-  const [isLoading, setIsLoading] = useState(isConfigured);
+  const [isLoading, setIsLoading] = useState(isConfigured && enabled);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // Ref to track the latest query for debouncing
-  const latestQueryRef = useRef(query);
+  const coordinatorRef = useRef(new RequestGenerationCoordinator());
+  const activeSearchRef = useRef<RequestGeneration | null>(null);
+  const latestQueryRef = useRef("");
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const normalizeQuery = useCallback((value: string) => value.trim().toLowerCase(), []);
+
+  const activateSearch = useCallback((searchQuery: string) => {
+    const active = coordinatorRef.current.activate(normalizeQuery(searchQuery));
+    activeSearchRef.current = active;
+    return active;
+  }, [normalizeQuery]);
 
   // Fetch GIFs (either search or trending)
   const fetchGifs = useCallback(
     async (
       searchQuery: string,
       newOffset: number = 0,
-      append: boolean = false
+      append: boolean = false,
+      activeSearch: RequestGeneration,
     ) => {
+      const token = coordinatorRef.current.start(activeSearch);
+      if (!token) return;
       setIsLoading(true);
       setError(null);
 
       try {
-        const results = searchQuery.trim()
-          ? await searchGifs(searchQuery, limit, newOffset)
-          : await getTrendingGifs(limit, newOffset);
+        const results = searchQuery
+          ? await searchGifs(searchQuery, limit, newOffset, token.signal)
+          : await getTrendingGifs(limit, newOffset, token.signal);
+
+        if (!coordinatorRef.current.isCurrent(token)) return;
 
         if (append) {
-          setGifs((prev) => [...prev, ...results]);
+          setGifs((prev) => {
+            const existingIds = new Set(prev.map((gif) => gif.id));
+            return [...prev, ...results.filter((gif) => !existingIds.has(gif.id))];
+          });
         } else {
           setGifs(results);
         }
@@ -88,13 +109,17 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
         setHasMore(results.length === limit);
         setOffset(newOffset + results.length);
       } catch (err) {
-        Sentry.addBreadcrumb({ category: "giphy", message: "GIF fetch failed", data: { error: String(err) }, level: "warning" });
+        if (!coordinatorRef.current.isCurrent(token) || isAbortError(err)) return;
+        Sentry.addBreadcrumb({ category: "giphy", message: "GIF fetch failed", level: "warning" });
         setError(err instanceof Error ? err.message : "Failed to load GIFs");
         if (!append) {
           setGifs([]);
         }
       } finally {
-        setIsLoading(false);
+        if (coordinatorRef.current.isCurrent(token)) {
+          setIsLoading(false);
+          coordinatorRef.current.settle(token);
+        }
       }
     },
     [limit]
@@ -104,7 +129,11 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
   const setQuery = useCallback(
     (newQuery: string) => {
       setQueryState(newQuery);
-      latestQueryRef.current = newQuery;
+      const normalizedQuery = normalizeQuery(newQuery);
+      latestQueryRef.current = normalizedQuery;
+      const activeSearch = activateSearch(normalizedQuery);
+      setIsLoading(false);
+      setError(null);
 
       // Clear existing timer
       if (debounceTimerRef.current) {
@@ -113,33 +142,42 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
 
       // Set new debounce timer
       debounceTimerRef.current = setTimeout(() => {
-        // Only fetch if this is still the latest query
-        if (latestQueryRef.current === newQuery) {
+        if (enabled && coordinatorRef.current.isGenerationActive(activeSearch)) {
           setOffset(0);
-          fetchGifs(newQuery, 0, false);
+          fetchGifs(normalizedQuery, 0, false, activeSearch);
         }
       }, debounceMs);
     },
-    [debounceMs, fetchGifs]
+    [activateSearch, debounceMs, enabled, fetchGifs, normalizeQuery]
   );
 
   // Load more GIFs (pagination)
   const loadMore = useCallback(() => {
-    if (!isLoading && hasMore) {
-      fetchGifs(query, offset, true);
+    const activeSearch = activeSearchRef.current;
+    if (!isLoading && hasMore && activeSearch) {
+      fetchGifs(normalizeQuery(query), offset, true, activeSearch);
     }
-  }, [isLoading, hasMore, query, offset, fetchGifs]);
+  }, [isLoading, hasMore, query, offset, fetchGifs, normalizeQuery]);
 
   // Refresh GIFs
   const refresh = useCallback(() => {
+    const normalizedQuery = normalizeQuery(query);
+    const activeSearch = activateSearch(normalizedQuery);
     setOffset(0);
-    fetchGifs(query, 0, false);
-  }, [query, fetchGifs]);
+    fetchGifs(normalizedQuery, 0, false, activeSearch);
+  }, [activateSearch, query, fetchGifs, normalizeQuery]);
 
   // Load trending GIFs on mount (only if configured)
   useEffect(() => {
+    const coordinator = coordinatorRef.current;
     if (isConfigured && enabled) {
-      fetchGifs("", 0, false);
+      const normalizedQuery = latestQueryRef.current;
+      const activeSearch = activateSearch(normalizedQuery);
+      fetchGifs(normalizedQuery, 0, false, activeSearch);
+    } else {
+      coordinator.invalidate();
+      activeSearchRef.current = null;
+      setIsLoading(false);
     }
 
     // Cleanup debounce timer on unmount
@@ -147,8 +185,9 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      coordinator.invalidate();
     };
-  }, [isConfigured, enabled]);
+  }, [activateSearch, enabled, fetchGifs, isConfigured]);
 
   return {
     gifs,

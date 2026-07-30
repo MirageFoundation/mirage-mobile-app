@@ -1,0 +1,160 @@
+import { StyleSheet } from "react-native-unistyles";
+
+/**
+ * Shared styles for the post-card media surfaces (frame, video, YouTube,
+ * image). Each media-type component composes the same frame styling so the
+ * card look stays identical regardless of which feature renders it.
+ */
+export const postMediaStyles = StyleSheet.create((theme) => ({
+  mediaContainer: {
+    marginTop: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  mediaWrapper: {
+    width: "100%",
+    backgroundColor: theme.colors.background.subtle,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  borderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.3,
+    borderColor: theme.colors.border.subtle,
+    zIndex: 50,
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  media: {
+    width: "100%",
+    height: "100%",
+    borderRadius: theme.radius.md,
+  },
+  deferredMediaPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background.subtle,
+  },
+  deferredMediaLabel: {
+    marginTop: theme.spacing.xs,
+    color: theme.colors.text.subtle,
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoTapArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tapToPlayContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  youtubeControlsContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: theme.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 25,
+  },
+  youtubeControlsRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  youtubeControlButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  watchOnYouTubeButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeButtonTop: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  muteButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+    zIndex: 30,
+    elevation: 4,
+  },
+  muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenButton: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
+    zIndex: 20,
+  },
+  fullscreenButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  multiMediaBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radius.sm,
+  },
+}));

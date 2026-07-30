@@ -9,6 +9,7 @@ import {
 } from "react-native-popup-menu";
 
 import { Text } from "@/src/components/ui/primitives";
+import { FeedDensityToggle } from "@/src/components/molecules";
 import { styles } from "./topic-feed-styles";
 
 type SortBy = "magic" | "newest";
@@ -161,6 +162,7 @@ export function TopicFeedHeader({
             })}
           </MenuOptions>
         </Menu>
+        <FeedDensityToggle />
         <Pressable
           onPress={onFollowTopic}
           style={[

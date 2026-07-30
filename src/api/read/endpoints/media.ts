@@ -1,25 +1,27 @@
 /**
  * Media Upload Endpoints
  *
- * POST /get_upload_url - Get a signed URL for uploading media
+ * POST /upload_media - Upload media through the mobile backend
  */
 
-import { api } from "@/src/api/client";
+import { api, apiClient } from "@/src/api/client";
 import * as Sentry from "@sentry/react-native";
 import {
   createUploadTask,
-  uploadAsync,
   FileSystemUploadType,
   FileSystemSessionType,
 } from "expo-file-system/legacy";
-import type {
-  FileSystemUploadResult,
-  UploadProgressData,
-  FileSystemNetworkTaskProgressCallback,
-} from "expo-file-system/legacy";
-import * as Network from "expo-network";
+import type { FileSystemUploadResult } from "expo-file-system/legacy";
 import { AppState, Platform } from "react-native";
+import {
+  backgroundUpload,
+  Image as CompressorImage,
+  getVideoMetaData,
+  UploaderHttpMethod,
+  UploadType,
+} from "react-native-compressor";
 import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
+import { classifyUploadError } from "@/src/api/read/utils/media-upload-telemetry";
 
 // ============================================
 // Types
@@ -31,54 +33,188 @@ export interface GetUploadUrlParams {
   type: MediaType;
 }
 
+interface UploadMediaResponse {
+  url?: string;
+  asset_id?: string;
+  kind?: MediaType;
+  id?: string;
+  accountHash?: string;
+  account_hash?: string;
+  uid?: string;
+  streamCustomer?: string;
+  stream_customer?: string;
+  thumbnailUrl?: string;
+  thumbnail_url?: string;
+  downloadUrl?: string;
+  download_url?: string;
+  posterUrl?: string;
+  poster_url?: string;
+}
+
+type UploadMediaParameters = Record<string, string>;
+
 // ============================================
 // Constants
 // ============================================
 
 const MAX_UPLOAD_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 2000;
-const IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
-const VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
-
-// ============================================
-// Helpers
-// ============================================
-
-function getFileNameFromUri(localUri: string): string {
-  return localUri.split("/").pop() || "unknown";
-}
-
-function isNetworkError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error);
-  return msg.includes("Network") ||
-    msg.includes("network") ||
-    msg.includes("Upload aborted") ||
-    msg.includes("timed out") ||
-    msg.includes("no result") ||
-    (error as any)?.code === "ERR_NETWORK";
-}
+const IMAGE_UPLOAD_TIMEOUT_MS = 180_000;
+const VIDEO_UPLOAD_TIMEOUT_MS = 720_000;
+const IMAGE_UPLOAD_MAX_WIDTH = 3840;
+const IMAGE_UPLOAD_MAX_HEIGHT = 2160;
+const IMAGE_UPLOAD_QUALITY = 0.92;
 
 function captureMediaUploadException(
   error: unknown,
   mediaType: MediaType,
   stage: string,
-  localUri: string,
   contentType: string,
   extra?: Record<string, unknown>
 ) {
-  if (isNetworkError(error)) return;
-  Sentry.captureException(error, {
+  // User-initiated aborts are expected cancellations, not failures.
+  const errorClass = classifyUploadError(error);
+  if (errorClass === "aborted") return;
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Media upload failed",
+    level: errorClass === "unknown" ? "error" : "warning",
+    data: {
+      mediaType,
+      stage,
+      errorClass,
+      contentType,
+      attemptsMade: (error as { attemptsMade?: number }).attemptsMade,
+      ...extra,
+    },
+  });
+  if (errorClass !== "unknown") return;
+  Sentry.captureException(error instanceof Error ? new Error(error.message) : new Error("Unknown media upload failure"), {
+    level: "error",
     tags: {
       feature: "media-upload",
       media_type: mediaType,
       stage,
+      error_class: errorClass,
     },
-    extra: {
-      fileName: getFileNameFromUri(localUri),
-      contentType,
-      ...extra,
+    extra: { contentType, ...extra },
+  });
+}
+
+function getUploadErrorCode(responseText: string): string | undefined {
+  try {
+    const parsed = responseText ? JSON.parse(responseText) : undefined;
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const error = parsed as { error_code?: unknown; code?: unknown };
+    const code = error.error_code ?? error.code;
+    return code === undefined ? undefined : String(code);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildUploadError(status: number, responseText: string): Error {
+  let data: unknown;
+  try {
+    data = responseText ? JSON.parse(responseText) : undefined;
+  } catch {
+    data = responseText;
+  }
+  const parsedError =
+    typeof data === "object" && data !== null
+      ? data as { error?: unknown; error_code?: unknown; message?: unknown }
+      : undefined;
+  const errorCode =
+    parsedError?.error ?? parsedError?.error_code ?? parsedError?.message;
+  const message =
+    errorCode !== undefined
+      ? String(errorCode)
+      : `Upload failed: ${status}`;
+  return Object.assign(new Error(message), {
+    status,
+    responseText,
+    response: { status, data },
+  });
+}
+
+function parseUploadMediaResponse(responseText: string): UploadMediaResponse {
+  const parsed = responseText ? JSON.parse(responseText) : {};
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Upload service returned an invalid response.");
+  }
+  return parsed as UploadMediaResponse;
+}
+
+async function prepareImageForUpload(
+  localUri: string,
+  contentType: string,
+): Promise<{ uri: string; contentType: string }> {
+  if (contentType === "image/gif") {
+    return { uri: localUri, contentType };
+  }
+
+  try {
+    const startedAt = Date.now();
+    const compressedUri = await CompressorImage.compress(localUri, {
+      compressionMethod: "manual",
+      maxWidth: IMAGE_UPLOAD_MAX_WIDTH,
+      maxHeight: IMAGE_UPLOAD_MAX_HEIGHT,
+      quality: IMAGE_UPLOAD_QUALITY,
+      output: "jpg",
+    });
+    console.log("[MediaUpload] Image prepared for upload", {
+      durationMs: Date.now() - startedAt,
+    });
+    return { uri: compressedUri, contentType: "image/jpeg" };
+  } catch {
+    console.warn("[MediaUpload] Image compression failed; uploading original");
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Image compression failed; uploading original",
+      level: "warning",
+      data: {
+        contentType,
+        errorClass: "compression",
+      },
+    });
+    return { uri: localUri, contentType };
+  }
+}
+
+async function getVideoUploadParameters(localUri: string): Promise<UploadMediaParameters> {
+  const startedAt = Date.now();
+  const meta = await getVideoMetaData(localUri);
+  const duration = Math.round(Number(meta.duration) || 0);
+  const width = Math.round(Number(meta.width) || 0);
+  const height = Math.round(Number(meta.height) || 0);
+
+  console.log("[VideoTiming] metadata complete", {
+    durationMs: Date.now() - startedAt,
+    duration,
+    width,
+    height,
+  });
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Video metadata ready",
+    level: "info",
+    data: {
+      elapsedMs: Date.now() - startedAt,
+      durationSeconds: duration,
+      width,
+      height,
     },
   });
+
+  if (!duration || !height) {
+    throw new Error("Could not read video duration and height for upload.");
+  }
+
+  return {
+    duration: String(duration),
+    width: String(width),
+    height: String(height),
+  };
 }
 
 function normalizeFileUri(uri: string): string {
@@ -100,21 +236,6 @@ function waitForForeground(): Promise<void> {
   });
 }
 
-async function waitForNetwork(): Promise<void> {
-  const state = await Network.getNetworkStateAsync();
-  if (state.isConnected && state.isInternetReachable !== false) return;
-  console.log("[MediaUpload] Network unavailable, waiting for reconnection...");
-  return new Promise((resolve) => {
-    const sub = Network.addNetworkStateListener((event) => {
-      if (event.isConnected && event.isInternetReachable !== false) {
-        sub.remove();
-        console.log("[MediaUpload] Network restored, resuming upload");
-        resolve();
-      }
-    });
-  });
-}
-
 async function withRetry<T>(
   fn: () => Promise<T>,
   {
@@ -130,30 +251,46 @@ async function withRetry<T>(
   } = {}
 ): Promise<T> {
   let lastError: unknown;
+  let attemptsMade = 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (signal?.aborted) throw new Error("Upload aborted");
     try {
       return await fn();
     } catch (error) {
       lastError = error;
+      attemptsMade = attempt + 1;
       const msg = error instanceof Error ? error.message : String(error);
       if (msg === "Upload aborted") throw error;
       const status = (error as { status?: number }).status;
-      if (status === 422) throw error;
+      if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        Object.assign(error as object, { attemptsMade });
+        throw error;
+      }
 
       if (attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt);
-        console.log(`[MediaUpload] ${label} retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
+        console.log(`[MediaUpload] ${label} retry ${attempt + 1}/${maxRetries} in ${delay}ms`, {
+          status,
+          error: msg,
+        });
         Sentry.addBreadcrumb({
           category: "media-upload",
           message: `${label} retry ${attempt + 1}/${maxRetries}`,
           level: "warning",
-          data: { delay, error: msg },
+          data: {
+            delayMs: delay,
+            attempt: attempt + 1,
+            errorClass: classifyUploadError(error),
+            status,
+          },
         });
         await waitForForeground();
         await new Promise((r) => setTimeout(r, delay));
       }
     }
+  }
+  if (lastError instanceof Error || (typeof lastError === "object" && lastError !== null)) {
+    Object.assign(lastError as object, { attemptsMade, retriesExhausted: maxRetries > 0 });
   }
   throw lastError;
 }
@@ -179,6 +316,122 @@ export async function getVideoUploadUrl(): Promise<VideoUploadResponse> {
   return api.post<VideoUploadResponse>("/get_upload_url", { type: "video" });
 }
 
+export async function uploadMedia(
+  localUri: string,
+  mediaType: MediaType,
+  contentType: string,
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal,
+  parameters: UploadMediaParameters = {},
+): Promise<UploadMediaResponse> {
+  const startedAt = Date.now();
+  const normalizedUri = normalizeFileUri(localUri);
+  const timeoutMs = mediaType === "video" ? VIDEO_UPLOAD_TIMEOUT_MS : IMAGE_UPLOAD_TIMEOUT_MS;
+  const uploadUrl = apiClient.getApiUrl("/upload_media");
+
+  const uploadWithNativeProgress = async (): Promise<UploadMediaResponse> => {
+    const reportedMilestones = new Set<number>();
+    const uploadController = new AbortController();
+    const onAbort = () => uploadController.abort();
+    if (signal) {
+      if (signal.aborted) throw new Error("Upload aborted");
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        uploadController.abort();
+        reject(Object.assign(
+          new Error(`${mediaType === "video" ? "Video" : "Image"} upload timed out while waiting for the server.`),
+          { code: "upload_timeout" },
+        ));
+      }, timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([
+        backgroundUpload(
+          uploadUrl,
+          normalizedUri,
+          {
+            uploadType: UploadType.MULTIPART,
+            fieldName: "file",
+            mimeType: contentType,
+            parameters: { kind: mediaType, ...parameters },
+            headers: {},
+            httpMethod: UploaderHttpMethod.POST,
+          },
+          (bytesWritten, totalBytes) => {
+            if (totalBytes > 0) {
+              const progress = Math.min(100, Math.round((bytesWritten / totalBytes) * 100));
+              onProgress?.(progress);
+              [25, 50, 75, 100].filter(
+                (value) => progress >= value && !reportedMilestones.has(value),
+              ).forEach((milestone) => {
+                reportedMilestones.add(milestone);
+                Sentry.addBreadcrumb({
+                  category: "media-upload",
+                  message: milestone === 100 ? "Upload body complete; waiting for provider" : "Upload progress milestone",
+                  level: "info",
+                  data: { mediaType, milestone, elapsedMs: Date.now() - startedAt },
+                });
+              });
+            }
+          },
+          uploadController.signal,
+        ),
+        timeoutPromise,
+      ]) as { status: number; body: string };
+      if (!result) throw new Error("Upload returned no result");
+      console.log("[MediaUpload] upload_media complete", {
+        status: result.status,
+        mediaType,
+        transport: "native-background-upload",
+      });
+      if (result.status < 200 || result.status >= 300) {
+        const errorCode = getUploadErrorCode(result.body);
+        Sentry.addBreadcrumb({
+          category: "media-upload",
+          message: "upload_media rejected upload",
+          level: "warning",
+          data: {
+            mediaType,
+            status: result.status,
+            errorCode,
+            uploadsDisabled: errorCode === "uploads_disabled",
+          },
+        });
+        throw buildUploadError(result.status, result.body);
+      }
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "upload_media upload complete",
+        level: "info",
+        data: {
+          mediaType,
+          status: result.status,
+          parameterCount: Object.keys(parameters).length,
+          transport: "native-background-upload",
+          elapsedMs: Date.now() - startedAt,
+        },
+      });
+      return parseUploadMediaResponse(result.body);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  };
+
+  const uploadFn = async (): Promise<UploadMediaResponse> => uploadWithNativeProgress();
+
+  return withRetry(uploadFn, {
+    label: `${mediaType}-upload`,
+    maxRetries: mediaType === "video" ? 0 : 2,
+    signal,
+  });
+}
+
 // ============================================
 // Image Upload (expo-file-system with retry)
 // ============================================
@@ -192,7 +445,6 @@ export async function uploadToSignedUrl(
   console.log("[MediaUpload] Starting upload to signed URL");
 
   const normalizedUri = normalizeFileUri(localUri);
-  const filename = getFileNameFromUri(localUri) || "image.jpg";
 
   const uploadFn = async (): Promise<FileSystemUploadResult> => {
     const task = createUploadTask(
@@ -265,49 +517,67 @@ export interface UploadImageResult {
 
 export async function uploadImage(
   localUri: string,
-  contentType: string = "image/jpeg"
+  contentType: string = "image/jpeg",
+  onProgress?: UploadProgressCallback,
 ): Promise<UploadImageResult> {
-  console.log("[MediaUpload] uploadImage called with:", { localUri, contentType });
+  const uploadStartedAt = Date.now();
+  console.log("[MediaUpload] image upload started", { contentType });
   Sentry.addBreadcrumb({
     category: "media-upload",
     message: "Starting image upload",
     level: "info",
     data: {
-      fileName: getFileNameFromUri(localUri),
       contentType,
     },
   });
 
-  let uploadResponse: ImageUploadResponse;
   try {
-    uploadResponse = await getImageUploadUrl();
-    console.log("[MediaUpload] Got upload response:", uploadResponse);
-  } catch (error) {
-    console.error("[MediaUpload] Failed to get upload URL:", error);
-    captureMediaUploadException(error, "image", "get-upload-url", localUri, contentType);
-    throw error;
-  }
-
-  try {
-    await uploadToSignedUrl(uploadResponse.uploadURL, localUri, contentType);
+    const preparedImage = await prepareImageForUpload(localUri, contentType);
+    const uploadResponse = await uploadMedia(
+      preparedImage.uri,
+      "image",
+      preparedImage.contentType,
+      onProgress,
+    );
     console.log("[MediaUpload] File uploaded successfully");
+    const accountHash = uploadResponse.accountHash ?? uploadResponse.account_hash;
+    const assetId = uploadResponse.asset_id ?? uploadResponse.id;
+    const finalUrl = uploadResponse.url ?? (accountHash && assetId
+      ? getImageUrl({
+          uploadURL: "",
+          id: assetId,
+          accountHash,
+        })
+      : "");
+    if (!finalUrl) throw new Error("Upload service did not return an image URL.");
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Image upload complete",
+      level: "info",
+      data: {
+        totalDurationMs: Date.now() - uploadStartedAt,
+        hasAssetId: !!assetId,
+        hasFinalUrl: true,
+      },
+    });
+
+    return {
+      url: finalUrl,
+      id: assetId ?? finalUrl,
+      accountHash: uploadResponse.accountHash ?? uploadResponse.account_hash ?? "",
+    };
   } catch (error) {
-    console.error("[MediaUpload] Failed to upload file:", error);
-    captureMediaUploadException(error, "image", "upload-file", localUri, contentType, {
+    console.error("[MediaUpload] Image upload failed", {
+      errorClass: classifyUploadError(error),
       status: (error as { status?: number }).status,
-      responseText: (error as { responseText?: string }).responseText,
+    });
+    captureMediaUploadException(error, "image", "upload-file", contentType, {
+      status: (error as { status?: number }).status,
+      errorCode: getUploadErrorCode((error as { responseText?: string }).responseText ?? ""),
     });
     throw error;
   }
 
-  const finalUrl = getImageUrl(uploadResponse);
-  console.log("[MediaUpload] Final URL:", finalUrl);
-
-  return {
-    url: finalUrl,
-    id: uploadResponse.id,
-    accountHash: uploadResponse.accountHash,
-  };
 }
 
 // ============================================
@@ -349,208 +619,26 @@ export interface UploadProgressCallback {
 export interface UploadVideoResult {
   url: string;
   uid: string;
-  streamCustomer: string;
   thumbnailUrl: string;
 }
 
-export function getVideoUrl(uploadResponse: VideoUploadResponse): string {
-  if (!uploadResponse.streamCustomer) {
-    return `https://videodelivery.net/${uploadResponse.uid}/manifest/video.m3u8`;
+/**
+ * Derive the Bunny Stream thumbnail URL from a playback URL.
+ * `https://{pull-zone}.b-cdn.net/{guid}/playlist.m3u8` -> `.../{guid}/thumbnail.jpg`
+ */
+function deriveVideoThumbnailUrl(playbackUrl: string): string {
+  try {
+    const parsed = new URL(playbackUrl);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return "";
+    segments[segments.length - 1] = "thumbnail.jpg";
+    parsed.pathname = `/${segments.join("/")}`;
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
   }
-  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/manifest/video.m3u8`;
-}
-
-export function getVideoThumbnailUrl(uploadResponse: VideoUploadResponse): string {
-  if (!uploadResponse.streamCustomer) {
-    return `https://videodelivery.net/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
-  }
-  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
-}
-
-export async function uploadVideoToSignedUrl(
-  uploadUrl: string,
-  localUri: string,
-  contentType: string,
-  onProgress?: UploadProgressCallback,
-  signal?: AbortSignal
-): Promise<void> {
-  const signedUploadStartedAt = Date.now();
-  console.log("[VideoUpload] Starting upload to signed URL");
-
-  const normalizedUri = normalizeFileUri(localUri);
-  const filename = getFileNameFromUri(localUri) || "video.mp4";
-
-  const uploadWithXhr = async (): Promise<void> => {
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      let didSettle = false;
-
-      const settle = (fn: () => void) => {
-        if (didSettle) return;
-        didSettle = true;
-        signal?.removeEventListener("abort", onAbort);
-        fn();
-      };
-
-      const onAbort = () => {
-        xhr.abort();
-        settle(() => reject(new Error("Upload aborted")));
-      };
-
-      xhr.open("POST", uploadUrl);
-      xhr.timeout = VIDEO_UPLOAD_TIMEOUT_MS;
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0 && onProgress) {
-          const pct = Math.min(100, Math.round((event.loaded / event.total) * 100));
-          onProgress(pct);
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const durationMs = Date.now() - signedUploadStartedAt;
-          console.log("[VideoUpload] Android XHR upload complete, status:", xhr.status);
-          console.log("[VideoTiming] signed upload complete", {
-            fileName: filename,
-            platform: Platform.OS,
-            status: xhr.status,
-            durationMs,
-          });
-          Sentry.addBreadcrumb({
-            category: "media-upload",
-            message: "Video signed upload complete",
-            level: "info",
-            data: {
-              fileName: filename,
-              platform: Platform.OS,
-              status: xhr.status,
-              durationMs,
-            },
-          });
-          settle(resolve);
-          return;
-        }
-        settle(() => reject(Object.assign(
-          new Error(`Upload failed: ${xhr.status}`),
-          { status: xhr.status, responseText: xhr.responseText }
-        )));
-      };
-      xhr.onerror = () => {
-        settle(() => reject(new Error("Video upload network error")));
-      };
-      xhr.ontimeout = () => {
-        settle(() => reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`)));
-      };
-      xhr.onabort = () => {
-        settle(() => reject(new Error("Upload aborted")));
-      };
-
-      if (signal) {
-        if (signal.aborted) {
-          onAbort();
-          return;
-        }
-        signal.addEventListener("abort", onAbort, { once: true });
-      }
-
-      const formData = new FormData();
-      formData.append("file", {
-        uri: normalizedUri,
-        name: filename,
-        type: contentType,
-      } as unknown as Blob);
-      Sentry.addBreadcrumb({
-        category: "media-upload",
-        message: "Using Android XHR video upload",
-        level: "info",
-        data: { fileName: filename, contentType },
-      });
-      xhr.send(formData);
-    });
-  };
-
-  const uploadFn = async (): Promise<void> => {
-    if (Platform.OS === "android") {
-      await uploadWithXhr();
-      return;
-    }
-
-    const task = createUploadTask(
-      uploadUrl,
-      normalizedUri,
-      {
-        uploadType: FileSystemUploadType.MULTIPART,
-        fieldName: "file",
-        mimeType: contentType,
-        parameters: {},
-        headers: {},
-        sessionType: FileSystemSessionType.FOREGROUND,
-        httpMethod: "POST",
-      },
-      (data) => {
-        if (data.totalBytesExpectedToSend > 0 && onProgress) {
-          const pct = Math.min(100, Math.round(
-            (data.totalBytesSent / data.totalBytesExpectedToSend) * 100
-          ));
-          onProgress(pct);
-        }
-      }
-    );
-
-    if (signal) {
-      const onAbort = () => {
-        task.cancelAsync();
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        task.cancelAsync();
-        reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`));
-      }, VIDEO_UPLOAD_TIMEOUT_MS);
-    });
-
-    try {
-      const result = await Promise.race([
-        task.uploadAsync(),
-        timeoutPromise,
-      ]);
-      if (!result) throw new Error("Upload returned no result");
-      if (result.status < 200 || result.status >= 300) {
-        throw Object.assign(
-          new Error(`Upload failed: ${result.status}`),
-          { status: result.status, responseText: result.body }
-        );
-      }
-      const durationMs = Date.now() - signedUploadStartedAt;
-      console.log("[VideoUpload] Upload complete, status:", result.status);
-      console.log("[VideoTiming] signed upload complete", {
-        fileName: filename,
-        platform: Platform.OS,
-        status: result.status,
-        durationMs,
-      });
-      Sentry.addBreadcrumb({
-        category: "media-upload",
-        message: "Video signed upload complete",
-        level: "info",
-        data: {
-          fileName: filename,
-          platform: Platform.OS,
-          status: result.status,
-          durationMs,
-        },
-      });
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  };
-
-  // Cloudflare Stream signed upload URLs are single-use. If the client times
-  // out after Cloudflare already accepted the file, retrying this same URL can
-  // fail later with "Video already uploaded" and surface stale errors.
-  return withRetry(uploadFn, { label: "video-upload", maxRetries: 0, signal });
 }
 
 export async function uploadVideo(
@@ -560,10 +648,8 @@ export async function uploadVideo(
   signal?: AbortSignal
 ): Promise<UploadVideoResult> {
   const uploadStartedAt = Date.now();
-  const fileName = getFileNameFromUri(localUri);
-  console.log("[VideoUpload] uploadVideo called with:", { localUri, contentType });
+  console.log("[VideoUpload] video upload started", { contentType, platform: Platform.OS });
   console.log("[VideoTiming] upload start", {
-    fileName,
     contentType,
     platform: Platform.OS,
   });
@@ -572,18 +658,24 @@ export async function uploadVideo(
     message: "Starting video upload",
     level: "info",
     data: {
-      fileName,
       contentType,
+      platform: Platform.OS,
     },
   });
 
-  let uploadResponse: VideoUploadResponse;
   try {
     const uploadUrlStartedAt = Date.now();
-    uploadResponse = await getVideoUploadUrl();
+    const videoParameters = await getVideoUploadParameters(localUri);
+    const uploadResponse = await uploadMedia(
+      localUri,
+      "video",
+      contentType,
+      onProgress,
+      signal,
+      videoParameters,
+    );
     const uploadUrlDurationMs = Date.now() - uploadUrlStartedAt;
     console.log("[VideoTiming] upload URL ready", {
-      fileName,
       durationMs: uploadUrlDurationMs,
       totalDurationMs: Date.now() - uploadStartedAt,
       uid: uploadResponse.uid,
@@ -593,89 +685,70 @@ export async function uploadVideo(
       message: "Video upload URL ready",
       level: "info",
       data: {
-        fileName,
         durationMs: uploadUrlDurationMs,
         totalDurationMs: Date.now() - uploadStartedAt,
         uid: uploadResponse.uid,
-        provider: uploadResponse.provider,
+        provider: "upload_media",
       },
     });
-    console.log("[VideoUpload] Got upload response:", JSON.stringify(uploadResponse, null, 2));
-
-    if (!uploadResponse.streamCustomer && uploadResponse.stream_customer) {
-      uploadResponse.streamCustomer = uploadResponse.stream_customer;
-    }
-
-    if (!uploadResponse.streamCustomer) {
-      console.warn("[VideoUpload] Missing streamCustomer, using videodelivery.net fallback");
-    }
-  } catch (error) {
-    console.error("[VideoUpload] Failed to get upload URL:", error);
-    captureMediaUploadException(error, "video", "get-upload-url", localUri, contentType);
-    throw error;
-  }
-
-  try {
-    await uploadVideoToSignedUrl(
-      uploadResponse.uploadURL,
-      localUri,
-      contentType,
-      onProgress,
-      signal
-    );
     console.log("[VideoUpload] File uploaded successfully");
+
+    const assetId = uploadResponse.asset_id ?? uploadResponse.uid;
+    const finalUrl = uploadResponse.url;
+    if (!finalUrl) {
+      throw new Error("Upload service did not return a video URL.");
+    }
+    const thumbnailUrl =
+      uploadResponse.thumbnailUrl ??
+      uploadResponse.thumbnail_url ??
+      uploadResponse.posterUrl ??
+      uploadResponse.poster_url ??
+      deriveVideoThumbnailUrl(finalUrl);
+    const totalUploadDurationMs = Date.now() - uploadStartedAt;
+    console.log("[VideoTiming] upload complete", {
+      uid: assetId,
+      totalDurationMs: totalUploadDurationMs,
+      hasFinalUrl: !!finalUrl,
+    });
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload complete",
+      level: "info",
+      data: {
+        uid: assetId,
+        totalDurationMs: totalUploadDurationMs,
+        hasFinalUrl: !!finalUrl,
+      },
+    });
+    if (totalUploadDurationMs > 30000) {
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "Video upload was slow",
+        level: "warning",
+        data: {
+          uid: assetId,
+          totalDurationMs: totalUploadDurationMs,
+          hasFinalUrl: !!finalUrl,
+        },
+      });
+    }
+
+    return {
+      url: finalUrl,
+      uid: assetId ?? finalUrl,
+      thumbnailUrl,
+    };
   } catch (error) {
-    console.error("[VideoUpload] Failed to upload file:", error);
-    captureMediaUploadException(error, "video", "upload-file", localUri, contentType, {
+    console.error("[VideoUpload] Video upload failed", {
+      errorClass: classifyUploadError(error),
       status: (error as { status?: number }).status,
-      responseText: (error as { responseText?: string }).responseText,
+    });
+    captureMediaUploadException(error, "video", "upload-file", contentType, {
+      status: (error as { status?: number }).status,
+      errorCode: getUploadErrorCode((error as { responseText?: string }).responseText ?? ""),
     });
     throw error;
   }
-
-  const finalUrl = getVideoUrl(uploadResponse);
-  const thumbnailUrl = getVideoThumbnailUrl(uploadResponse);
-  console.log("[VideoUpload] Final URL:", finalUrl);
-  const totalUploadDurationMs = Date.now() - uploadStartedAt;
-  console.log("[VideoTiming] upload complete", {
-    fileName,
-    uid: uploadResponse.uid,
-    totalDurationMs: totalUploadDurationMs,
-    finalUrl,
-  });
-  Sentry.addBreadcrumb({
-    category: "media-upload",
-    message: "Video upload complete",
-    level: "info",
-    data: {
-      fileName,
-      uid: uploadResponse.uid,
-      totalDurationMs: totalUploadDurationMs,
-      finalUrl,
-    },
-  });
-  if (totalUploadDurationMs > 30000) {
-    Sentry.captureMessage("Video upload was slow", {
-      level: "warning",
-      tags: {
-        feature: "video-posting",
-        operation: "video-upload",
-      },
-      extra: {
-        fileName,
-        uid: uploadResponse.uid,
-        totalDurationMs: totalUploadDurationMs,
-        finalUrl,
-      },
-    });
-  }
-
-  return {
-    url: finalUrl,
-    uid: uploadResponse.uid,
-    streamCustomer: uploadResponse.streamCustomer,
-    thumbnailUrl,
-  };
 }
 
 export function isVideoFile(uri: string): boolean {

@@ -1,87 +1,171 @@
 import type { PostFilters, UserFilters } from "../types";
+import { serverQueryRoot } from "../server-runtime";
+import {
+  normalizeInboxQueryParams,
+  normalizeUserPostsQueryParams,
+  type InboxQueryParamsInput,
+  type UserPostsQueryParams,
+  type UserPostsQueryParamsInput,
+} from "./request-params";
+import { normalizeUsernameIdentity } from "./username-resolution";
+
+const serverKey = <T extends readonly unknown[]>(...key: T) =>
+  [...serverQueryRoot(), ...key] as const;
+
+export const normalizeAccountIdentity = (address?: string | null): string =>
+  address?.trim().toLowerCase() || "anonymous";
+
+const viewerKey = (address?: string | null) =>
+  ["viewer", normalizeAccountIdentity(address)] as const;
+
+export const getUserPostsQueryParamsFromKey = (
+  queryKey: readonly unknown[],
+): UserPostsQueryParams | undefined => {
+  const value = queryKey.at(-1);
+  if (!value || typeof value !== "object") return undefined;
+  const params = value as Partial<UserPostsQueryParams>;
+  if (
+    typeof params.type !== "string" ||
+    typeof params.limit !== "number" ||
+    typeof params.allowed_tags !== "string"
+  ) return undefined;
+  return normalizeUserPostsQueryParams(params as UserPostsQueryParams);
+};
 
 export const queryKeys = {
   // Config & Parameters
-  parameters: (address?: string) => ["parameters", address] as const,
-  config: () => ["config"] as const,
-  nodeConfig: () => ["nodeConfig"] as const,
+  parameters: (address?: string) => serverKey("parameters", ...viewerKey(address)),
+  config: () => serverKey("config"),
+  nodeConfig: () => serverKey("nodeConfig"),
 
   // User
-  userStatus: (address: string) => ["user", "status", address] as const,
-  profile: (address: string) => ["user", "profile", address] as const,
-  userPostsRoot: () => ["user", "posts"] as const,
-  userPosts: (owner: string, type?: string, allowedTags?: string) =>
-    ["user", "posts", owner, type, allowedTags] as const,
-  userFollowed: (address: string) => ["user", "followed", address] as const,
-  userBlocked: (address: string) => ["user", "blocked", address] as const,
-  preferences: (address: string) => ["user", "preferences", address] as const,
-  similarUsers: (address: string) => ["user", "similar", address] as const,
+  userStatus: (address: string) => serverKey("user", "status", normalizeAccountIdentity(address)),
+  profile: (address: string) => serverKey("user", "profile", normalizeAccountIdentity(address)),
+  userPostsRoot: () => serverKey("user", "posts"),
+  userPostsForOwner: (owner: string) =>
+    serverKey("user", "posts", normalizeAccountIdentity(owner)),
+  userPostsForViewer: (
+    owner: string,
+    viewerAddress: string | null | undefined,
+  ) => serverKey(
+    "user",
+    "posts",
+    normalizeAccountIdentity(owner),
+    ...viewerKey(viewerAddress),
+  ),
+  userPosts: (
+    owner: string,
+    viewerAddress: string | null | undefined,
+    params?: UserPostsQueryParamsInput,
+  ) => serverKey(
+    "user",
+    "posts",
+    normalizeAccountIdentity(owner),
+    ...viewerKey(viewerAddress),
+    normalizeUserPostsQueryParams(params),
+  ),
+  userFollowed: (address: string) => serverKey("user", "followed", normalizeAccountIdentity(address)),
+  userBlocked: (address: string) => serverKey("user", "blocked", normalizeAccountIdentity(address)),
+  preferences: (address: string) => serverKey("user", "preferences", normalizeAccountIdentity(address)),
+  similarUsers: (address: string) => serverKey("user", "similar", normalizeAccountIdentity(address)),
 
   // Posts & Feed
-  postsRoot: () => ["posts"] as const,
-  commentsRoot: () => ["comments"] as const,
-  posts: (filters: PostFilters) => ["posts", filters] as const,
+  postsRoot: () => serverKey("posts"),
+  commentsRoot: () => serverKey("comments"),
+  posts: (filters: PostFilters = {}) => {
+    const { address, ...publicFilters } = filters;
+    return serverKey("posts", ...viewerKey(address), publicFilters);
+  },
   comments: (postId: string, address?: string) =>
-    ["comments", postId, address] as const,
-  rootPostId: (commentId: string) => ["rootPostId", commentId] as const,
-  commentContextRoot: () => ["commentContext"] as const,
-  commentContext: (commentId: string, maxDepth?: number) =>
-    ["commentContext", commentId, maxDepth] as const,
-  batchUsernamesRoot: () => ["batchUsernames"] as const,
-  batchUsernames: (stableKey: string) => ["batchUsernames", stableKey] as const,
+    serverKey("comments", ...viewerKey(address), postId),
+  rootPostId: (commentId: string) => serverKey("rootPostId", commentId),
+  commentContextRoot: () => serverKey("commentContext"),
+  commentContext: (
+    commentId: string,
+    maxDepth: number | undefined,
+    viewerAddress: string | null | undefined,
+  ) => serverKey("commentContext", ...viewerKey(viewerAddress), commentId, maxDepth),
+  batchUsernamesRoot: () => serverKey("batchUsernames"),
+  batchUsernames: (stableKey: string) => serverKey("batchUsernames", stableKey),
 
   // Inbox
-  inbox: (address: string, page?: number) =>
-    ["inbox", address, page] as const,
-  inboxInfinite: (address: string) =>
-    ["inbox", "infinite", address] as const,
+  inboxRoot: () => serverKey("inbox"),
+  inboxForAddress: (address: string) =>
+    serverKey("inbox", normalizeAccountIdentity(address)),
+  inbox: (
+    address: string,
+    page?: number,
+    params?: InboxQueryParamsInput,
+  ) => serverKey(
+    "inbox",
+    normalizeAccountIdentity(address),
+    "page",
+    page ?? 1,
+    normalizeInboxQueryParams(params),
+  ),
+  inboxInfinite: (address: string, params?: InboxQueryParamsInput) =>
+    serverKey(
+      "inbox",
+      normalizeAccountIdentity(address),
+      "infinite",
+      normalizeInboxQueryParams(params),
+    ),
 
   // Topics
-  topicsRoot: () => ["topics"] as const,
-  topics: (limit?: number, allowedTags?: string) => ["topics", limit, allowedTags] as const,
+  topicsRoot: () => serverKey("topics"),
+  topics: (
+    limit: number | undefined,
+    allowedTags: string | undefined,
+    viewerAddress: string | null | undefined,
+  ) => serverKey("topics", ...viewerKey(viewerAddress), limit, allowedTags),
   searchTopics: (query: string, limit?: number, allowedTags?: string) =>
-    ["topics", "search", query, limit, allowedTags] as const,
+    serverKey("topics", "search", query, limit, allowedTags),
 
   // Search
-  search: (query: string, type?: string, limit?: number, allowedTags?: string) =>
-    ["search", query, type, limit, allowedTags] as const,
+  search: (
+    query: string,
+    type: string | undefined,
+    limit: number | undefined,
+    allowedTags: string | undefined,
+    viewerAddress: string | null | undefined,
+  ) => serverKey("search", ...viewerKey(viewerAddress), query, type, limit, allowedTags),
 
   // Username/Address Resolution
   addressFromUsername: (username: string) =>
-    ["resolve", "address", username] as const,
+    serverKey("resolve", "address", normalizeUsernameIdentity(username)),
   usernameFromAddress: (address: string) =>
-    ["resolve", "username", address] as const,
-  users: (filters?: UserFilters) => ["users", filters] as const,
+    serverKey("resolve", "username", normalizeAccountIdentity(address)),
+  users: (filters?: UserFilters) => serverKey("users", filters),
 
   // Transaction
-  txStatus: (hash: string) => ["tx", hash] as const,
+  txStatus: (hash: string) => serverKey("tx", hash),
 
   // Stats
-  networkStats: () => ["stats", "network"] as const,
-  circulationStats: () => ["stats", "circulation"] as const,
-  appStats: () => ["stats", "app"] as const,
-  welcomeStats: () => ["stats", "welcome"] as const,
+  networkStats: () => serverKey("stats", "network"),
+  circulationStats: () => serverKey("stats", "circulation"),
+  appStats: () => serverKey("stats", "app"),
+  welcomeStats: () => serverKey("stats", "welcome"),
   leaderboard: (days?: number, page?: number) =>
-    ["leaderboard", days, page] as const,
+    serverKey("leaderboard", days, page),
 
   // Referral
-  referralStats: (address: string) => ["referral", address] as const,
-  referralPrecheck: (username: string) => ["referral", "precheck", username] as const,
+  referralStats: (address: string) => serverKey("referral", normalizeAccountIdentity(address)),
+  referralPrecheck: (username: string) => serverKey("referral", "precheck", username),
   referralSummary: (address: string, period?: string, month?: string) =>
-    ["referral", "summary", address, period, month] as const,
+    serverKey("referral", "summary", normalizeAccountIdentity(address), period, month),
 
   // Peers
-  peers: () => ["peers"] as const,
-  peersSource: () => ["peers", "source"] as const,
+  peers: () => serverKey("peers"),
+  peersSource: () => serverKey("peers", "source"),
 
  // Invite Code
- inviteCode: (code: string) => ["inviteCode", code] as const,
- inviteCodes: (address: string) => ["inviteCodes", address] as const,
+ inviteCode: (code: string) => serverKey("inviteCode", code),
+ inviteCodes: (address: string) => serverKey("inviteCodes", normalizeAccountIdentity(address)),
 
  // Rewards
- rewardSummary: (address: string) => ["rewards", "summary", address] as const,
- achievements: (address: string) => ["rewards", "achievements", address] as const,
+ rewardSummary: (address: string) => serverKey("rewards", "summary", normalizeAccountIdentity(address)),
+ achievements: (address: string) => serverKey("rewards", "achievements", normalizeAccountIdentity(address)),
 
  // Agents
- agents: () => ["agents"] as const,
+ agents: () => serverKey("agents"),
 } as const;

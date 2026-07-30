@@ -1,22 +1,19 @@
+import * as Sentry from "@sentry/react-native";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
+import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
+import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
+export type FeedDensity = "card" | "compact";
 export type ThemeMode = "light" | "dark" | "system";
 export type ShareServer = string;
 export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
-export type ContentType =
-  | "sensitive"
-  | "adult"
-  | "violence"
-  | "gore"
-  | "death"
-  | "none"
-  | "all";
+export type ContentType = ContentWarningId | "none" | "all";
 
-const CONTENT_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
+const CONTENT_TAGS = CONTENT_WARNING_IDS;
 const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
 type AdultContentTag = (typeof ADULT_CONTENT_TAGS)[number];
@@ -70,6 +67,7 @@ type PreferencesState = {
   // Feed
   feedType: FeedType;
   followingFeedType: FeedType;
+  feedDensity: FeedDensity;
 
   // Theme
   theme: ThemeMode;
@@ -114,6 +112,7 @@ type PreferencesState = {
 // Actions
  setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
+  setFeedDensity: (density: FeedDensity) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
@@ -144,6 +143,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Feed
       feedType: "home",
       followingFeedType: "home",
+      feedDensity: "card",
 
       // Theme
       theme: "system",
@@ -188,6 +188,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     // Actions
      setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
+      setFeedDensity: (density) => set({ feedDensity: density }),
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) =>
         set((state) => {
@@ -264,8 +265,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
       setAgeVerified: (verified) => set({ ageVerified: verified }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
-      setAnalyticsConsent: (granted) =>
-        set({ analyticsConsent: granted, analyticsConsentAsked: true }),
+      setAnalyticsConsent: (granted) => {
+        void setAnalyticsTrackingEnabled(granted);
+        set({ analyticsConsent: granted, analyticsConsentAsked: true });
+      },
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
@@ -281,7 +284,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -327,8 +330,24 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.analyticsConsentAsked = false;
         }
 
+        if (version < 7) {
+          state.feedDensity = state.feedDensity ?? "card";
+          Sentry.addBreadcrumb({
+            category: "preferences",
+            message: "Migrated preferences to v7 (feedDensity)",
+            level: "info",
+            data: { from: version, to: 7 },
+          });
+        }
+
         return state as PreferencesState;
       },
     }
   )
 );
+
+export const useFeedDensity = (): [FeedDensity, (density: FeedDensity) => void] => {
+  const density = usePreferencesStore((s) => s.feedDensity);
+  const setDensity = usePreferencesStore((s) => s.setFeedDensity);
+  return [density, setDensity];
+};

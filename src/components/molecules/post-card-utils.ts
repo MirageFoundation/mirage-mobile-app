@@ -1,9 +1,16 @@
+import type { ContentWarningType } from "@/src/domain/content";
 import type { PostMedia } from "./post-card-types";
 
-const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
 const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\([^)]+\)/g;
 // Regex to find standalone URLs (not inside markdown links)
 const STANDALONE_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]()]+/gi;
+const MATURE_CONTENT_WARNING_TYPES = new Set<ContentWarningType>([
+  "adult",
+  "violence",
+  "gore",
+  "death",
+  "nsfw",
+]);
 
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
@@ -37,6 +44,18 @@ export type ResolvedPostContent = {
   hasMultipleMedia: boolean;
   extraMediaCount: number;
 };
+
+export function shouldBlurMatureMedia(
+  blurMatureMedia: boolean,
+  contentWarnings: ContentWarningType[] | undefined,
+  contentRevealed: boolean,
+): boolean {
+  return (
+    blurMatureMedia &&
+    !contentRevealed &&
+    !!contentWarnings?.some((warning) => MATURE_CONTENT_WARNING_TYPES.has(warning))
+  );
+}
 
 export function extractDomain(url: string): string {
   try {
@@ -113,37 +132,6 @@ export function removeFirstUrl(text?: string): string | undefined {
   return text.replace(firstUrl, "").trim() || undefined;
 }
 
-export function normalizeVideoUrl(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
-      return url;
-    }
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      if (parsedUrl.pathname.endsWith("/iframe")) {
-        parsedUrl.pathname = parsedUrl.pathname.replace(
-          "/iframe",
-          "/manifest/video.m3u8"
-        );
-        return parsedUrl.toString();
-      }
-      if (parsedUrl.pathname.endsWith("/manifest")) {
-        parsedUrl.pathname = `${parsedUrl.pathname}/video.m3u8`;
-        return parsedUrl.toString();
-      }
-    }
-  } catch {
-    if (url.includes("videodelivery.net") && url.endsWith("/iframe")) {
-      return url.replace("/iframe", "/manifest/video.m3u8");
-    }
-    if (url.includes("videodelivery.net") && url.endsWith("/manifest")) {
-      return `${url}/video.m3u8`;
-    }
-  }
-
-  return url;
-}
-
 export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
   try {
     const parsedUrl = new URL(posterUrl);
@@ -191,25 +179,49 @@ export function resolveRedgifsPosterUrl(url: string): string | null {
 
 export function getVideoThumbnailUri(uri?: string, posterUri?: string): string {
   if (!uri) return "";
-  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
-    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
-    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
-  }
+  const bunnyThumbnail = getBunnyStreamThumbnailUri(uri);
+  if (bunnyThumbnail) return bunnyThumbnail;
   const redgifsPoster = resolveRedgifsPosterUrl(posterUri ?? uri);
   if (redgifsPoster) return redgifsPoster;
+  if (posterUri && !isHlsManifestUrl(posterUri)) return posterUri;
   return "";
+}
+
+// Bunny Stream delivery: https://{pull-zone}.b-cdn.net/{guid}/playlist.m3u8
+// Thumbnail lives at /{guid}/thumbnail.jpg (no "thumbnails/" segment).
+function getBunnyStreamThumbnailUri(uri: string): string | null {
+  try {
+    const parsed = new URL(uri);
+    if (!parsed.hostname.toLowerCase().endsWith(".b-cdn.net")) return null;
+    const guid = parsed.pathname.split("/").filter(Boolean)[0];
+    if (!guid) return null;
+    return `${parsed.origin}/${guid}/thumbnail.jpg`;
+  } catch {
+    return null;
+  }
+}
+
+export function isHlsManifestUrl(uri?: string | null): boolean {
+  if (!uri) return false;
+  try {
+    return new URL(uri).pathname.toLowerCase().endsWith(".m3u8");
+  } catch {
+    return uri.toLowerCase().split("?")[0].endsWith(".m3u8");
+  }
+}
+
+// Hosted stream videos (Bunny Stream, or any HLS manifest) transcode
+// asynchronously: the manifest can 404/501 right after upload, so playback
+// errors are retryable rather than permanent.
+export function isHostedStreamVideoUrl(uri?: string | null): boolean {
+  if (!uri) return false;
+  return uri.toLowerCase().includes(".b-cdn.net/") || isHlsManifestUrl(uri);
 }
 
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {
   if (isYouTubeUrl(url)) return "youtube";
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
-      return "video";
-    }
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      return "video";
-    }
     if (parsedUrl.hostname.includes("redgifs.com")) {
       return "gif";
     }
@@ -220,8 +232,6 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "y
   } catch {
     const path = url.toLowerCase().split("?")[0];
     const extension = path.split(".").pop() ?? "";
-    if (url.includes("cloudflarestream.com")) return "video";
-    if (url.includes("videodelivery.net")) return "video";
     if (url.includes("redgifs.com")) return "gif";
     if (extension === "gif") return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
@@ -238,20 +248,16 @@ export function isDirectMediaUrl(url: string): boolean {
   if (isYouTubeUrl(url)) return true;
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("cloudflarestream.com")) return true;
-    if (parsedUrl.hostname.includes("videodelivery.net")) return true;
     if (parsedUrl.hostname.includes("redgifs.com")) return true;
-    // Cloudflare Images (used for uploaded images and meme stickers). URLs look
-    // like https://imagedelivery.net/<account>/<id>/<variant> and have no file
-    // extension, but always resolve to an image.
+    // Cloudflare Images (used for legacy uploaded images and meme stickers).
+    // URLs look like https://imagedelivery.net/<account>/<id>/<variant> and
+    // have no file extension, but always resolve to an image.
     if (parsedUrl.hostname.includes("imagedelivery.net")) return true;
     const ext = parsedUrl.pathname.toLowerCase().split(".").pop() ?? "";
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
   } catch {
     const path = url.toLowerCase().split("?")[0];
     const ext = path.split(".").pop() ?? "";
-    if (url.includes("cloudflarestream.com")) return true;
-    if (url.includes("videodelivery.net")) return true;
     if (url.includes("redgifs.com")) return true;
     if (url.includes("imagedelivery.net")) return true;
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
@@ -263,37 +269,18 @@ export function resolvePostContent(
   media: PostMedia[] | undefined
 ): ResolvedPostContent {
   const extractedUrl = extractFirstUrl(body);
-  if (__DEV__ && body?.includes("cloudflarestream")) {
-    console.log("[resolvePostContent] body:", body, "extractedUrl:", extractedUrl);
-  }
   const bodyWithoutUrl = removeFirstUrl(body);
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
   const bodyVideoUrl =
     extractedUrl && (getMediaTypeFromUrl(extractedUrl) === "video" || getMediaTypeFromUrl(extractedUrl) === "youtube")
-      ? normalizeVideoUrl(extractedUrl)
+      ? extractedUrl
       : null;
-  if (__DEV__ && extractedUrl?.includes("cloudflarestream")) {
-    console.log("[resolvePostContent] mediaType:", getMediaTypeFromUrl(extractedUrl), "bodyVideoUrl:", bodyVideoUrl);
-  }
-
   const primaryMedia = media?.[0];
   const mediaCount = media?.length ?? 0;
   const hasMultipleMedia = mediaCount > 1;
   const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
-  const isOgThumbnail =
-    extractedUrl &&
-    !isDirectMediaUrl(extractedUrl) &&
-    mediaCount === 1 &&
-    primaryMedia?.type === "image" &&
-    primaryMedia?.uri &&
-    !primaryMedia.uri.includes("imagedelivery.net") &&
-    !primaryMedia.uri.includes("cloudflarestream.com") &&
-    !primaryMedia.uri.includes("videodelivery.net");
-
-  const resolvedMedia = isOgThumbnail
-    ? undefined
-    : bodyVideoUrl
+  const resolvedMedia = bodyVideoUrl
     ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
       ? ({
           uri: extractedUrl!,
@@ -319,10 +306,7 @@ export function resolvePostContent(
             ? getMediaTypeFromUrl(extractedUrl)
             : primaryMedia.type
           : primaryMedia.type,
-        uri:
-          primaryMedia.type === "video"
-            ? normalizeVideoUrl(primaryMedia.uri)
-            : primaryMedia.uri,
+        uri: primaryMedia.uri,
       }
     : undefined;
 
@@ -345,27 +329,25 @@ export function resolvePostContent(
 
   return {
     extractedUrl,
-    bodyWithoutUrl: (isOgThumbnail || !isBodyUrlRenderedAsMedia) ? body : bodyWithoutUrl,
+    bodyWithoutUrl: !isBodyUrlRenderedAsMedia ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
     resolvedMedia: finalMedia,
-    resolvedMediaList: isOgThumbnail
-      ? []
-      : (media ?? []).map((m) => {
-          const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
-          return {
-            ...m,
-            uri: redgifs ?? (m.type === "video" ? normalizeVideoUrl(m.uri) : m.uri),
-            type: redgifs ? ("video" as const) : m.type,
-            posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
-          };
-        }),
-    hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
-    extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
+    resolvedMediaList: (media ?? []).map((m) => {
+      const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
+      return {
+        ...m,
+        uri: redgifs ?? m.uri,
+        type: redgifs ? ("video" as const) : m.type,
+        posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
+      };
+    }),
+    hasMultipleMedia,
+    extraMediaCount,
   };
 }
 
-export function postHasPlayableVideo(post?: { media?: Array<{ type?: string; uri?: string }>; body?: string }): boolean {
+export function postHasPlayableVideo(post?: { media?: { type?: string; uri?: string }[]; body?: string }): boolean {
   const hasMediaVideo = !!post?.media?.some(
     (m) =>
       m.type === "video" ||
@@ -376,4 +358,10 @@ export function postHasPlayableVideo(post?: { media?: Array<{ type?: string; uri
   if (!post?.body) return false;
   const url = extractFirstUrl(post.body);
   return !!url && isYouTubeUrl(url);
+}
+
+export function isSuccessfulOptimisticPost(
+  post: { optimisticStatus?: string },
+): boolean {
+  return post.optimisticStatus === "success";
 }

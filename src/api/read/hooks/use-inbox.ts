@@ -1,9 +1,18 @@
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { infiniteQueryOptions, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import { Platform } from "react-native";
 import { queryKeys } from "../query-keys";
-import { getInbox, type GetInboxParams } from "../endpoints/inbox";
+import {
+  getInbox,
+  normalizeInboxQueryParams,
+  type GetInboxParams,
+} from "../endpoints/inbox";
 import { useAuthStore } from "@/src/stores";
+import {
+  INBOX_MAX_PAGES,
+  INBOX_QUERY_GC_TIME,
+  getPreviousNumberedPageParam,
+} from "../infinite-query-policy";
 
 /**
  * Get user's inbox (reply notifications)
@@ -13,14 +22,16 @@ import { useAuthStore } from "@/src/stores";
  */
 export function useInbox(params?: Omit<GetInboxParams, "address">) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const queryParams = normalizeInboxQueryParams(params);
 
   return useQuery({
-    queryKey: queryKeys.inbox(walletAddress ?? "", params?.page),
+    queryKey: queryKeys.inbox(walletAddress ?? "", params?.page, queryParams),
     queryFn: async () => {
       try {
         return await getInbox({
           address: walletAddress!,
           ...params,
+          ...queryParams,
         });
       } catch (err) {
         Sentry.addBreadcrumb({
@@ -46,19 +57,21 @@ export function useInbox(params?: Omit<GetInboxParams, "address">) {
 /**
  * Get inbox with infinite scrolling
  */
-export function useInfiniteInbox(
-  params?: Omit<GetInboxParams, "address" | "page">
+export function infiniteInboxQueryOptions(
+  walletAddress: string,
+  params?: Omit<GetInboxParams, "address" | "page">,
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const queryParams = normalizeInboxQueryParams(params);
 
-  return useInfiniteQuery({
-    queryKey: queryKeys.inboxInfinite(walletAddress ?? ""),
+  return infiniteQueryOptions({
+    queryKey: queryKeys.inboxInfinite(walletAddress, queryParams),
     queryFn: async ({ pageParam = 1 }) => {
       try {
         return await getInbox({
-          address: walletAddress!,
+          address: walletAddress,
           page: pageParam,
           ...params,
+          ...queryParams,
         });
       } catch (err) {
         Sentry.addBreadcrumb({
@@ -79,8 +92,19 @@ export function useInfiniteInbox(
       if (!lastPage?.has_more) return undefined;
       return (lastPage?.page ?? 0) + 1;
     },
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: INBOX_MAX_PAGES,
     enabled: !!walletAddress,
     retry: 1,
     staleTime: 1000 * 30, // 30 seconds
+    gcTime: INBOX_QUERY_GC_TIME,
   });
+}
+
+export function useInfiniteInbox(
+  params?: Omit<GetInboxParams, "address" | "page">
+) {
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+
+  return useInfiniteQuery(infiniteInboxQueryOptions(walletAddress ?? "", params));
 }

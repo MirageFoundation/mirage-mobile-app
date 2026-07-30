@@ -5,6 +5,10 @@ import type { Post as ApiPost } from "@/src/api/types";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import type { Post } from "@/src/components/molecules";
 import { useAppState } from "@/src/hooks";
+import {
+  createScrollDirectionTracker,
+  getWarmWindowBounds,
+} from "@/src/utils/video-warm-window";
 
 export type ProfileFeedListItem = Post | ApiPost | "header" | "tabs";
 
@@ -40,6 +44,7 @@ export function useProfileFeedVideoState({
   );
   const listDataRef = useRef(listData);
   listDataRef.current = listData;
+  const scrollDirectionTrackerRef = useRef(createScrollDirectionTracker());
 
   const clearDeferredViewability = useCallback(() => {
     if (profileDeferHandleRef.current !== null) {
@@ -49,6 +54,7 @@ export function useProfileFeedVideoState({
   }, []);
 
   const resetVideoState = useCallback(() => {
+    scrollDirectionTrackerRef.current.reset();
     setVisibleVideoPostIds(new Set());
     setNearbyVideoPostIds(new Set());
     setActiveVideoPostId(null);
@@ -79,8 +85,8 @@ export function useProfileFeedVideoState({
       const indices = visibleItems.map((v) => v.index ?? 0);
       const minIdx = Math.min(...indices);
       const maxIdx = Math.max(...indices);
-      const lo = Math.max(0, minIdx - 3);
-      const hi = Math.min(allData.length - 1, maxIdx + 3);
+      const direction = scrollDirectionTrackerRef.current.update(minIdx);
+      const { lo, hi } = getWarmWindowBounds(minIdx, maxIdx, direction, allData.length);
       for (let i = lo; i <= hi; i++) {
         const post = allData[i];
         if (isUiPost(post) && postHasPlayableVideo(post)) {

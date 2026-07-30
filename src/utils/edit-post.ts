@@ -1,6 +1,8 @@
-import type { Router } from "expo-router";
+import type { useRouter } from "expo-router";
 import type { Post } from "@/src/components/molecules/post-card-types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+
+type Router = ReturnType<typeof useRouter>;
 
 let _lastEditTimestamp = 0;
 const EDIT_COOLDOWN_MS = 15000;

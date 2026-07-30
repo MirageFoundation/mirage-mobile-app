@@ -19,7 +19,7 @@ export function useTopics(limit?: number) {
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
-    queryKey: queryKeys.topics(limit, allowedTags),
+    queryKey: queryKeys.topics(limit, allowedTags, walletAddress),
     queryFn: () => getTopics({ limit, address: walletAddress ?? undefined, allowed_tags: allowedTags || undefined }),
     staleTime: 1000 * 60 * 10, // 10 minutes
     gcTime: 1000 * 60 * 60 * 24, // 24 hours

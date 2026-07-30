@@ -14,7 +14,7 @@ import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 export type ValueOption<T> = {
@@ -91,7 +91,7 @@ const handleSelect = useCallback(
         } else {
           dismiss();
         }
-      } catch (err) {
+      } catch {
         dismiss();
       }
     },
@@ -117,11 +117,14 @@ const handleSelect = useCallback(
             {title}
           </Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close ${title}`}
             onPress={dismiss}
             style={[
               styles.closeButton,
               { backgroundColor: theme.colors.background.subtle },
             ]}
+            hitSlop={6}
           >
             <Ionicons
               name="close"
@@ -139,6 +142,8 @@ const handleSelect = useCallback(
             return (
               <Pressable
                 key={String(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
                 onPress={() => handleSelect(option.value)}
                 style={({ pressed }) => [
                   styles.optionItem,

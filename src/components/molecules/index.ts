@@ -15,6 +15,8 @@ export {
 } from "./post-card";
 export { MediaPreviewModal } from "./media-preview-modal";
 export { PostCardItem } from "./post-card-item";
+export { PostCardCompact } from "./post-card-compact";
+export { FeedDensityToggle } from "./feed-density-toggle";
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
 export { MediaPostDetailSkeleton } from "./media-post-detail-skeleton";
 
@@ -79,26 +81,17 @@ export {
 ProfileMenuSheet,
 type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
-export {
-  UserProfileMenuSheet,
-  type UserProfileMenuSheetRef,
-} from "./user-profile-menu-sheet";
-export { SideMenu, type SideMenuRef } from "./side-menu";
 export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
   ProfileTabBar,
-  ProfileTabContent,
-  ProfileTabs,
   type TabType,
 } from "./profile-tabs";
 export { ProfileCommentItem } from "./profile-comment-item";
 export { InboxItem } from "./inbox-item";
-export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";
 export { UserProfileContentAnimated } from "./user-profile-content-animated";
-export { ProfileAboutTab } from "./profile-about-tab";
 
 // Settings
 export {

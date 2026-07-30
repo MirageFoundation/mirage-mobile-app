@@ -11,7 +11,7 @@ import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { useAwardConfigs } from "@/src/api/read/hooks/use-award-configs";
 import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useGiveAward } from "@/src/api/write/hooks/use-award";
@@ -19,8 +19,9 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore } from "@/src/stores";
 import { AWARD_TYPES, formatAwardCost, getFriendlyAwardError } from "@/src/data/awards";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 import type { AwardConfig } from "@/src/api/types";
-import axios from "axios";
+import { isAxiosError } from "axios";
 
 type AwardPickerSheetProps = {
   targetId: string;
@@ -124,6 +125,7 @@ export const AwardPickerSheet = forwardRef<
     const [isPresented, setIsPresented] = useState(false);
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+    const sendGuardRef = useRef(createDuplicateActionGuard());
     const { data: awardConfigs } = useAwardConfigs({ enabled: isPresented });
     const { data: userStatus } = useUserStatus({ enabled: isPresented });
     const giveAwardMutation = useGiveAward();
@@ -174,7 +176,7 @@ export const AwardPickerSheet = forwardRef<
       !isAdmin && selectedConfig ? balance < selectedConfig.cost : false;
 
     const handleSendAward = useCallback(async () => {
-      if (!selectedType || !targetId || isSending) return;
+      if (!selectedType || !targetId || !sendGuardRef.current.tryAcquire()) return;
       setIsSending(true);
       triggerHaptic("medium");
 
@@ -192,7 +194,7 @@ export const AwardPickerSheet = forwardRef<
         triggerHaptic("error");
         Sentry.captureException(err, { tags: { feature: "award", operation: "give-award" } });
         let errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (axios.isAxiosError(err)) {
+        if (isAxiosError(err)) {
           const data = err.response?.data;
           if (typeof data === "string" && data.trim()) {
             errorMessage = data;
@@ -206,6 +208,7 @@ export const AwardPickerSheet = forwardRef<
         }
         toast.error(getFriendlyAwardError(errorMessage));
       } finally {
+        sendGuardRef.current.release();
         setIsSending(false);
       }
     }, [selectedType, targetId, giveAwardMutation, toast, dismiss, onSuccess]);
@@ -230,9 +233,13 @@ export const AwardPickerSheet = forwardRef<
               Give Award
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close award picker"
+              accessibilityState={{ disabled: isSending, busy: isSending }}
               onPress={dismiss}
               disabled={isSending}
               style={[styles.closeButton, isSending && { opacity: 0.5 }]}
+              hitSlop={6}
             >
               <EvilIcons
                 name="close"

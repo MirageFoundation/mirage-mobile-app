@@ -1,8 +1,8 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Sentry from "@sentry/react-native";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -82,7 +82,7 @@ export function ChangeUsernameScreen() {
       bottomPadding.value = withTiming(insets.bottom + 16, { duration: 250 });
     });
     return () => { showSub.remove(); hideSub.remove(); };
-  }, [insets.bottom]);
+  }, [bottomPadding, insets.bottom]);
 
   const animatedBottomStyle = useAnimatedStyle(() => ({
     paddingBottom: bottomPadding.value,

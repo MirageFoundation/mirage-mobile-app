@@ -2,31 +2,28 @@ import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/src/components/molecules";
-import { PostCard } from "@/src/components/molecules";
+import { PostCard, PostCardCompact } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
-import { getShareBaseUrl } from "@/src/stores";
+import { getShareBaseUrl, useFeedDensity } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { router } from "@/src/navigation/guarded-router";
 import { markOptimisticPostError, removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
 import { useCreateComposeState } from "@/src/pages/create/create-compose-state";
-import { usePowQueueStore } from "@/src/services/pow-queue";
 import {
-  useHomePostCardStore,
-  useAllowAutoplay,
-  useFeedActive,
-  useIsFollowing,
-  useIsTopicFollowed,
-  useIsOwnPost,
-  useIsPostRevealed,
-  useVideoVisibility,
-  useShareServer,
+  useIsPowActionCurrent,
+  useIsPowActionQueued,
+} from "@/src/services/pow-queue";
+import {
   useVoteOverride,
   useCommentCountOverride,
-  useIsTopicDisabled,
 } from "@/src/stores/home-post-card-store";
+import {
+  useFeedPostCardRuntime,
+  useFeedPostCardSelector,
+} from "./feed-post-card-runtime";
 
 type HomePostCardItemProps = {
  post: Post;
@@ -35,31 +32,6 @@ type HomePostCardItemProps = {
   onLayout?: (postId: string, event: LayoutChangeEvent) => void;
 };
 
-function areHomePostCardItemPropsEqual(
-  prevProps: HomePostCardItemProps,
-  nextProps: HomePostCardItemProps
-): boolean {
-  const prev = prevProps.post;
-  const next = nextProps.post;
-  
-  if (prev.id !== next.id) return false;
-  if (prev.likes !== next.likes) return false;
-  if (prev.dislikes !== next.dislikes) return false;
-  if (prev.comments !== next.comments) return false;
- if (prev.hasLiked !== next.hasLiked) return false;
- if (prev.hasDisliked !== next.hasDisliked) return false;
- if (prev.awards?.length !== next.awards?.length) return false;
- if (prev.optimisticStatus !== next.optimisticStatus) return false;
- if (prev.optimisticError !== next.optimisticError) return false;
- if (prev.optimisticActionId !== next.optimisticActionId) return false;
- if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
-  if (prevProps.feedScreen !== nextProps.feedScreen) return false;
-  if (prevProps.feedContext !== nextProps.feedContext) return false;
- return true;
-}
-
-// Get handlers from store without subscribing to changes
-const getHandlers = () => useHomePostCardStore.getState().handlers;
 const APP_STARTED_AT = Date.now();
 
 const getCreatedAtMs = (createdAt: Post["createdAt"]): number => {
@@ -76,25 +48,44 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   onLayout,
 }: HomePostCardItemProps) {
  const queryClient = useQueryClient();
- const visibility = useVideoVisibility(post.id, feedContext);
+ const feedRuntime = useFeedPostCardRuntime();
+ const visibility = useFeedPostCardSelector((state) =>
+   (state.visiblePostIds.has(post.id) ? 2 : 0) |
+   (state.activePostId === post.id ? 1 : 0) |
+   (state.nearbyPostIds.has(post.id) ? 4 : 0),
+ );
  const isVisible = (visibility & 2) !== 0;
  const isFocused = (visibility & 1) !== 0;
  const isNearVisible = (visibility & 4) !== 0;
- const isFollowing = useIsFollowing(post.author.id);
- const isTopicFollowed = useIsTopicFollowed(post.topic);
- const contentRevealed = useIsPostRevealed(post.id);
+ const isFollowing = useFeedPostCardSelector((state) =>
+   state.followUserOverrides[post.author.id] ?? state.followedUsers.has(post.author.id),
+ );
+ const isTopicFollowed = useFeedPostCardSelector((state) =>
+   post.topic ? state.followedTopics.has(post.topic) : false,
+ );
+ const contentRevealed = useFeedPostCardSelector((state) => state.revealedPosts.has(post.id));
  const voteOverride = useVoteOverride(post.id);
  const commentCountOverride = useCommentCountOverride(post.id);
- const isOwnPost = useIsOwnPost(post.author.id);
- const isTopicDisabled = useIsTopicDisabled(post.topic);
- const shareServer = useShareServer();
- const allowAutoplay = useAllowAutoplay();
- const feedActive = useFeedActive(feedScreen);
- const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
- const isOptimisticActionQueued = usePowQueueStore((state) =>
-   post.optimisticActionId
-     ? state.queue.some((action) => action.id === post.optimisticActionId)
-     : false,
+ const isOwnPost = useFeedPostCardSelector((state) => state.currentUserId === post.author.id);
+ const isTopicDisabled = useFeedPostCardSelector((state) =>
+   post.topic ? state.disabledTopicName === post.topic : false,
+ );
+ const shareServer = useFeedPostCardSelector((state) => state.shareServer);
+ const allowAutoplay = useFeedPostCardSelector((state) => state.allowAutoplay);
+ const feedActive = useFeedPostCardSelector((state) => state.active);
+ const [feedDensity] = useFeedDensity();
+ const isOptimisticActionCurrent = useIsPowActionCurrent(
+   post.optimisticActionId,
+ );
+ const isOptimisticActionQueued = useIsPowActionQueued(
+   post.optimisticActionId,
+ );
+ const optimisticQueueState = useMemo(
+   () => ({
+     isCurrent: isOptimisticActionCurrent,
+     isQueued: isOptimisticActionQueued,
+   }),
+   [isOptimisticActionCurrent, isOptimisticActionQueued],
  );
 
 // Store post data in ref to avoid recreating callbacks
@@ -114,7 +105,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    if (post.optimisticStatus !== "pending") return;
    if (
      post.optimisticActionId &&
-     (currentPowActionId === post.optimisticActionId || isOptimisticActionQueued)
+     (isOptimisticActionCurrent || isOptimisticActionQueued)
    ) {
      return;
    }
@@ -138,7 +129,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      "Posting was interrupted. Please try posting again.",
    );
  }, [
-   currentPowActionId,
+   isOptimisticActionCurrent,
    isOptimisticActionQueued,
    post.id,
    post.optimisticActionId,
@@ -153,23 +144,23 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const handlePostPress = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_card_item", postId: p.id });
-    getHandlers().onPostPress?.(p.id);
-  }, []);
+    feedRuntime.getState().handlers.onPostPress?.(p.id);
+  }, [feedRuntime]);
 
   const handleAuthorPress = useCallback(() => {
-    getHandlers().onAuthorPress?.(postRef.current.author.id);
-  }, []);
+    feedRuntime.getState().handlers.onAuthorPress?.(postRef.current.author.id);
+  }, [feedRuntime]);
 
   const handleTopicPress = useCallback(() => {
     const p = postRef.current;
     if (!p.topic) return;
-    if (useHomePostCardStore.getState().disabledTopicName === p.topic) return;
-    getHandlers().onTopicPress?.(p.topic);
-  }, []);
+    if (feedRuntime.getState().disabledTopicName === p.topic) return;
+    feedRuntime.getState().handlers.onTopicPress?.(p.topic);
+  }, [feedRuntime]);
 
   const handleMorePress = useCallback(() => {
-    getHandlers().onMorePress?.(postRef.current);
-  }, []);
+    feedRuntime.getState().handlers.onMorePress?.(postRef.current);
+  }, [feedRuntime]);
 
  const handleLikePress = useCallback(() => {
    const p = postRef.current;
@@ -178,13 +169,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
    const currentLikes = override?.likes ?? p.likes;
    logPress({ name: "post_like", postId: p.id });
-   getHandlers().onLikePress?.(
+   feedRuntime.getState().handlers.onLikePress?.(
      p.id,
      currentHasLiked,
      currentHasDisliked,
      currentLikes
    );
- }, []);
+ }, [feedRuntime]);
 
  const handleDislikePress = useCallback(() => {
    const p = postRef.current;
@@ -193,67 +184,67 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
    const currentLikes = override?.likes ?? p.likes;
    logPress({ name: "post_dislike", postId: p.id });
-   getHandlers().onDislikePress?.(
+   feedRuntime.getState().handlers.onDislikePress?.(
      p.id,
      currentHasLiked,
      currentHasDisliked,
      currentLikes
    );
- }, []);
+ }, [feedRuntime]);
 
   const handleCommentPress = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_comment", postId: p.id });
-    getHandlers().onCommentPress?.(p.id);
-  }, []);
+    feedRuntime.getState().handlers.onCommentPress?.(p.id);
+  }, [feedRuntime]);
 
   const handleFollowUser = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_follow_user", postId: p.id });
-    getHandlers().onFollowUser?.(p.author.id, p.author.username, isFollowingRef.current);
-  }, []);
+    feedRuntime.getState().handlers.onFollowUser?.(p.author.id, p.author.username, isFollowingRef.current);
+  }, [feedRuntime]);
 
   const handleFollowTopic = useCallback(() => {
     const p = postRef.current;
     if (!p.topic) return;
     logPress({ name: "post_follow_topic", postId: p.id });
-    getHandlers().onFollowTopic?.(p.topic, isTopicFollowedRef.current);
-  }, []);
+    feedRuntime.getState().handlers.onFollowTopic?.(p.topic, isTopicFollowedRef.current);
+  }, [feedRuntime]);
 
   const handleRevealContent = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
     markSeen(p.id, "open", p.title);
-    getHandlers().onRevealContent?.(p.id);
+    feedRuntime.getState().handlers.onRevealContent?.(p.id);
     if (postHasPlayableVideo(p)) {
-      useHomePostCardStore.getState().setActiveVideoPostId(feedContext, p.id);
+      feedRuntime.setActivePostId(p.id);
     }
-  }, [feedContext]);
+  }, [feedRuntime]);
 
   const handleBlockUser = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_block_user", postId: p.id });
-    getHandlers().onBlockUser?.(p.id, p.author.id, p.author.username);
-  }, []);
+    feedRuntime.getState().handlers.onBlockUser?.(p.id, p.author.id, p.author.username);
+  }, [feedRuntime]);
 
   const handleBlockPost = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_block_post", postId: p.id });
-    getHandlers().onBlockPost?.(p.id);
-  }, []);
+    feedRuntime.getState().handlers.onBlockPost?.(p.id);
+  }, [feedRuntime]);
 
   const handleBlockTopic = useCallback(() => {
     const p = postRef.current;
     if (!p.topic) return;
     logPress({ name: "post_block_topic", postId: p.id });
-    getHandlers().onBlockTopic?.(p.id, p.topic);
-  }, []);
+    feedRuntime.getState().handlers.onBlockTopic?.(p.id, p.topic);
+  }, [feedRuntime]);
 
   const handleReport = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_report", postId: p.id });
-    getHandlers().onReport?.(p.id);
-  }, []);
+    feedRuntime.getState().handlers.onReport?.(p.id);
+  }, [feedRuntime]);
 
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
 
@@ -304,6 +295,40 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     return result;
   }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
 
+  if (feedDensity === "compact") {
+    return (
+      <PostCardCompact
+        post={displayPost}
+        isOwnPost={isOwnPost}
+        isTopicFollowed={isTopicFollowed}
+        topicDisabled={isTopicDisabled}
+        contentRevealed={contentRevealed}
+        shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
+        onPress={handlePostPress}
+        onAuthorPress={handleAuthorPress}
+        onTopicPress={handleTopicPress}
+        onMorePress={handleMorePress}
+        onLikePress={handleLikePress}
+        onDislikePress={handleDislikePress}
+        onCommentPress={handleCommentPress}
+        onFollowUser={handleFollowUser}
+        onFollowTopic={handleFollowTopic}
+        onRevealContent={handleRevealContent}
+        onBlockUser={handleBlockUser}
+        onBlockPost={handleBlockPost}
+        onBlockTopic={handleBlockTopic}
+        onReport={handleReport}
+        onMediaPress={handlePostPress}
+        onLayout={handleLayout}
+        onOptimisticRetryPress={
+          displayPost.optimisticStatus === "error"
+            ? handleOptimisticRetryPress
+            : undefined
+        }
+      />
+    );
+  }
+
   return (
    <PostCard
      post={displayPost}
@@ -316,6 +341,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      showUrlCard={false}
      allowAutoplay={allowAutoplay}
       screenActive={feedActive}
+      allowOptimisticMediaPreview={feedScreen === "home"}
+      optimisticQueueState={optimisticQueueState}
       videoSyncScope={feedContext}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
@@ -340,4 +367,4 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />
   );
-}, areHomePostCardItemPropsEqual);
+});

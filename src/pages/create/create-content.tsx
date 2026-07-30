@@ -1,4 +1,4 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Sentry from "@sentry/react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
@@ -107,8 +107,6 @@ export function CreateScreen() {
     (state) => state.selectedContentWarning,
   );
   const selectedStickers = useCreateComposeState((state) => state.selectedStickers);
-  const openLinkInput = useCreateComposeState((state) => state.openLinkInput);
-  const setLinkUrl = useCreateComposeState((state) => state.setLinkUrl);
   const setSelectedContentWarning = useCreateComposeState(
     (state) => state.setSelectedContentWarning,
   );
@@ -217,21 +215,25 @@ export function CreateScreen() {
     };
   }, []);
 
-  // Clean up stale attachment state on mount
+  // Clean up stale attachment state when entering the create route.
   useEffect(() => {
-    if (isEditMode) return;
-    if (draft.attachmentType === "link" && draft.linkUrl) {
-      openLinkInput();
-      setLinkUrl(draft.linkUrl);
-    } else if (draft.attachmentType === "link" && !draft.linkUrl) {
-      removeAttachment();
+    if (params.editPostId) return;
+
+    const currentDraft = useDraftStore.getState().draft;
+    const composeState = useCreateComposeState.getState();
+    const draftState = useDraftStore.getState();
+    if (currentDraft.attachmentType === "link" && currentDraft.linkUrl) {
+      composeState.openLinkInput();
+      composeState.setLinkUrl(currentDraft.linkUrl);
+    } else if (currentDraft.attachmentType === "link" && !currentDraft.linkUrl) {
+      draftState.removeAttachment();
     } else if (
-      (draft.attachmentType === "image" || draft.attachmentType === "video") &&
-      draft.mediaUris.length === 0
+      (currentDraft.attachmentType === "image" || currentDraft.attachmentType === "video") &&
+      currentDraft.mediaUris.length === 0
     ) {
-      removeAttachment();
+      draftState.removeAttachment();
     }
-  }, []);
+  }, [params.editPostId]);
 
   useCreateEditInitialization({
     isEditMode,
@@ -295,7 +297,7 @@ export function CreateScreen() {
       }
       setIsPreparingVideo(false);
       startVideoUpload(result.videoUri);
-    }, [setAttachment, startVideoUpload])
+    }, [setAttachment, setVideoUploadState, startVideoUpload])
   );
 
   const hasDraftContent = useMemo(() => {

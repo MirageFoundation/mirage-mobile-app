@@ -1,30 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { VideoView } from "expo-video";
 import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-iframe";
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Modal,
   Platform,
   Pressable,
   View,
 } from "react-native";
 import {
-  Gesture,
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ResolvedMedia } from "./post-card-utils";
@@ -32,473 +24,22 @@ import type { ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { useAppState } from "@/src/hooks";
 import { useScreenOrientation } from "@/src/hooks/use-screen-orientation";
+import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
 import {
   buildVideoPositionKey,
   useVideoMuteStore,
   useVideoPositionStore,
 } from "@/src/stores";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
 import {
-  YouTubeAutoplayEmbed,
-  type YouTubeAutoplayEmbedRef,
-} from "./youtube-autoplay-embed";
-import { extractYouTubeVideoId } from "./post-card-utils";
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+  type VideoPlayerLease,
+} from "@/src/utils/video-player-handoff";
+import { PreviewVideoItem } from "./media-preview-video-item";
+import { PreviewYouTubeItem } from "./media-preview-youtube-item";
+import { usePreviewZoomGesture } from "./use-preview-zoom-gesture";
 import { StyleSheet } from "react-native-unistyles";
-
-const PreviewVideoItem = memo(function PreviewVideoItem({
-  item,
-  width,
-  height,
-  isActive,
-  videoSyncScope,
-}: {
-  item: ResolvedMedia;
-  width: number;
-  height: number;
-  isActive: boolean;
-  videoSyncScope?: string;
-}) {
-  const ref = useRef<Video>(null);
-  const [playing, setPlaying] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const muted = useVideoMuteStore((s) => s.isMuted);
-  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-  const getPosition = useVideoPositionStore((s) => s.getPosition);
-  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
-  const positionKey = buildVideoPositionKey(item.uri, videoSyncScope);
-  const currentPositionRef = useRef(0);
-  const hasRestoredRef = useRef(false);
-
-  useEffect(() => {
-    if (!isActive) {
-      if (item.uri && currentPositionRef.current > 500) {
-        setPositionStore(positionKey, currentPositionRef.current / 1000);
-      }
-      ref.current?.pauseAsync().catch(() => {});
-    }
-  }, [isActive, item.uri, setPositionStore]);
-
-  useEffect(() => {
-    return () => {
-      if (item.uri && currentPositionRef.current > 500) {
-        useVideoPositionStore.getState().setPosition(positionKey, currentPositionRef.current / 1000);
-      }
-    };
-  }, [item.uri, positionKey]);
-
-  const handleTogglePlay = useCallback(() => {
-    setPlaying((p) => !p);
-  }, []);
-
-  const handleToggleMute = useCallback(async () => {
-    const newMuted = !muted;
-    toggleMute();
-    try {
-      if (ref.current) {
-        if (!newMuted) {
-          await ref.current.pauseAsync();
-          await ref.current.setStatusAsync({ isMuted: false });
-          await ref.current.playAsync();
-        } else {
-          await ref.current.setStatusAsync({ isMuted: true });
-        }
-      }
-    } catch {}
-  }, [muted, toggleMute]);
-
-  return (
-    <View style={{ width, height, justifyContent: "center", alignItems: "center" }}>
-      <Pressable onPress={handleTogglePlay} style={{ width, height }}>
-        <Video
-          ref={ref}
-          source={{ uri: item.uri }}
-          style={{ width: "100%", height: "100%" }}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={playing && isActive}
-          isLooping
-          isMuted={muted}
-          useNativeControls={false}
-          progressUpdateIntervalMillis={100}
-          onPlaybackStatusUpdate={(status) => {
-            if (status.isLoaded) {
-              currentPositionRef.current = status.positionMillis;
-              if (status.isPlaying && !status.isBuffering) {
-                setIsLoading(false);
-              }
-            }
-          }}
-          onLoad={() => {
-            setIsLoading(false);
-            if (!hasRestoredRef.current && item.uri) {
-              const saved = getPosition(positionKey);
-              if (saved > 0.5) {
-                hasRestoredRef.current = true;
-                ref.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
-              }
-            }
-          }}
-        />
-        {isLoading && (
-          <View style={previewVideoStyles.playOverlay}>
-            <ActivityIndicator size="large" color="#fff" />
-          </View>
-        )}
-        {!playing && !isLoading && (
-          <View style={previewVideoStyles.playOverlay}>
-            <View style={previewVideoStyles.playButton}>
-              <Ionicons name="play" size={40} color="#fff" />
-            </View>
-          </View>
-        )}
-      </Pressable>
-      <Pressable
-        onPress={handleToggleMute}
-        style={previewVideoStyles.muteButton}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <View style={previewVideoStyles.muteButtonInner}>
-          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
-        </View>
-      </Pressable>
-    </View>
-  );
-});
-
-const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
-  item,
-  width,
-  height,
-  isActive,
-  videoSyncScope,
-}: {
-  item: ResolvedMedia;
-  width: number;
-  height: number;
-  isActive: boolean;
-  videoSyncScope?: string;
-}) {
-  const embedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
-  const iframeRef = useRef<YoutubeIframeRef | null>(null);
-  const insets = useSafeAreaInsets();
-  const [playing, setPlaying] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const muted = useVideoMuteStore((s) => s.isMuted);
-  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-  const [controlsVisible, setControlsVisible] = useState(false);
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const videoId = extractYouTubeVideoId(item.uri) ?? "";
-  const positionKey = videoId
-    ? buildVideoPositionKey(videoId, videoSyncScope)
-    : "";
-  const isAndroid = Platform.OS === "android";
-  const youtubeHeight = Math.max(240, height - (insets.top + insets.bottom + 32));
-  const getPosition = useVideoPositionStore((s) => s.getPosition);
-  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
-  const hasRestoredRef = useRef(false);
-  const lastKnownTimeRef = useRef(0);
-  const playingRef = useRef(playing);
-  const resumePlaybackRef = useRef(true);
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-
-  const showControlsTemporarily = useCallback(() => {
-    setControlsVisible(true);
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    controlsTimerRef.current = setTimeout(() => {
-      setControlsVisible(false);
-    }, 2000);
-  }, []);
-
-  const handleScreenTap = useCallback(() => {
-    if (controlsVisible) {
-      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-      setControlsVisible(false);
-    } else {
-      showControlsTemporarily();
-    }
-  }, [controlsVisible, showControlsTemporarily]);
-
-  useEffect(() => {
-    return () => {
-      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    };
-  }, []);
-
-  const savePositionSync = useCallback(() => {
-    if (!positionKey) return;
-    if (isAndroid) {
-      const t = embedRef.current?.getLastKnownTime?.() ?? lastKnownTimeRef.current;
-      if (t > 2) setPositionStore(positionKey, t);
-    } else {
-      const t = lastKnownTimeRef.current;
-      if (t > 2) setPositionStore(positionKey, t);
-    }
-  }, [positionKey, isAndroid, setPositionStore]);
-
-  const handleTimeUpdate = useCallback((seconds: number) => {
-    lastKnownTimeRef.current = seconds;
-  }, []);
-
-  const restorePosition = useCallback(() => {
-    if (!isAndroid) return;
-    if (!positionKey || hasRestoredRef.current) return;
-    const saved = getPosition(positionKey);
-    if (saved > 2) {
-      hasRestoredRef.current = true;
-      setTimeout(() => {
-        embedRef.current?.seekTo(saved);
-        setTimeout(() => embedRef.current?.play(), 600);
-      }, 600);
-    }
-  }, [positionKey, isAndroid, getPosition]);
-
-  useEffect(() => {
-    if (!isActive) {
-      resumePlaybackRef.current = playingRef.current;
-      savePositionSync();
-      setPlaying(false);
-      if (isAndroid) {
-        embedRef.current?.pause();
-      }
-    } else {
-      hasRestoredRef.current = false;
-      if (resumePlaybackRef.current) {
-        setPlaying(true);
-      }
-    }
-  }, [isActive, isAndroid, savePositionSync]);
-
-  const handleTogglePlay = useCallback(() => {
-    setPlaying((prev) => {
-      const next = !prev;
-      if (isAndroid) {
-        if (next) {
-          embedRef.current?.play();
-        } else {
-          embedRef.current?.pause();
-        }
-      }
-      return next;
-    });
-  }, [isAndroid]);
-
-  const handleToggleMute = useCallback(() => {
-    const nextMuted = !muted;
-    toggleMute();
-    if (isAndroid) {
-      embedRef.current?.setMuted(nextMuted);
-    }
-  }, [muted, toggleMute, isAndroid]);
-
-  const handleSeekBy = useCallback(
-    async (seconds: number) => {
-      if (isAndroid) {
-        embedRef.current?.seekBy(seconds);
-        return;
-      }
-      try {
-        const current = await iframeRef.current?.getCurrentTime();
-        if (typeof current === "number") {
-          const next = Math.max(current + seconds, 0);
-          iframeRef.current?.seekTo(next, true);
-        }
-      } catch {}
-    },
-    [isAndroid],
-  );
-
-  return (
-    <View
-      style={{
-        width,
-        height,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      <Pressable
-        onPress={isAndroid ? handleScreenTap : handleTogglePlay}
-        style={{ width, height: youtubeHeight }}
-      >
-        {isAndroid ? (
-          <YouTubeAutoplayEmbed
-            ref={embedRef}
-            height={youtubeHeight}
-            videoId={videoId}
-            play={playing && isActive}
-            muted={muted}
-            autoplay={true}
-            controls={false}
-            loop={true}
-            allowFullscreen={false}
-            onPress={handleScreenTap}
-            onReady={() => setIsLoading(false)}
-            onPlaying={() => {
-              setIsLoading(false);
-              setPlaying(true);
-              restorePosition();
-            }}
-            onTimeUpdate={handleTimeUpdate}
-            onStateChange={(state) => {
-              if (state === "playing") {
-                setPlaying(true);
-                setIsLoading(false);
-              }
-              if (state === "paused" || state === "ended") {
-                setPlaying(false);
-              }
-            }}
-          />
-        ) : (
-          <YoutubePlayer
-            ref={iframeRef}
-            height={youtubeHeight}
-            videoId={videoId}
-            play={playing && isActive}
-            mute={muted}
-            forceAndroidAutoplay={false}
-            initialPlayerParams={{
-              controls: false,
-              preventFullScreen: false,
-              rel: false,
-            }}
-            onReady={() => setIsLoading(false)}
-            onChangeState={(event: string) => {
-              if (event === "playing") {
-                setPlaying(true);
-                setIsLoading(false);
-                restorePosition();
-              }
-              if (event === "paused" || event === "ended") {
-                setPlaying(false);
-              }
-            }}
-            webViewProps={{
-              allowsInlineMediaPlayback: true,
-              mediaPlaybackRequiresUserAction: false,
-            }}
-          />
-        )}
-
-      </Pressable>
-
-      {isAndroid && controlsVisible && (
-        <View style={previewVideoStyles.centerControlsOverlay} pointerEvents="box-none">
-          <View style={previewVideoStyles.centerControlsRow}>
-            <Pressable onPress={() => { handleSeekBy(-10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
-              <Ionicons name="play-back" size={22} color="#fff" />
-            </Pressable>
-            <Pressable onPress={() => { handleTogglePlay(); showControlsTemporarily(); }} style={previewVideoStyles.centerPlayButton}>
-              <Ionicons name={playing ? "pause" : "play"} size={36} color="#fff" />
-            </Pressable>
-            <Pressable onPress={() => { handleSeekBy(10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
-              <Ionicons name="play-forward" size={22} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
-      )}
-      {isAndroid && (
-        <Pressable
-          onPress={handleToggleMute}
-          style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 10, right: 16 }]}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <View style={previewVideoStyles.muteButtonInner}>
-            <Ionicons name={muted ? "volume-mute" : "volume-high"} size={22} color="#fff" />
-          </View>
-        </Pressable>
-      )}
-      {isAndroid && (
-        <Pressable
-          onPress={() => {
-            if (item.uri) Linking.openURL(item.uri);
-          }}
-          style={[previewVideoStyles.watchOnYouTubeButton, { bottom: insets.bottom + 10, left: 16 }]}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <View style={previewVideoStyles.watchOnYouTubeInner}>
-            <Ionicons name="logo-youtube" size={14} color="#FF0000" />
-            <Text size="xs" weight="semibold" style={{ color: "#fff", marginLeft: 4 }}>
-              Watch on YouTube
-            </Text>
-          </View>
-        </Pressable>
-      )}
-    </View>
-  );
-});
-
-const previewVideoStyles = StyleSheet.create({
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  muteButton: {
-    position: "absolute",
-    bottom: 80,
-    right: 20,
-  },
-  muteButtonInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerControlsOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 50,
-  },
-  centerControlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 24,
-  },
-  centerPlayButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  youtubeControlButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  watchOnYouTubeButton: {
-    position: "absolute",
-    bottom: 80,
-    left: 20,
-  },
-  watchOnYouTubeInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 22,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-});
 
 type MediaPreviewModalProps = {
   visible: boolean;
@@ -509,6 +50,12 @@ type MediaPreviewModalProps = {
   onClose: () => void;
 };
 
+/**
+ * Fullscreen media preview: orientation-unlocked modal hosting either a
+ * paged gallery (items own their players — `PreviewVideoItem`,
+ * `PreviewYouTubeItem`) or a single media surface with pinch-zoom for
+ * images and an owned player for video.
+ */
 export const MediaPreviewModal = memo(function MediaPreviewModal({
   visible,
   media,
@@ -537,7 +84,6 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
   }, [visible]);
-  const videoRef = useRef<Video | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const isMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
@@ -547,42 +93,98 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const videoPositionKey = media?.uri
     ? buildVideoPositionKey(media.uri, videoSyncScope)
     : "";
+  const hasGallery = !!(mediaList && mediaList.length > 1);
+
+  // Adopt the underlying screen's already-buffered player (the feed/detail
+  // card stays mounted beneath the modal), so fullscreen opens continue
+  // instantly instead of re-streaming. Adopted players are already at the
+  // live position, so the saved-position restore is skipped.
+  const isSingleVideo = media?.type === "video" && !hasGallery;
+  const singleVideoUri = isSingleVideo ? media.uri : null;
+  const videoHandoffKey =
+    singleVideoUri && !singleVideoUri.startsWith("file://")
+      ? canonicalVideoAssetId(singleVideoUri)
+      : null;
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
+  useEffect(() => {
+    if (!visible || !videoHandoffKey || !singleVideoUri) return;
+    const lease = adoptHandoffPlayer(videoHandoffKey, singleVideoUri);
+    if (!lease) return;
+    hasRestoredVideoRef.current = true;
+    setAdoptedLease(lease);
+    return () => {
+      setAdoptedLease(null);
+      releaseHandoffPlayer(lease);
+    };
+  }, [visible, videoHandoffKey, singleVideoUri]);
+  const controllerPlayer = useVideoPlayerController(
+    isSingleVideo && !adoptedLease ? media.uri : null,
+    {
+      loop: true,
+      muted: isMuted,
+      shouldPlay:
+        isSingleVideo &&
+        !adoptedLease &&
+        isVideoPlaying &&
+        mediaSurfaceActive,
+      timeUpdateInterval: 0.1,
+    },
+  );
+  const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+  // An adopted player bypasses the controller's option effects; as the top
+  // lease holder the modal applies its settings directly.
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.loop = true;
+      adoptedPlayer.timeUpdateEventInterval = 0.1;
+      setIsLoading(false);
+    } catch {
+      // Native player was released underneath us.
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.muted = isMuted;
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, isMuted]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      if (isVideoPlaying && mediaSurfaceActive) {
+        adoptedPlayer.play();
+      } else {
+        adoptedPlayer.pause();
+      }
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, isVideoPlaying, mediaSurfaceActive]);
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);
-  const hasGallery = mediaList && mediaList.length > 1;
 
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  const resetTransforms = useCallback(() => {
-    scale.value = withTiming(1);
-    savedScale.value = 1;
-    translateX.value = withTiming(0);
-    translateY.value = withTiming(0);
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
-  }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
+  const { composedGesture, animatedStyle, resetTransforms } = usePreviewZoomGesture();
 
   const handleClose = useCallback(() => {
-    if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
-      useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
+    if (!hasGallery && media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 0.5) {
+      useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current);
     }
-    videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
     setIsVideoPlaying(false);
     setIsLoading(true);
     hasRestoredVideoRef.current = false;
     onClose();
-  }, [onClose, resetTransforms, media, videoPositionKey]);
+  }, [hasGallery, onClose, resetTransforms, media, videoPositionKey]);
 
   useEffect(() => {
     if (!visible) {
-      videoRef.current?.pauseAsync().catch(() => {});
       setIsVideoPlaying(false);
     } else {
       setIsVideoPlaying(true);
@@ -590,103 +192,52 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, [visible]);
 
   useEffect(() => {
-    if (!mediaSurfaceActive) {
-      videoRef.current?.pauseAsync().catch(() => {});
-    }
-  }, [mediaSurfaceActive]);
-
-  const handleVideoToggle = useCallback(async () => {
-    if (!videoRef.current) return;
-    try {
-      const status = await videoRef.current.getStatusAsync();
-      if (!status.isLoaded) return;
-      if (status.isPlaying) {
-        await videoRef.current.pauseAsync();
-        setIsVideoPlaying(false);
-      } else {
-        if (status.didJustFinish) {
-          await videoRef.current.replayAsync();
-        } else {
-          await videoRef.current.playAsync();
-        }
+    const restorePosition = () => {
+      if (hasGallery || hasRestoredVideoRef.current || !media?.uri) return;
+      const saved = useVideoPositionStore.getState().getPosition(videoPositionKey);
+      if (saved > 0.5) {
+        hasRestoredVideoRef.current = true;
+        videoPlayer.currentTime = saved;
+      }
+    };
+    const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+      currentVideoPositionRef.current = currentTime;
+    });
+    const statusSubscription = videoPlayer.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay") {
+        setIsLoading(false);
+        restorePosition();
+      }
+    });
+    const playingSubscription = videoPlayer.addListener("playingChange", ({ isPlaying }) => {
+      if (mediaSurfaceActive && !hasGallery && isPlaying) {
         setIsVideoPlaying(true);
       }
-    } catch {}
+    });
+    const sourceSubscription = videoPlayer.addListener("sourceLoad", () => {
+      setIsLoading(false);
+      restorePosition();
+    });
+    if (!hasGallery && videoPlayer.status === "readyToPlay") {
+      setIsLoading(false);
+      restorePosition();
+    }
+
+    return () => {
+      timeSubscription.remove();
+      statusSubscription.remove();
+      playingSubscription.remove();
+      sourceSubscription.remove();
+    };
+  }, [hasGallery, media?.uri, mediaSurfaceActive, videoPlayer, videoPositionKey]);
+
+  const handleVideoToggle = useCallback(() => {
+    setIsVideoPlaying((playing) => !playing);
   }, []);
 
   const handleMuteToggle = useCallback(() => {
     toggleMute();
   }, [toggleMute]);
-
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    currentVideoPositionRef.current = status.positionMillis;
-    if (status.isPlaying && !status.isBuffering) {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.value = savedScale.value * e.scale;
-    })
-    .onEnd(() => {
-      if (scale.value < 1) {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else if (scale.value > 4) {
-        scale.value = withTiming(4);
-        savedScale.value = 4;
-      } else {
-        savedScale.value = scale.value;
-      }
-    });
-
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      if (savedScale.value > 1) {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
-      }
-    })
-    .onEnd(() => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
-
-  const doubleTapGesture = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      if (savedScale.value > 1) {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        scale.value = withTiming(2);
-        savedScale.value = 2;
-      }
-    });
-
-  const composedGesture = Gesture.Simultaneous(
-    pinchGesture,
-    panGesture,
-    doubleTapGesture
-  );
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
 
   if (!media && !hasGallery) return null;
 
@@ -702,6 +253,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       >
         <View style={styles.container}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close media preview"
             style={[styles.closeButton, { top: insets.top + 10 }]}
             onPress={handleClose}
             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
@@ -718,6 +271,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={initialIndex}
+            initialNumToRender={2}
+            maxToRenderPerBatch={2}
+            windowSize={3}
             getItemLayout={(_, index) => ({
               length: screenWidth,
               offset: screenWidth * index,
@@ -730,7 +286,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             keyExtractor={(item, index) => `${item.uri}-${index}`}
             renderItem={({ item, index }) =>
               item.type === "video" ? (
-                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} videoSyncScope={videoSyncScope} />
+                <PreviewVideoItem
+                  item={item}
+                  width={screenWidth}
+                  height={screenHeight}
+                  isActive={index === activeGalleryIndex && mediaSurfaceActive}
+                  shouldPrepare={
+                    mediaSurfaceActive && Math.abs(index - activeGalleryIndex) <= 1
+                  }
+                  videoSyncScope={videoSyncScope}
+                />
               ) : item.type === "youtube" ? (
                 <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} videoSyncScope={videoSyncScope} />
               ) : (
@@ -739,6 +304,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
                     source={{ uri: item.uri }}
                     style={styles.fullMedia}
                     contentFit="contain"
+                    recyclingKey={item.uri}
                   />
                 </View>
               )
@@ -772,6 +338,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.container}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close media preview"
             style={[styles.closeButton, { top: insets.top + 10 }]}
             onPress={handleClose}
             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
@@ -806,27 +374,21 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isVideo && (
-            <Pressable style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]} onPress={handleVideoToggle}>
-              <Video
-                ref={videoRef}
-                source={{ uri: media!.uri }}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isVideoPlaying ? "Pause video" : "Play video"}
+              style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}
+              onPress={handleVideoToggle}
+            >
+              <VideoView
+                player={videoPlayer}
                 style={styles.fullMedia}
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay={isVideoPlaying && mediaSurfaceActive}
-                isLooping
-                isMuted={isMuted}
-                useNativeControls={false}
-                onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                onLoad={() => {
-                  setIsLoading(false);
-                  if (!hasRestoredVideoRef.current && media?.uri) {
-                    const saved = useVideoPositionStore.getState().getPosition(videoPositionKey);
-                    if (saved > 0.5) {
-                      hasRestoredVideoRef.current = true;
-                      videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
-                    }
-                  }
-                }}
+                contentFit="contain"
+                nativeControls={false}
+                fullscreenOptions={{ enable: false }}
+                allowsPictureInPicture={false}
+                surfaceType={Platform.OS === "android" ? "textureView" : undefined}
+                onFirstFrameRender={() => setIsLoading(false)}
               />
               {!isVideoPlaying && !isLoading && (
                 <View style={styles.playOverlay}>
@@ -850,6 +412,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
           {isVideo && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isMuted ? "Unmute video" : "Mute video"}
               style={[styles.muteButton, { bottom: insets.bottom + 10 }]}
               onPress={handleMuteToggle}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

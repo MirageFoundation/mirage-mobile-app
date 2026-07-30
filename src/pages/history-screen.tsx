@@ -11,6 +11,7 @@ import {
   type Post,
   PostOptionsSheet,
   type PostOptionsSheetRef,
+  FeedDensityToggle,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { Text } from "@/src/components/ui/primitives";
@@ -89,11 +90,13 @@ export function HistoryScreen() {
     (postId: string) => {
       const post = visibleEntries.find((p) => p.id === postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        requireAuth(() => {
+          setSelectedPost(post);
+          postOptionsSheetRef.current?.present();
+        });
       }
     },
-    [visibleEntries],
+    [visibleEntries, requireAuth],
   );
 
   const handleLikePress = useCallback(
@@ -216,15 +219,16 @@ export function HistoryScreen() {
         <Text size="lg" weight="bold">
           History
         </Text>
-        {visibleEntries.length > 0 ? (
-          <Pressable onPress={handleClearAll} style={styles.clearButton}>
-            <Text size="md" style={{ color: theme.colors.text.subtle }}>
-              Clear
-            </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.placeholder} />
-        )}
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <FeedDensityToggle />
+          {visibleEntries.length > 0 ? (
+            <Pressable onPress={handleClearAll} style={styles.clearButton}>
+              <Text size="md" style={{ color: theme.colors.text.subtle }}>
+                Clear
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.subtle }]} />

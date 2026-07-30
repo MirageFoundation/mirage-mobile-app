@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import * as Sentry from "@sentry/react-native";
-import { Audio } from "expo-av";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
 import { resetServerScopedCache } from "@/src/api/cache/server-cache";
+import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
+import { serverQueryRoot } from "@/src/api/server-runtime";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { Text } from "@/src/components/ui/primitives";
@@ -35,6 +36,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const initializedRef = useRef(false);
   const previousServerRef = useRef<ApiServer>(apiServer);
+  const refreshingCountRef = useRef(0);
 
   useEffect(() => {
     const baseUrl = getApiBaseUrl(apiServer);
@@ -48,7 +50,6 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (previousServerRef.current !== apiServer) {
       apiClient.setBaseUrl(baseUrl);
-      resetServerScopedCache(queryClient);
       previousServerRef.current = apiServer;
     }
   }, [apiServer, queryClient]);
@@ -58,8 +59,10 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
+    refreshingCountRef.current += 1;
     setIsRefreshing(true);
-    const previousServer = previousServerRef.current;
+    let previousServer = previousServerRef.current;
+    let wallet = null as Awaited<ReturnType<typeof walletService.getWallet>>;
 
     Sentry.addBreadcrumb({
       category: "api-server",
@@ -72,75 +75,60 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      const wallet = await walletService.getWallet();
-      await unregisterPush(wallet);
-
       const baseUrl = getApiBaseUrl(server);
-      apiClient.setBaseUrl(baseUrl);
-
-      resetServerScopedCache(queryClient);
-
-      // Clear any video viewability/active state from the previous server and
-      // keep feed playback suppressed while the settings screen is still on
-      // top. The caller releases sideMenuOpen after navigating back home.
-      useHomePostCardStore.setState({
-        activeVideoPostIds: {},
-        visibleVideoPostIds: {},
-        nearbyVideoPostIds: {},
-        sideMenuOpen: true,
-      });
-      Sentry.addBreadcrumb({
-        category: "feed-video",
-        message: "Suppressed feed playback during API server switch",
-        level: "info",
-        data: {
-          from: previousServer,
-          to: server,
-        },
-      });
-
-      setApiServer(server);
-      previousServerRef.current = server;
-
-      const audioModeResult = await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      }).then(
-        () => "ok" as const,
-        (error) => {
-          Sentry.captureException(error, {
-            tags: {
-              feature: "feed-video",
-              action: "reset-audio-mode-after-server-switch",
-            },
-            extra: {
-              from: previousServer,
-              to: server,
-            },
+      await apiClient.switchBaseUrl(baseUrl, {
+        beforeCommit: async (previousContext) => {
+          previousServer = previousServerRef.current;
+          await queryClient.cancelQueries({
+            queryKey: serverQueryRoot(previousContext.identity),
           });
-          return "failed" as const;
+          wallet = await walletService.getWallet();
+          await unregisterPush(wallet);
+          removePersistedQueryCache(previousContext.identity, wallet?.address);
         },
-      );
-      Sentry.addBreadcrumb({
-        category: "feed-video",
-        message: "Reset audio mode after API server switch",
-        level: audioModeResult === "ok" ? "info" : "warning",
-        data: {
-          result: audioModeResult,
-          from: previousServer,
-          to: server,
+        afterCommit: async (previousContext) => {
+          resetServerScopedCache(queryClient, previousContext.identity);
+
+          // Clear any video viewability/active state from the previous server
+          // and suppress playback until the caller navigates back home.
+          useHomePostCardStore.setState({
+            sideMenuOpen: true,
+          });
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message: "Suppressed feed playback during API server switch",
+            level: "info",
+            data: { from: previousServer, to: server },
+          });
+
+          previousServerRef.current = server;
+          setApiServer(server);
+          await primeBootstrap(queryClient, wallet?.address);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        },
+        rollback: (_previousContext, failedContext) => {
+          if (failedContext) {
+            resetServerScopedCache(queryClient, failedContext.identity);
+          }
+          previousServerRef.current = previousServer;
+          setApiServer(previousServer);
         },
       });
-
-      await primeBootstrap(queryClient, wallet?.address);
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const walletAfterSwitch = await walletService.getWallet();
       if (walletAfterSwitch) {
         await registerPush(walletAfterSwitch);
       }
     } catch (error) {
+      if (wallet && previousServerRef.current === previousServer) {
+        try {
+          await registerPush(wallet);
+        } catch (rollbackError) {
+          Sentry.captureException(rollbackError, {
+            tags: { feature: "api-server", action: "rollback-push" },
+          });
+        }
+      }
       Sentry.captureException(error, {
         tags: {
           feature: "api-server",
@@ -153,7 +141,10 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       throw error;
     } finally {
-      setIsRefreshing(false);
+      refreshingCountRef.current -= 1;
+      if (refreshingCountRef.current === 0) {
+        setIsRefreshing(false);
+      }
     }
   }, [queryClient, setApiServer]);
 
@@ -174,7 +165,11 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "center",
     alignItems: "center",

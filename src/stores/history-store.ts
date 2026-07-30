@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
 import type { Post } from "@/src/domain/content";
 
 export type HistoryEntry = Post & {
@@ -52,7 +55,8 @@ export const useHistoryStore = create<HistoryState>()(
     }),
     {
       name: "history-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
       version: 1,
       migrate: (persistedState) => {
         const state = persistedState as {
@@ -67,3 +71,9 @@ export const useHistoryStore = create<HistoryState>()(
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "history-storage",
+  reset: () => useHistoryStore.getState().clearAll(),
+  rehydrate: () => useHistoryStore.persist.rehydrate(),
+});

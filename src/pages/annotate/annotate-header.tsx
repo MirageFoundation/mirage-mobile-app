@@ -33,7 +33,13 @@ export function AnnotateHeader({
           Annotate Post
         </Text>
       </View>
-      <Pressable onPress={onBack} style={styles.headerButton}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close annotation"
+        onPress={onBack}
+        style={styles.headerButton}
+        hitSlop={8}
+      >
         <Ionicons
           name="close"
           size={28}

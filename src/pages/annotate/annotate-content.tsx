@@ -1,7 +1,7 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as ImagePicker from "expo-image-picker";
 import * as Network from "expo-network";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +12,6 @@ import {
   ScrollView,
   View,
 } from "react-native";
-import { ResizeMode, Video } from "expo-av";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +25,7 @@ import * as Sentry from "@sentry/react-native";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { useAnnotate } from "@/src/api/write";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { StaticVideoPreview } from "@/src/components/molecules/static-video-preview";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { CommunitySelectionModal } from "@/src/components/molecules/community-selection-modal";
 import { consumePendingVideoResult } from "@/src/stores/video-editor-result-store";
@@ -70,7 +70,6 @@ export function AnnotateScreen() {
 
   const postId = params.postId ?? "";
   const originalTitle = params.postTitle ?? "";
-  const originalTopic = params.postTopic ?? "";
   const postLikes = parseInt(params.postLikes ?? "0", 10);
   const postComments = parseInt(params.postComments ?? "0", 10);
   const postThumbnail = params.postThumbnail ?? "";
@@ -258,7 +257,6 @@ export function AnnotateScreen() {
     selectedCommunity,
     tagEnabled,
     selectedTag,
-    mediaEnabled,
     hasMediaContent,
     appendix,
     mediaType,
@@ -440,7 +438,7 @@ export function AnnotateScreen() {
       Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-picker" } });
       toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
-  }, [mediaType, toast, startVideoUpload]);
+  }, [mediaType, router, toast]);
 
   const handleStickerPress = useCallback(() => {
     if (mediaType && mediaType !== "sticker") return;
@@ -639,13 +637,9 @@ export function AnnotateScreen() {
                     return (
                       <Pressable key={uri} onPress={() => handleEditVideo(uri)} style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}>
                         <View pointerEvents="none">
-                          <Video
-                            source={{ uri }}
+                          <StaticVideoPreview
+                            uri={uri}
                             style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }]}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay={false}
-                            isMuted
-                            useNativeControls={false}
                           />
                         </View>
 

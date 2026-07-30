@@ -4,11 +4,10 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
-  SCREEN_WIDTH,
 } from "@gorhom/bottom-sheet";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
-import { Platform, Pressable, Share, View } from "react-native";
+import { Dimensions, Platform, Pressable, Share, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -150,7 +149,6 @@ export const CommentOptionsSheet = forwardRef<
       triggerHaptic("light");
       try {
         const commentId = comment?.id || "";
-        const root = rootPostId || "";
         const url = `${getShareBaseUrl(shareServer)}/p/${commentId}`;
         await Share.share({ message: url });
       } catch {
@@ -160,9 +158,6 @@ export const CommentOptionsSheet = forwardRef<
       onShare?.();
     }, [
       comment?.id,
-      comment?.content,
-      comment?.author?.username,
-      rootPostId,
       shareServer,
       dismiss,
       onShare,
@@ -256,7 +251,13 @@ export const CommentOptionsSheet = forwardRef<
             <Text size="lg" weight="bold">
               Options
             </Text>
-            <Pressable onPress={dismiss} style={[styles.closeButton]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close comment options"
+              onPress={dismiss}
+              style={[styles.closeButton]}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}
@@ -404,7 +405,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   divider: {
-    width: SCREEN_WIDTH,
+    width: Dimensions.get("window").width,
     alignSelf: "center",
     marginBottom: theme.sizing.md,
   },

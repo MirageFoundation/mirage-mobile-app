@@ -2,14 +2,16 @@ import * as Sentry from "@sentry/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { getBootstrap, type BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
-import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
+import { getNodeConfig, getSafeApiErrorContext } from "@/src/api/read/endpoints/parameters";
 import {
   getInviteCodes,
   getUserBlocked,
   getUserFollowed,
   getUserStatus,
+  mergeUserFollowedEnabledAgents,
 } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
+import type { UserFollowedResponse } from "@/src/api/types";
 
 type BootstrapSection = keyof BootstrapResponse;
 
@@ -58,6 +60,16 @@ export function hydrateBootstrapCache(
 ) {
   if (response.node_config) {
     queryClient.setQueryData(queryKeys.nodeConfig(), response.node_config);
+    Sentry.addBreadcrumb({
+      category: "auto-enabled-agents",
+      message: "Bootstrap node config hydrated",
+      level: "info",
+      data: {
+        source: "bootstrap",
+        autoEnabledAgentsCount: response.node_config.auto_enabled_agents?.length ?? 0,
+        hasAutoEnabledAgents: Array.isArray(response.node_config.auto_enabled_agents),
+      },
+    });
   }
 
   if (!address) return;
@@ -66,7 +78,13 @@ export function hydrateBootstrapCache(
     queryClient.setQueryData(queryKeys.userStatus(address), response.user_status);
   }
   if (response.user_followed) {
-    queryClient.setQueryData(queryKeys.userFollowed(address), response.user_followed);
+    queryClient.setQueryData(
+      queryKeys.userFollowed(address),
+      mergeUserFollowedEnabledAgents(response.user_followed, {
+        source: "bootstrap",
+        nodeConfigAutoEnabledAgents: response.node_config?.auto_enabled_agents,
+      }),
+    );
   }
   if (response.user_blocked) {
     queryClient.setQueryData(queryKeys.userBlocked(address), response.user_blocked);
@@ -88,7 +106,62 @@ function scheduleBootstrapFallbacks(
     addBootstrapFallbackBreadcrumb("node_config", Boolean(address));
     queryClient.prefetchQuery({
       queryKey: queryKeys.nodeConfig(),
-      queryFn: () => getNodeConfig(),
+      queryFn: async () => {
+        let nodeConfigFetched = false;
+
+        try {
+          const nodeConfig = await getNodeConfig();
+          nodeConfigFetched = true;
+          const autoEnabledAgentsCount = nodeConfig.auto_enabled_agents?.length ?? 0;
+          let mergedExistingUserFollowed = false;
+
+          if (address) {
+            queryClient.setQueryData<UserFollowedResponse | undefined>(
+              queryKeys.userFollowed(address),
+              (old) => {
+                if (!old) return old;
+                mergedExistingUserFollowed = true;
+                return mergeUserFollowedEnabledAgents(old, {
+                  source: "node_config_fallback",
+                  nodeConfigAutoEnabledAgents: nodeConfig.auto_enabled_agents,
+                });
+              },
+            );
+          }
+
+          Sentry.addBreadcrumb({
+            category: "auto-enabled-agents",
+            message: "Bootstrap node config fallback completed",
+            level: "info",
+            data: {
+              source: "node_config_fallback",
+              hasAddress: Boolean(address),
+              autoEnabledAgentsCount,
+              mergedExistingUserFollowed,
+            },
+          });
+
+          return nodeConfig;
+        } catch (error) {
+          Sentry.addBreadcrumb({
+            category: "auto-enabled-agents",
+            message: "Bootstrap node config fallback failed",
+            level: "error",
+            data: {
+              source: "node_config_fallback",
+              hasAddress: Boolean(address),
+              ...getSafeApiErrorContext(error),
+            },
+          });
+          if (nodeConfigFetched) {
+            Sentry.captureException(error, {
+              tags: { feature: "auto-enabled-agents", operation: "bootstrap-node-config-merge" },
+              extra: { hasAddress: Boolean(address) },
+            });
+          }
+          throw error;
+        }
+      },
       staleTime: 1000 * 60 * 60 * 24,
     });
   }
@@ -128,6 +201,7 @@ function scheduleBootstrapFallbacks(
 export async function primeBootstrap(
   queryClient: QueryClient,
   address?: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<BootstrapResponse | null> {
   const hasAddress = Boolean(address);
 
@@ -140,6 +214,7 @@ export async function primeBootstrap(
 
   try {
     const response = await getBootstrap(address ? { address } : undefined);
+    if (!isCurrent()) return null;
     hydrateBootstrapCache(queryClient, response, address);
     scheduleBootstrapFallbacks(queryClient, response, address);
 
@@ -167,6 +242,7 @@ export async function primeBootstrap(
 
     return response;
   } catch (error) {
+    if (!isCurrent()) return null;
     console.warn("[Bootstrap] Failed to prime bootstrap cache:", error);
     Sentry.addBreadcrumb({
       category: "bootstrap",

@@ -6,6 +6,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useRef } from "react";
 import {
@@ -83,11 +84,13 @@ type PostActionsProps = {
 
 const SIZE_CONFIG = {
   sm: {
-    iconSize: 12,
-    gap: 10,
+    iconSize: 14,
+    gap: 6,
     textSize: "xs" as const,
-    pillHeight: 24,
+    pillHeight: 28,
     voteTextSize: "xs" as const,
+    voteButtonPadX: 8,
+    iconOnlyPad: 6,
   },
   md: {
     iconSize: 16,
@@ -95,6 +98,8 @@ const SIZE_CONFIG = {
     textSize: "sm" as const,
     pillHeight: 30,
     voteTextSize: "sm" as const,
+    voteButtonPadX: 10,
+    iconOnlyPad: 8,
   },
   lg: {
     iconSize: 18,
@@ -102,6 +107,8 @@ const SIZE_CONFIG = {
     textSize: "sm" as const,
     pillHeight: 32,
     voteTextSize: "sm" as const,
+    voteButtonPadX: 10,
+    iconOnlyPad: 9,
   },
 };
 
@@ -149,7 +156,23 @@ export const PostActions = memo(function PostActions({
   hideCommentAction = false,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
-  const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
+  const {
+    iconSize,
+    gap,
+    pillHeight,
+    voteTextSize,
+    voteButtonPadX,
+    iconOnlyPad,
+  } = SIZE_CONFIG[size];
+  const voteButtonStyle = { paddingHorizontal: voteButtonPadX };
+  // Icon-only pills (share, ban) get equal horizontal + vertical padding
+  // so they render as visually-round circles inside the pill border.
+  const iconOnlyButtonStyle = {
+    paddingHorizontal: iconOnlyPad,
+    paddingVertical: Math.max(4, (pillHeight - iconSize) / 2 - 1),
+  };
 
   const blockMenuMinWidth = Math.max(180, `Block @${authorUsername || ""}`.length * 10 + 60);
 
@@ -247,6 +270,11 @@ export const PostActions = memo(function PostActions({
     onReport?.();
   };
 
+  const handleAuthRequiredModeration = () => {
+    triggerHaptic("warning");
+    showAuthSheet();
+  };
+
   const defaultColor = theme.colors.text.default;
 
   // Colors persist based on vote state
@@ -257,15 +285,16 @@ export const PostActions = memo(function PostActions({
   const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : defaultColor;
 
   return (
-    <View style={[styles.container, { gap }, style]}>
-      {/* Vote pill container */}
-      <View style={[styles.votePill, { height: pillHeight }]}>
+    <View style={[styles.container, style]}>
+      <View style={[styles.actionGroup, { gap }]}>
+        {/* Vote pill container */}
+        <View style={[styles.votePill, { height: pillHeight }]}>
         {/* Like button */}
         <Pressable
           onPress={handleLikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Animated.View
             style={{
@@ -288,12 +317,20 @@ export const PostActions = memo(function PostActions({
           onPress={handleLikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ color: upvoteColor }}
+            style={{
+              color: upvoteColor,
+              // Cap line-height to the icon size so the count baseline
+              // aligns with the up/down arrows. Without this, the Text
+              // default lineHeight (≈ 1.5x fontSize) pushes the count
+              // visually lower than the icons.
+              lineHeight: iconSize,
+              marginTop: -1,
+            }}
           >
             {formatCount(likes)}
           </Text>
@@ -307,7 +344,7 @@ export const PostActions = memo(function PostActions({
           onPress={handleDislikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Animated.View
             style={{
@@ -321,54 +358,73 @@ export const PostActions = memo(function PostActions({
             )}
           </Animated.View>
         </Pressable>
+        </View>
+
+        {!hideCommentAction && (
+          <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: commentPillScale }] }]}>
+            <Pressable
+              onPress={() => {
+                if (disabled) return;
+                triggerHaptic("selection");
+                onCommentPress?.();
+              }}
+              {...makePressHandlers(commentPillScale)}
+              disabled={disabled}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
+            >
+              <CommentIcon size={iconSize} color={defaultColor} />
+              <Text
+                size={voteTextSize}
+                weight="bold"
+                style={{
+                  marginLeft: size === "sm" ? 4 : 8,
+                  color: defaultColor,
+                  marginTop: -2,
+                }}
+              >
+                {formatCount(comments)}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
 
-      {!hideCommentAction && (
-        <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: commentPillScale }] }]}>
+      <View style={[styles.actionGroup, { gap }]}>
+        {/* Share pill container — grouped with moderation/options */}
+        <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
           <Pressable
-            onPress={() => {
-              if (disabled) return;
-              triggerHaptic("selection");
-              onCommentPress?.();
-            }}
-            {...makePressHandlers(commentPillScale)}
+            onPress={handleShare}
+            {...makePressHandlers(sharePillScale)}
             disabled={disabled}
-            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            style={[styles.voteButton, disabled && styles.disabled]}
+            style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}
           >
-            <CommentIcon size={iconSize} color={defaultColor} />
-            <Text
-              size={voteTextSize}
-              weight="bold"
-              style={{ marginLeft: 8, color: defaultColor, marginTop: -2 }}
-            >
-              {formatCount(comments)}
-            </Text>
+            <ShareIcon size={iconSize} color={defaultColor} />
           </Pressable>
         </Animated.View>
-      )}
 
-      {/* Spacer to push share to the right */}
-      <View style={styles.spacer} />
-
-      {/* Share pill container */}
-      <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
-        <Pressable
-          onPress={handleShare}
-          {...makePressHandlers(sharePillScale)}
-          disabled={disabled}
-          style={[styles.voteButton, disabled && styles.disabled]}
-        >
-          <ShareIcon size={iconSize} color={defaultColor} />
-        </Pressable>
-      </Animated.View>
-
-      {/* Moderation menu (only for other users' posts) */}
-      {!isOwnPost && (
-        <Menu>
+        {/* Moderation menu (only for other users' posts) */}
+        {!isOwnPost && !isLoggedIn && (
+          <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
+            <Pressable
+              onPress={handleAuthRequiredModeration}
+              {...makePressHandlers(banPillScale)}
+              disabled={disabled}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}
+            >
+              <Ionicons
+                name="ban-outline"
+                size={iconSize}
+                color={theme.colors.error[500]}
+              />
+            </Pressable>
+          </Animated.View>
+        )}
+        {!isOwnPost && isLoggedIn && (
+          <Menu>
           <MenuTrigger
             customStyles={{
-              triggerOuterWrapper: { marginLeft: -3 },
               triggerTouchable: {
                 hitSlop: { top: 6, bottom: 6, left: 6, right: 6 },
                 ...makePressHandlers(banPillScale),
@@ -376,7 +432,7 @@ export const PostActions = memo(function PostActions({
             }}
           >
             <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
-             <View style={[styles.voteButton, disabled && styles.disabled]}>
+             <View style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}>
                <Ionicons
                   name="ban-outline"
                  size={iconSize}
@@ -474,14 +530,20 @@ export const PostActions = memo(function PostActions({
               </View>
             </MenuOption>
           </MenuOptions>
-        </Menu>
-      )}
+          </Menu>
+        )}
+      </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create((theme) => ({
   container: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionGroup: {
     flexDirection: "row",
     alignItems: "center",
   },
@@ -494,6 +556,7 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border.default,
     paddingHorizontal: 2,
   },
+
   voteButton: {
     flexDirection: "row",
     alignItems: "center",

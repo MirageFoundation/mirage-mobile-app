@@ -1,31 +1,71 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
 
 type MediaPostDetailNotFoundProps = {
+  description?: string;
+  message?: string;
   onBack: () => void;
 };
 
-export function MediaPostDetailNotFound({ onBack }: MediaPostDetailNotFoundProps) {
+export function MediaPostDetailNotFound({
+  description = "This post or comment may have been deleted by its author or is no longer available.",
+  message = "Content not found",
+  onBack,
+}: MediaPostDetailNotFoundProps) {
   const { theme } = useUnistyles();
 
   return (
-    <Box flex center background="base" p="lg">
-      <Ionicons
-        name="alert-circle-outline"
-        size={48}
-        color={theme.colors.text.subtle}
-      />
-      <Text size="lg" weight="semibold" mode="subtle" style={{ marginTop: 12 }}>
-        Post unavailable
-      </Text>
-      <Pressable onPress={onBack} style={{ marginTop: 16 }}>
-        <Text size="sm" weight="medium">
-          Go back
+    <Box flex center background="base" px="lg" gap="lg" safeArea>
+      <Box
+        center
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: theme.radius.full,
+          backgroundColor: theme.colors.error[500] + "15",
+          borderWidth: 1,
+          borderColor: theme.colors.error[500] + "40",
+        }}
+      >
+        <Ionicons
+          name="trash-bin-outline"
+          size={38}
+          color={theme.colors.error[500]}
+        />
+      </Box>
+
+      <Box center gap="xs">
+        <Text size="xl" weight="bold">
+          {message}
         </Text>
-      </Pressable>
+        <Text
+          size="sm"
+          mode="subtle"
+          leading="relaxed"
+          style={{ textAlign: "center", maxWidth: 300 }}
+        >
+          {description}
+        </Text>
+      </Box>
+
+      <Button
+        size="md"
+        variant="outline"
+        mode="subtle"
+        rounded="full"
+        onPress={onBack}
+        contentStyle={{ paddingHorizontal: theme.spacing.md }}
+        mt="sm"
+      >
+        <Button.Icon>
+          {({ color, size }) => (
+            <Ionicons name="arrow-back" size={size} color={color} />
+          )}
+        </Button.Icon>
+        <Button.Text weight="semibold">Go back</Button.Text>
+      </Button>
     </Box>
   );
 }

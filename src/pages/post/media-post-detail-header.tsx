@@ -39,7 +39,13 @@ export function MediaPostDetailHeader({
       ]}
       pointerEvents={pointerEvents}
     >
-      <Pressable onPress={onBack} style={styles.headerBtn} hitSlop={8}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close post"
+        onPress={onBack}
+        style={styles.headerBtn}
+        hitSlop={8}
+      >
         <AntDesign name="close" size={22} color={theme.colors.text.default} />
       </Pressable>
       <View style={styles.headerCenter}>
@@ -56,7 +62,13 @@ export function MediaPostDetailHeader({
           </Pressable>
         ) : null}
       </View>
-      <Pressable onPress={onOptionsPress} style={styles.headerBtn} hitSlop={8}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open post options"
+        onPress={onOptionsPress}
+        style={styles.headerBtn}
+        hitSlop={8}
+      >
         <Ionicons
           name="ellipsis-horizontal"
           size={22}

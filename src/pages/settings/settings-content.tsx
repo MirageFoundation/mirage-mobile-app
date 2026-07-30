@@ -18,10 +18,11 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { CONTENT_WARNING_IDS, CONTENT_WARNING_OPTIONS } from "@/src/domain/content";
 import { useApiServer } from "@/src/providers/api-server-provider";
+import { useTheme } from "@/src/providers/theme-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
-import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
@@ -69,18 +70,17 @@ export function SettingsScreen() {
  const router = useRouter();
  const insets = useSafeAreaInsets();
  const { theme } = useUnistyles();
+ const { setThemeMode } = useTheme();
 
 // Stores
   const { switchServer } = useApiServer();
   const toast = useToast();
   const {
     theme: themeMode,
-    setTheme,
     selectedContentTypes,
     adultContentEnabled,
     setAdultContent,
     toggleContentType,
-    setSelectedContentTypes,
     blurSensitiveMedia,
     setBlurSensitiveMedia,
     hideDownvotedPosts,
@@ -108,9 +108,6 @@ export function SettingsScreen() {
     },
     [setAnalyticsConsent],
   );
-
-  const adultContentActive = isAdultContentEnabled(selectedContentTypes);
-  const hasAnyContentEnabled = selectedContentTypes.length > 0;
 
   const handleBlurToggle = useCallback((value: boolean) => {
     setBlurSensitiveMedia(value);
@@ -155,9 +152,9 @@ export function SettingsScreen() {
 
  const handleThemeChange = useCallback(
     (value: ThemeMode) => {
-      setTheme(value);
+      setThemeMode(value);
     },
-    [setTheme]
+    [setThemeMode]
   );
 
 const handleApiServerChange = useCallback(
@@ -197,15 +194,15 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"];
-   const allSelected = ALL_TAGS.every((t) => selectedContentTypes.includes(t as any));
+   const allSelected = CONTENT_WARNING_IDS.every((type) =>
+     selectedContentTypes.includes(type),
+   );
    if (allSelected) return "All";
     if (selectedContentTypes.length === 0) return "None";
    if (selectedContentTypes.length === 1) {
-     return (
-        selectedContentTypes[0].charAt(0).toUpperCase() +
-        selectedContentTypes[0].slice(1)
-      );
+     return CONTENT_WARNING_OPTIONS.find(
+       (option) => option.id === selectedContentTypes[0],
+     )?.label ?? selectedContentTypes[0];
     }
     return `${selectedContentTypes.length} selected`;
   };

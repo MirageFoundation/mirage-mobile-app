@@ -23,11 +23,15 @@ export function LogoutConfirmationPopup({
   const isDark = rt.themeName === "dark";
 
   const handleConfirm = () => {
+    if (isLoading) return;
+
     triggerHaptic("medium");
     onConfirm();
   };
 
   const handleCancel = () => {
+    if (isLoading) return;
+
     triggerHaptic("light");
     onCancel();
   };
@@ -37,7 +41,7 @@ export function LogoutConfirmationPopup({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onCancel}
+      onRequestClose={handleCancel}
     >
       <View style={styles.overlay}>
         <BlurView
@@ -45,7 +49,7 @@ export function LogoutConfirmationPopup({
           tint={isDark ? "dark" : "light"}
           style={StyleSheet.absoluteFill}
         />
-        <Pressable style={styles.backdrop} onPress={onCancel} />
+        <Pressable style={styles.backdrop} onPress={handleCancel} />
 
         <View
           style={[

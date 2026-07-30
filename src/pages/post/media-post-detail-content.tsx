@@ -46,16 +46,23 @@ import {
   useAuthStore,
   usePreferencesStore,
 } from "@/src/stores";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
+import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
+import { useQueryClient } from "@tanstack/react-query";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {
   MediaPostDetailActionSheets,
   type MediaPostDetailActionSheetsRef,
 } from "./media-post-detail-action-sheets";
 import { MediaPostDetailCommentSheet } from "./media-post-detail-comment-sheet";
+import {
+  createMediaPostDetailSheetController,
+  type MediaPostDetailCommentsListRef,
+} from "./media-post-detail-contracts";
 import { MediaPostDetailGallery } from "./media-post-detail-gallery";
 import { MediaPostDetailHeader } from "./media-post-detail-header";
 import { type MediaItem } from "./media-post-detail-media-item";
@@ -115,6 +122,7 @@ export default function MediaPostDetailScreen({
     initialHighlightCommentId ? "context" : "full",
   );
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const { isLoggedIn, requireAuth } = useAuthGuard();
@@ -123,16 +131,18 @@ export default function MediaPostDetailScreen({
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
-  const setActiveFeedScreen = useHomePostCardStore((s) => s.setActiveFeedScreen);
 
-  const commentsListRef = useRef<any>(null);
+  const commentsListRef = useRef<MediaPostDetailCommentsListRef>(null);
   const commentsScrollYRef = useRef(0);
   const preciseScrollTargetRef = useRef<string | null>(null);
   const coarseScrollTargetRef = useRef<string | null>(null);
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
   const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
-  const pendingPostedCommentScrollRef = useRef<string | null>(null);
+  const pendingPostedCommentScrollRef = useRef<{
+    id: string;
+    createdAt: number;
+  } | null>(null);
   const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
@@ -156,10 +166,6 @@ export default function MediaPostDetailScreen({
     coarseScrollTargetRef.current = null;
   }, [highlightedCommentId]);
 
-  useEffect(() => {
-    setActiveFeedScreen(null);
-  }, [setActiveFeedScreen]);
-
   const {
     blockCommentAuthor,
     commentVote,
@@ -170,6 +176,8 @@ export default function MediaPostDetailScreen({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isFocusedCommentNotFound,
+    isPostNotFound,
     post,
     recentContextDisabled,
     recentContextDone,
@@ -341,6 +349,11 @@ export default function MediaPostDetailScreen({
     displayCommentsRef.current = displayComments;
   }, [displayComments]);
 
+  const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
+    if (comment.id === targetId) return true;
+    return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
+  }, []);
+
   useEffect(() => {
     const pendingTarget = pendingPostedCommentScrollRef.current;
     if (!pendingTarget || displayComments.length === 0) return;
@@ -406,11 +419,6 @@ export default function MediaPostDetailScreen({
     return () => clearTimeout(timer);
   }, [focusedCommentId, focusedMode, displayComments, highlightedCommentId, scrollCommentsToIndex]);
 
-  const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
-    if (comment.id === targetId) return true;
-    return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
-  }, []);
-
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
@@ -441,7 +449,7 @@ export default function MediaPostDetailScreen({
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
       const isPendingPostedComment =
-        pendingPostedCommentScrollRef.current === highlightedCommentId;
+        pendingPostedCommentScrollRef.current?.id === highlightedCommentId;
       if (
         !isPendingPostedComment &&
         preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)
@@ -563,6 +571,18 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/");
+  }, [router]);
+
+  const handleUnavailableBack = useCallback(() => {
+    router.replace("/");
+  }, [router]);
+
   const handleFollowCommentAuthor = useCallback(
     (authorId: string, isCurrentlyFollowing: boolean) => {
       followUser(authorId, "", isCurrentlyFollowing);
@@ -576,9 +596,9 @@ export default function MediaPostDetailScreen({
     requestAnimationFrame(() => {
       sheetRef.current?.snapToIndex?.(2, { duration: 1 });
     });
-    pendingPostedCommentScrollRef.current = commentId;
+    pendingPostedCommentScrollRef.current = { id: commentId, createdAt: Date.now() };
     setTimeout(() => {
-      if (pendingPostedCommentScrollRef.current !== commentId) return;
+      if (pendingPostedCommentScrollRef.current?.id !== commentId) return;
       Sentry.captureMessage(
         "Posted media-detail comment did not trigger reveal layout",
         {
@@ -641,12 +661,21 @@ export default function MediaPostDetailScreen({
   });
 
   // --- render -------------------------------------------------------------
+  if (isPostNotFound) {
+    return (
+      <MediaPostDetailNotFound
+        message="Content not found"
+        onBack={handleUnavailableBack}
+      />
+    );
+  }
+
   if (!post && isLoadingComments) {
     return <MediaPostDetailSkeleton />;
   }
 
   if (!post) {
-    return <MediaPostDetailNotFound onBack={() => router.back()} />;
+    return <MediaPostDetailNotFound onBack={handleUnavailableBack} />;
   }
 
   return (
@@ -663,11 +692,17 @@ export default function MediaPostDetailScreen({
             expandMedia={expandMedia}
             globalMuted={globalMuted}
             isFocused={isFocused}
+            isVideoProcessing={isPostVideoProcessing(post)}
             isVideoActive={isVideoActive}
             mediaContainerStyle={mediaContainerStyle}
             mediaItems={mediaItems}
             onMuteToggle={handleMuteToggle}
             onPlayPause={handlePlayPause}
+            onVideoReady={() => {
+              if (isPostVideoProcessing(post)) {
+                markOptimisticVideoProcessingComplete(queryClient, post.id);
+              }
+            }}
             registerVideo={registerVideo}
             setActiveIndex={setActiveIndex}
             sourceMediaTransition={
@@ -679,107 +714,119 @@ export default function MediaPostDetailScreen({
               if (collapseProgress.value > 0.1) {
                 expandMedia();
               } else {
-                router.back();
+                handleBack();
               }
             }}
           />
 
           {/* --------------- BottomSheet for comments ------------------ */}
           <MediaPostDetailCommentSheet
-            sheetRef={sheetRef}
-            commentsListRef={commentsListRef}
-            displayComments={displayComments}
-            post={displayPost ?? post}
-            currentUserId={currentUser?.id ?? null}
-            followedUsers={displayFollowedUsers}
-            followedTopics={followedTopics}
-            inputDockTotalH={inputDockTotalH}
-            shouldOpenSheetInitially={shouldOpenSheetInitially}
-            snapPoints={snapPoints}
-            animatedIndex={animatedIndex}
-            animatedPosition={animatedPosition}
-            animationConfigs={sheetAnimationConfigs}
-            measuredPostSummaryH={measuredPostSummaryH}
-            onPostSummaryHeightChange={setMeasuredPostSummaryH}
-            onClose={() => router.back()}
-            focusedCommentId={focusedCommentId}
-            focusedMode={focusedMode}
-            isLoadingComments={isLoadingComments}
-            isLoadingFocusedComment={isLoadingFocusedComment}
-            isLoadingFocusedContextThread={isLoadingFocusedContextThread}
-            recentContextDisabled={recentContextDisabled}
-            recentContextDone={recentContextDone}
-            hasFullThreadBeyondFocus={hasFullThreadBeyondFocus}
-            highlightedCommentId={highlightedCommentId}
-            onScrollYChange={(y) => {
-              commentsScrollYRef.current = y;
-            }}
-            onScrollToIndex={scrollCommentsToIndex}
-            onAuthorPress={handleAuthorPress}
-            onAuthorIdPress={(authorId) => router.push(`/user/${authorId}`)}
-            onFollowAuthor={() =>
-              followUser(
-                post.author.id,
-                post.author.username,
-                displayPost?.isFollowing ?? false,
-              )
-            }
-            onFollowCommentAuthor={handleFollowCommentAuthor}
-            onFollowTopic={() => {
-              if (post.topic) {
-                followTopic(post.topic, followedTopics.includes(post.topic));
-              }
-            }}
-            onUpvote={handleUpvote}
-            onDownvote={handleDownvote}
-            onComment={handleComment}
-            onShare={handleShare}
-            onBlockUser={() => actionSheetsRef.current?.requestBlockUser()}
-            onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
-            onBlockTopic={() => actionSheetsRef.current?.requestBlockTopic()}
-            onReportPost={() => actionSheetsRef.current?.requestReportPost()}
-            onExpandSheet={collapseMedia}
-            isOwnPost={currentUser?.id === post.author.id}
-            shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
-            isVideo={isVideoActive}
-            isPlaying={activeStatus.playing}
-            positionMs={activeStatus.position}
-            durationMs={activeStatus.duration}
-            onPlayPause={handlePlayPause}
-            onSeek={handleSeek}
-            isMuted={globalMuted}
-            onMuteToggle={handleMuteToggle}
-            onSetFocusedMode={setFocusedMode}
-            onRefetchFocusedContext={() => {
-              setFocusedContextDepth(10);
-            }}
-            onCommentUpvote={(cid, l, d, n) =>
-              commentVote.handleUpvote(cid, l, d, n)
-            }
-            onCommentDownvote={(cid, l, d, n) =>
-              commentVote.handleDownvote(cid, l, d, n)
-            }
-            onReplyPress={(c) => {
-              requireAuth(() => {
-                if (!reserveComposeNavigation()) return;
-                router.push({
-                  pathname: "/comment-compose",
-                  params: {
-                    postId: post.id,
-                    postTitle: post.title,
-                    postAuthorUsername: post.author.username,
-                    postContent: post.body ?? "",
-                    replyToId: c.id,
-                    replyToUsername: c.author.username,
-                    replyToContent: c.content,
-                  },
-                });
-              });
-            }}
-            onMorePress={(c) => {
-              actionSheetsRef.current?.presentCommentOptions(c);
-            }}
-            onHighlightedLayout={handleHighlightedCommentLayout}
+            controller={createMediaPostDetailSheetController({
+              threadState: {
+                comments: displayComments,
+                currentUserId: currentUser?.id ?? null,
+                followedUsers: displayFollowedUsers,
+                focusedCommentId,
+                focusedMode,
+                focusedCommentNotFound: isFocusedCommentNotFound,
+                isLoadingComments,
+                isLoadingFocusedComment,
+                isLoadingFocusedContextThread,
+                recentContextDisabled,
+                recentContextDone,
+                hasFullThreadBeyondFocus,
+                highlightedCommentId,
+              },
+              postState: {
+                post: displayPost ?? post,
+                currentUserId: currentUser?.id ?? null,
+                followedUsers: displayFollowedUsers,
+                followedTopics,
+                isOwnPost: currentUser?.id === post.author.id,
+                shareUrl: `${getShareBaseUrl(shareServer)}/p/${post.id}`,
+              },
+              postActions: {
+                authorPress: handleAuthorPress,
+                authorIdPress: (authorId) => router.push(`/user/${authorId}`),
+                followAuthor: () =>
+                  followUser(
+                    post.author.id,
+                    post.author.username,
+                    displayPost?.isFollowing ?? false,
+                  ),
+                followTopic: () => {
+                  if (post.topic) {
+                    followTopic(post.topic, followedTopics.includes(post.topic));
+                  }
+                },
+                upvote: handleUpvote,
+                downvote: handleDownvote,
+                comment: handleComment,
+                share: handleShare,
+                blockUser: () => actionSheetsRef.current?.requestBlockUser(),
+                blockPost: () => actionSheetsRef.current?.requestBlockPost(),
+                blockTopic: () => actionSheetsRef.current?.requestBlockTopic(),
+                reportPost: () => actionSheetsRef.current?.requestReportPost(),
+                expandSheet: collapseMedia,
+              },
+              commentActions: {
+                scrollYChange: (y) => {
+                  commentsScrollYRef.current = y;
+                },
+                scrollToIndex: scrollCommentsToIndex,
+                followAuthor: handleFollowCommentAuthor,
+                setFocusedMode,
+                refetchFocusedContext: () => setFocusedContextDepth(10),
+                upvote: (cid, l, d, n) => commentVote.handleUpvote(cid, l, d, n),
+                downvote: (cid, l, d, n) => commentVote.handleDownvote(cid, l, d, n),
+                replyPress: (comment) => {
+                  requireAuth(() => {
+                    if (!reserveComposeNavigation()) return;
+                    router.push({
+                      pathname: "/comment-compose",
+                      params: {
+                        postId: post.id,
+                        postTitle: post.title,
+                        postAuthorUsername: post.author.username,
+                        postContent: post.body ?? "",
+                        replyToId: comment.id,
+                        replyToUsername: comment.author.username,
+                        replyToContent: comment.content,
+                      },
+                    });
+                  });
+                },
+                morePress: (comment) => {
+                  requireAuth(() => {
+                    actionSheetsRef.current?.presentCommentOptions(comment);
+                  });
+                },
+                highlightedLayout: handleHighlightedCommentLayout,
+              },
+              videoControls: {
+                isVideo: isVideoActive,
+                isPlaying: activeStatus.playing,
+                positionMs: activeStatus.position,
+                durationMs: activeStatus.duration,
+                isMuted: globalMuted,
+                playPause: handlePlayPause,
+                seek: handleSeek,
+                muteToggle: handleMuteToggle,
+              },
+              sheetLayout: {
+                sheetRef,
+                commentsListRef,
+                inputDockTotalH,
+                shouldOpenInitially: shouldOpenSheetInitially,
+                snapPoints,
+                animatedIndex,
+                animatedPosition,
+                animationConfigs: sheetAnimationConfigs,
+                measuredPostSummaryH,
+                postSummaryHeightChange: setMeasuredPostSummaryH,
+                close: handleBack,
+              },
+            })}
           />
 
           {/* --------------- Header overlay ---------------------------- */}
@@ -789,9 +836,9 @@ export default function MediaPostDetailScreen({
             height={headerH}
             animatedStyle={headerStyle}
             pointerEvents="box-none"
-            onBack={() => router.back()}
+            onBack={handleBack}
             onTopicPress={handleTopicPress}
-            onOptionsPress={() => actionSheetsRef.current?.presentPostOptions()}
+            onOptionsPress={() => requireAuth(() => actionSheetsRef.current?.presentPostOptions())}
           />
 
           {/* --------------- Comment input dock (collapsed mode) ------ */}

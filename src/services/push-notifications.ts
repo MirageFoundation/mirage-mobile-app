@@ -12,15 +12,16 @@ import {
 import { walletService } from "@/src/services/wallet-service";
 import { storage } from "@/src/stores/mmkv-storage";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
-import { queryClient } from "@/src/providers/query-provider";
+import { queryClient } from "@/src/providers/query-client";
+import { infiniteInboxQueryOptions } from "@/src/api/read/hooks/use-inbox";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { apiClient } from "@/src/api/client";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
-import { getInbox } from "@/src/api/read/endpoints/inbox";
 import { isRetryable } from "@/src/utils/error-messages";
+import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 
 const PUSH_TOKEN_KEY = "push-token";
 const PUSH_ENABLED_KEY = "push-enabled";
@@ -88,6 +89,10 @@ function isOfflineRegistrationError(error: unknown): boolean {
   }
 
   return false;
+}
+
+function isTokenOwnershipConflict(error: unknown): boolean {
+  return (error as any)?.response?.status === 409;
 }
 
 function isRetryablePushError(error: unknown): boolean {
@@ -171,7 +176,7 @@ function queuePendingUnregister(item: PendingUnregister): void {
   const existing = readPendingUnregisters().filter((pending) => pending.id !== item.id);
   writePendingUnregisters([...existing, item]);
   needsNetworkRetry = true;
-  console.log("[PushNotifications] Queued pending push unregister for address:", item.address);
+  console.log("[PushNotifications] Queued pending push unregister");
 }
 
 async function postUnregisterWithRetry(
@@ -212,7 +217,7 @@ async function performPendingUnregisterFlush(): Promise<boolean> {
   for (const item of pending) {
     try {
       await postUnregisterWithRetry(item.request, item.baseUrl);
-      console.log("[PushNotifications] Pending push token unregistered:", item.token);
+      console.log("[PushNotifications] Pending push token unregistered");
     } catch (error) {
       const nextItem = {
         ...item,
@@ -230,17 +235,20 @@ async function performPendingUnregisterFlush(): Promise<boolean> {
           message: "Pending unregister retry remains queued",
           level: "warning",
           data: {
-            address: item.address,
             attempts: nextItem.attempts,
             ...getPushErrorDetails(error),
           },
         });
         remaining.push(nextItem);
       } else {
-        console.warn("[PushNotifications] Dropping non-retryable pending unregister:", error);
-        Sentry.captureException(error, {
+        console.warn("[PushNotifications] Dropping non-retryable pending unregister");
+        const details = getPushErrorDetails(error);
+        Sentry.captureException(sanitizedTelemetryError("push-notifications", {
+          error_class: "unexpected",
+          status: typeof details.status === "number" ? details.status : undefined,
+        }), {
           tags: { feature: "push-notifications", operation: "pending-unregister-non-retryable" },
-          extra: { address: item.address, attempts: nextItem.attempts },
+          extra: { attempts: nextItem.attempts },
         });
       }
     }
@@ -368,11 +376,15 @@ async function getExpoPushToken(): Promise<string | null> {
     }
   }
 
-  console.error("[PushNotifications] Failed to get Expo push token after retries:", lastError);
+  console.error("[PushNotifications] Failed to get Expo push token after retries");
   if (isTransientNetworkError(lastError)) {
     needsNetworkRetry = true;
   }
-  Sentry.captureException(lastError, {
+  const details = getPushErrorDetails(lastError);
+  Sentry.captureException(sanitizedTelemetryError("push-notifications", {
+    error_class: isTransientNetworkError(lastError) ? "network" : "unexpected",
+    status: typeof details.status === "number" ? details.status : undefined,
+  }), {
     tags: { feature: "push-notifications", operation: "get-token" },
     extra: { retries: TOKEN_FETCH_MAX_RETRIES },
   });
@@ -426,14 +438,14 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       return;
     }
     storePushToken(token);
-    console.log("[PushNotifications] Stored push token locally:", token);
+    console.log("[PushNotifications] Stored push token locally");
 
     const platform = Platform.OS as "ios" | "android";
     await registerPushToken(wallet, token, platform);
 
     setPushEnabled(true);
     needsNetworkRetry = false;
-    console.log("[PushNotifications] Push token registered successfully:", token);
+    console.log("[PushNotifications] Push token registered successfully");
     Sentry.addBreadcrumb({
       category: "push-notifications",
       message: "Push token registered successfully",
@@ -452,14 +464,23 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
         message: "Push registration skipped: network unavailable",
         level: "warning",
       });
+    } else if (isTokenOwnershipConflict(error)) {
+      console.warn("[PushNotifications] Push token belongs to another account, falling back to polling");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push registration skipped: token belongs to another account",
+        level: "warning",
+      });
     } else {
       const is429 = (error as any)?.response?.status === 429;
       if (is429) {
         needsNetworkRetry = true;
         console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
       } else {
-        console.error("[PushNotifications] Registration failed, falling back to polling:", error);
-        Sentry.captureException(error, {
+        console.error("[PushNotifications] Registration failed, falling back to polling");
+        Sentry.captureException(sanitizedTelemetryError("push-notifications", {
+          error_class: "unexpected",
+        }), {
           tags: { feature: "push-notifications", operation: "register" },
         });
       }
@@ -497,9 +518,9 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
         return;
       }
       storePushToken(token);
-      console.log("[PushNotifications] Recovered push token for unregister:", token);
+      console.log("[PushNotifications] Recovered push token for unregister");
     }
-    console.log("[PushNotifications] Starting unregister for token:", token);
+    console.log("[PushNotifications] Starting push token unregister");
 
     const w = wallet ?? (await walletService.getWallet());
     if (!w) {
@@ -511,8 +532,6 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
       });
       return;
     }
-    console.log("[PushNotifications] Unregistering token for address:", w.address);
-
     unregisterToken = token;
     unregisterWallet = w;
     unregisterBaseUrl = apiClient.getCurrentBaseUrl();
@@ -520,7 +539,7 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
     unregisterRequest = request;
     await postUnregisterWithRetry(request, unregisterBaseUrl);
     didUnregister = true;
-    console.log("[PushNotifications] Push token unregistered:", token);
+    console.log("[PushNotifications] Push token unregistered");
     Sentry.addBreadcrumb({
       category: "push-notifications",
       message: "Push token unregistered successfully",
@@ -542,16 +561,18 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
           attempts: 0,
         });
       }
-      console.warn("[PushNotifications] Unregister deferred for retry:", error);
+      console.warn("[PushNotifications] Unregister deferred for retry");
       Sentry.addBreadcrumb({
         category: "push-notifications",
         message: "Push unregister deferred for retry",
         level: "warning",
-        data: { hasToken: !!token, address: w?.address, baseUrl: unregisterBaseUrl },
+        data: { hasToken: !!token },
       });
     } else {
-      console.error("[PushNotifications] Unregister failed:", error);
-      Sentry.captureException(error, {
+      console.error("[PushNotifications] Unregister failed");
+      Sentry.captureException(sanitizedTelemetryError("push-notifications", {
+        error_class: "unexpected",
+      }), {
         tags: { feature: "push-notifications", operation: "unregister" },
       });
     }
@@ -576,11 +597,7 @@ function subscribePushReceived(): void {
     }
     const address = useAuthStore.getState().walletAddress;
     if (address) {
-      queryClient.prefetchInfiniteQuery({
-        queryKey: queryKeys.inboxInfinite(address),
-        queryFn: ({ pageParam = 1 }) => getInbox({ address, page: pageParam, limit: 25 }),
-        initialPageParam: 1,
-      });
+      queryClient.prefetchInfiniteQuery(infiniteInboxQueryOptions(address, { limit: 25 }));
     }
   });
 }

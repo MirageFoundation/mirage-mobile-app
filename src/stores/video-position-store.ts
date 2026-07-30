@@ -1,9 +1,15 @@
 import { create } from "zustand";
 
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
+
 const MAX_ENTRIES = 100;
 
+// Position state must survive the backend switching a video's canonical URL
+// between formats (playlist.m3u8 <-> play_*p.mp4), so keys canonicalize on
+// the Bunny asset guid.
 export function buildVideoPositionKey(videoId: string, scope?: string): string {
-  return scope ? `${scope}::${videoId}` : videoId;
+  const canonical = canonicalVideoAssetId(videoId);
+  return scope ? `${scope}::${canonical}` : canonical;
 }
 
 type VideoPositionState = {

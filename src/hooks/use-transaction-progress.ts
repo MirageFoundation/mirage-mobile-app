@@ -27,8 +27,15 @@
 
 import { useState, useCallback, useRef } from "react";
 import * as Sentry from "@sentry/react-native";
-import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
+import {
+  didPowPauseForAppState,
+  getPowAppStatePauseVersion,
+  waitForPowAppActive,
+  waitForQueueDrain,
+  usePowQueueStore,
+} from "@/src/services/pow-queue";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { isPowCancelled } from "@/src/wallet";
 import type {
   TransactionPhase,
   TransactionProgress,
@@ -126,6 +133,7 @@ export function useTransactionProgress(): UseTransactionProgressReturn {
         attempts: powProgress.attempts,
         elapsedMs: powProgress.elapsedMs,
         estimatedTotalMs: powProgress.estimatedTotalMs,
+        expectedAttempts: powProgress.expectedAttempts,
       },
     }));
   }, []);
@@ -262,8 +270,49 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
       await waitForQueueDrain();
     }
 
-    // Execute with PoW progress tracking
-    const result = await executor(updatePoWProgress);
+    await waitForPowAppActive();
+
+    const executeTransaction = async (): Promise<TResult> => {
+      let backgroundRetryCount = 0;
+
+      while (true) {
+        const pauseVersion = getPowAppStatePauseVersion();
+        try {
+          return await executor(updatePoWProgress);
+        } catch (error) {
+          if (
+            !isPowCancelled(error) ||
+            !didPowPauseForAppState(pauseVersion)
+          ) {
+            throw error;
+          }
+
+          backgroundRetryCount += 1;
+          setPhase("waiting");
+          Sentry.addBreadcrumb({
+            category: "pow",
+            message: "Transaction PoW paused while app was backgrounded",
+            level: "info",
+            data: { backgroundRetryCount },
+          });
+
+          await waitForPowAppActive();
+          await waitForQueueDrain();
+          await waitForPowAppActive();
+
+          Sentry.addBreadcrumb({
+            category: "pow",
+            message: "Retrying transaction PoW after app foregrounded",
+            level: "info",
+            data: { backgroundRetryCount },
+          });
+        }
+      }
+    };
+
+    // Execute with PoW progress tracking. If app backgrounding cancels the
+    // native worker, restart the transaction with fresh PoW after foregrounding.
+    const result = await executeTransaction();
     const txHash = typeof result === "string" ? result : result.tx_hash;
 
     // If not polling, mark as success immediately

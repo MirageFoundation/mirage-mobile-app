@@ -13,6 +13,7 @@ import type {
   ValidateInviteCodeResponse,
   GetInviteCodesResponse,
 } from "../../types";
+import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
 
 // ============================================
 // User Status & Profile
@@ -52,13 +53,80 @@ export interface GetUserFollowedParams {
   address: string;
 }
 
+interface MergeUserFollowedOptions {
+  source: "bootstrap" | "get_user_followed" | "node_config_fallback";
+  nodeConfigAutoEnabledAgents?: string[];
+}
+
+export function mergeUserFollowedEnabledAgents(
+  response: UserFollowedResponse,
+  options: MergeUserFollowedOptions,
+): UserFollowedResponse {
+  const enabledAgents = Array.from(new Set([
+    ...(response.enabled_agents ?? []),
+    ...(response.auto_enabled_agents ?? []),
+    ...(options.nodeConfigAutoEnabledAgents ?? []),
+  ]));
+
+  if (__DEV__) {
+    console.log("[auto-enabled-agents] merge", {
+      source: options.source,
+      user_followed_enabled_agents: response.enabled_agents ?? [],
+      user_followed_auto_enabled_agents: response.auto_enabled_agents ?? [],
+      node_config_auto_enabled_agents: options.nodeConfigAutoEnabledAgents ?? [],
+      merged_enabled_agents: enabledAgents,
+    });
+  }
+
+  Sentry.addBreadcrumb({
+    category: "auto-enabled-agents",
+    message: "Enabled agents merged",
+    level: options.nodeConfigAutoEnabledAgents ? "info" : "warning",
+    data: {
+      source: options.source,
+      userFollowedEnabledAgentsCount: response.enabled_agents?.length ?? 0,
+      userFollowedAutoEnabledAgentsCount: response.auto_enabled_agents?.length ?? 0,
+      nodeConfigAutoEnabledAgentsCount: options.nodeConfigAutoEnabledAgents?.length ?? 0,
+      mergedEnabledAgentsCount: enabledAgents.length,
+      usedNodeConfig: Boolean(options.nodeConfigAutoEnabledAgents),
+    },
+  });
+
+  return {
+    ...response,
+    enabled_agents: enabledAgents,
+  };
+}
+
 /**
  * Get user's followed users, topics, and enabled agents
  */
 export async function getUserFollowed(
   params: GetUserFollowedParams
 ): Promise<UserFollowedResponse> {
-  return api.get<UserFollowedResponse>("/get_user_followed", params);
+  const [response, nodeConfig] = await Promise.all([
+    api.get<UserFollowedResponse>("/get_user_followed", params),
+    getNodeConfig().catch((error) => {
+      if (__DEV__) {
+        console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
+      }
+      Sentry.addBreadcrumb({
+        category: "auto-enabled-agents",
+        message: "Node config unavailable during user_followed merge",
+        level: "warning",
+        data: {
+          source: "get_user_followed",
+          ...getSafeApiErrorContext(error),
+        },
+      });
+      return null;
+    }),
+  ]);
+
+  return mergeUserFollowedEnabledAgents(response, {
+    source: "get_user_followed",
+    nodeConfigAutoEnabledAgents: nodeConfig?.auto_enabled_agents,
+  });
 }
 
 export interface GetUserBlockedParams {
@@ -215,18 +283,16 @@ export async function validateInviteCode(
 ): Promise<ValidateInviteCodeResponse> {
   const trimmed = params.code.trim();
   const isValidFormat = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(trimmed);
-  console.log("[validateInviteCode] code:", JSON.stringify(trimmed), "isValidFormat:", isValidFormat);
   if (!isValidFormat) {
     return { valid: false, code: trimmed, error: "invalid_code" };
   }
 
   try {
-    const response = await apiClient.getInstance().post<ValidateInviteCodeResponse>("/api/validate_invite_code", { code: trimmed });
-    console.log("[validateInviteCode] server response:", JSON.stringify(response.data));
-    return response.data;
+    const response = await apiClient.post<ValidateInviteCodeResponse>("/validate_invite_code", { code: trimmed });
+    return response;
   } catch (error: any) {
     const status = error?.response?.status;
-    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status, error: error?.message }, level: "warning" });
+    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status }, level: "warning" });
     if (status === 404 || status === 405) {
       return { valid: true, code: trimmed };
     }

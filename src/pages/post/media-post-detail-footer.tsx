@@ -2,15 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Avatar, TimeAgo } from "@/src/components/atoms";
-import { PostActions, type Post } from "@/src/components/molecules";
+import { PostActions } from "@/src/components/molecules";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { getUsernameColor } from "@/src/utils/tiers";
 
+import type { MediaPostDetailFooterContract } from "./media-post-detail-contracts";
 import { MediaPostDetailFollowMenuButton } from "./media-post-detail-follow-menu-button";
 import { SeekBarFlex, formatTime } from "./media-post-detail-seek-bar";
 import { styles } from "./media-post-detail-styles";
@@ -41,78 +43,32 @@ function hasMoreBodyContent(body: string): boolean {
   return firstLine.length > 100;
 }
 
-type MediaPostDetailFooterProps = {
-  post: Post;
-  isExpanded?: boolean;
-  hideVideoControls?: boolean;
-  onAuthorPress: () => void;
-  onUpvote: () => void;
-  onDownvote: () => void;
-  onComment: () => void;
-  onShare: () => void;
-  onBlockUser: () => void;
-  onBlockPost: () => void;
-  onBlockTopic: () => void;
-  onReport: () => void;
-  isOwnPost: boolean;
-  shareUrl: string;
-  isVideo: boolean;
-  isPlaying: boolean;
-  positionMs: number;
-  durationMs: number;
-  onPlayPause: () => void;
-  onSeek: (ms: number) => void;
-  onMoreLink: () => void;
-  isMuted: boolean;
-  onMuteToggle: () => void;
-  isFollowing: boolean;
-  isTopicFollowed: boolean;
-  topic?: string;
-  isOwnAuthor: boolean;
-  onFollowAuthor: () => void;
-  onFollowTopic: () => void;
-};
-
 export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
   post,
-  isExpanded = false,
-  hideVideoControls = false,
-  onAuthorPress,
-  onUpvote,
-  onDownvote,
-  onComment,
-  onShare,
-  onBlockUser,
-  onBlockPost,
-  onBlockTopic,
-  onReport,
+  presentation: { isExpanded, hideVideoControls },
+  actions,
+  videoControls,
+  followState: { isFollowing, isTopicFollowed, topic, isOwnAuthor },
   isOwnPost,
   shareUrl,
-  isVideo,
-  isPlaying,
-  positionMs,
-  durationMs,
-  onPlayPause,
-  onSeek,
-  onMoreLink,
-  isMuted,
-  onMuteToggle,
-  isFollowing,
-  isTopicFollowed,
-  topic,
-  isOwnAuthor,
-  onFollowAuthor,
-  onFollowTopic,
-}: MediaPostDetailFooterProps) {
+}: MediaPostDetailFooterContract) {
   const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
   const tierColor =
     post.author.level != null ? getUsernameColor(post.author.level) : undefined;
   const displayBody = resolvePostContent(post.body, post.media).bodyWithoutUrl ?? "";
 
   return (
-    <View style={styles.footerBlock}>
+    <View
+      style={[
+        styles.footerBlock,
+        !isExpanded && {
+          paddingBottom: insets.bottom || theme.spacing.sm,
+        },
+      ]}
+    >
       <View style={styles.authorRowFull}>
-        <Pressable onPress={onAuthorPress} style={styles.authorRow}>
+        <Pressable onPress={actions.authorPress} style={styles.authorRow}>
           <Avatar seed={post.author.avatarSeed ?? post.author.id} size={32} />
           <Text
             size="md"
@@ -140,8 +96,8 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
             topic={topic}
             isFollowing={isFollowing}
             isTopicFollowed={isTopicFollowed}
-            onFollowUser={onFollowAuthor}
-            onFollowTopic={onFollowTopic}
+            onFollowUser={actions.followAuthor}
+            onFollowTopic={actions.followTopic}
           />
         ) : null}
       </View>
@@ -176,7 +132,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
               {renderInlineBody(displayBody)}
             </Text>
             {hasMoreBodyContent(displayBody) ? (
-              <Pressable onPress={onMoreLink} hitSlop={4}>
+              <Pressable onPress={actions.expandSheet} hitSlop={4}>
                 <Text
                   size="md"
                   weight="medium"
@@ -190,41 +146,49 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
         )
       ) : null}
 
-      {isVideo && !hideVideoControls ? (
+      {videoControls.isVideo && !hideVideoControls ? (
         <Animated.View
           style={styles.controlsRow}
           entering={FadeIn.duration(120)}
           exiting={FadeOut.duration(120)}
         >
-          <Pressable onPress={onPlayPause} hitSlop={8} style={styles.ctrlBtn}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={videoControls.isPlaying ? "Pause video" : "Play video"}
+            onPress={videoControls.playPause}
+            hitSlop={8}
+            style={styles.ctrlBtn}
+          >
             <Ionicons
-              name={isPlaying ? "pause" : "play"}
+              name={videoControls.isPlaying ? "pause" : "play"}
               size={18}
               color={theme.colors.text.default}
             />
           </Pressable>
           <View style={{ flex: 1, marginHorizontal: 8 }}>
             <SeekBarFlex
-              positionMs={positionMs}
-              durationMs={durationMs}
-              onSeek={onSeek}
+              positionMs={videoControls.positionMs}
+              durationMs={videoControls.durationMs}
+              onSeek={videoControls.seek}
               tint={theme.colors.text.default}
-              playing={isPlaying}
+              playing={videoControls.isPlaying}
             />
           </View>
           <Text
             size="xs"
             style={{ color: theme.colors.text.default, marginRight: 8 }}
           >
-            {formatTime(positionMs)} / {formatTime(durationMs)}
+            {formatTime(videoControls.positionMs)} / {formatTime(videoControls.durationMs)}
           </Text>
           <Pressable
-            onPress={onMuteToggle}
+            accessibilityRole="button"
+            accessibilityLabel={videoControls.isMuted ? "Unmute video" : "Mute video"}
+            onPress={videoControls.muteToggle}
             hitSlop={8}
             style={styles.ctrlBtn}
           >
             <Ionicons
-              name={isMuted ? "volume-mute" : "volume-high"}
+              name={videoControls.isMuted ? "volume-mute" : "volume-high"}
               size={18}
               color={theme.colors.text.default}
             />
@@ -238,19 +202,19 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
         comments={post.comments}
         hasLiked={post.hasLiked}
         hasDisliked={post.hasDisliked}
-        onLikePress={onUpvote}
-        onDislikePress={onDownvote}
-        onCommentPress={onComment}
-        onSharePress={onShare}
+        onLikePress={actions.upvote}
+        onDislikePress={actions.downvote}
+        onCommentPress={actions.comment}
+        onSharePress={actions.share}
         shareUrl={shareUrl}
         shareTitle={post.title}
         isOwnPost={isOwnPost}
         authorUsername={post.author.username}
-        onBlockUser={onBlockUser}
-        onBlockPost={onBlockPost}
-        onBlockTopic={onBlockTopic}
+        onBlockUser={actions.blockUser}
+        onBlockPost={actions.blockPost}
+        onBlockTopic={actions.blockTopic}
         topic={post.topic}
-        onReport={onReport}
+        onReport={actions.reportPost}
         size="md"
         style={{ marginTop: 12 }}
       />

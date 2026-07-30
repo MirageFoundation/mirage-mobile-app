@@ -14,7 +14,9 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import type { PostWithChildren } from "@/src/api/types";
 import { type Comment, type Post } from "@/src/components/molecules";
 import { useVoteHandler } from "@/src/hooks";
+import { parseApiError } from "@/src/utils/parse-api-error";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import {
   useOptimisticReplyComments,
   useOptimisticTopLevelComments,
@@ -95,6 +97,40 @@ export function useMediaPostDetailData({
     isError: isCommentsError,
     error: commentsError,
   } = useComments(id!, { enabled: isFocused });
+  const commentsApiError = useMemo(() => {
+    if (!commentsError) return null;
+    return parseApiError(commentsError);
+  }, [commentsError]);
+  const currentFetchPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+  const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
+  const reportedNotFoundRouteRef = useRef<string | null>(null);
+  useEffect(() => {
+    setNotFoundRouteId(null);
+  }, [id]);
+  useEffect(() => {
+    if (!id || !currentFetchPostNotFound) return;
+    setNotFoundRouteId(id);
+    const reportKey = `${id}:${commentsApiError?.errorCode ?? commentsApiError?.httpStatus ?? "unknown"}`;
+    if (reportedNotFoundRouteRef.current === reportKey) return;
+    reportedNotFoundRouteRef.current = reportKey;
+    Sentry.captureMessage("Media post detail route content not found", {
+      level: "info",
+      tags: {
+        feature: "post-detail",
+        operation: "route-content-not-found",
+        screen: "media-post-detail",
+        error_code: commentsApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        routePostId: id,
+        httpStatus: commentsApiError?.httpStatus,
+        hasAddress: !!currentUser?.walletAddress,
+        focusedCommentId,
+        focusedMode,
+      },
+    });
+  }, [commentsApiError?.errorCode, commentsApiError?.httpStatus, currentFetchPostNotFound, currentUser?.walletAddress, focusedCommentId, focusedMode, id]);
+  const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
   const [focusedContextDepth, setFocusedContextDepth] = useState(5);
   const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
@@ -106,6 +142,47 @@ export function useMediaPostDetailData({
   } = useComments(focusedCommentId, {
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
   });
+  const focusedCommentApiError = useMemo(() => {
+    if (!focusedCommentError) return null;
+    return parseApiError(focusedCommentError);
+  }, [focusedCommentError]);
+  const currentFocusedCommentNotFound = !!focusedCommentId && focusedMode !== "full" && (
+    focusedCommentApiError?.errorCode === "post_not_found" ||
+    focusedCommentApiError?.errorCode === "comment_not_found" ||
+    focusedCommentApiError?.httpStatus === 404
+  );
+  const [notFoundFocusedCommentId, setNotFoundFocusedCommentId] = useState<string | null>(null);
+  const reportedFocusedCommentNotFoundRef = useRef<string | null>(null);
+  useEffect(() => {
+    setNotFoundFocusedCommentId(null);
+  }, [focusedCommentId]);
+  useEffect(() => {
+    if (!focusedCommentId || !currentFocusedCommentNotFound) return;
+    setNotFoundFocusedCommentId(focusedCommentId);
+    const reportKey = `${id ?? "missing"}:${focusedCommentId}:${focusedCommentApiError?.errorCode ?? focusedCommentApiError?.httpStatus ?? "unknown"}`;
+    if (reportedFocusedCommentNotFoundRef.current === reportKey) return;
+    reportedFocusedCommentNotFoundRef.current = reportKey;
+    Sentry.captureMessage("Media post detail focused comment not found", {
+      level: "info",
+      tags: {
+        feature: "comments",
+        operation: "focused-comment-not-found",
+        screen: "media-post-detail",
+        error_code: focusedCommentApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        rootPostId: id,
+        focusedCommentId,
+        focusedMode,
+        httpStatus: focusedCommentApiError?.httpStatus,
+        hasAddress: !!currentUser?.walletAddress,
+        hasRootData: !!commentsData?.root,
+      },
+    });
+  }, [commentsData?.root, currentFocusedCommentNotFound, currentUser?.walletAddress, focusedCommentApiError?.errorCode, focusedCommentApiError?.httpStatus, focusedCommentId, focusedMode, id]);
+  const isFocusedCommentNotFound = !!focusedCommentId && (
+    currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId
+  );
   const {
     data: focusedContextData,
     refetch: refetchFocusedContext,
@@ -113,7 +190,11 @@ export function useMediaPostDetailData({
     isError: isFocusedContextError,
     error: focusedContextError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, focusedDepth),
+    queryKey: queryKeys.commentContext(
+      focusedCommentId!,
+      focusedDepth,
+      currentUser?.walletAddress,
+    ),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
@@ -129,12 +210,16 @@ export function useMediaPostDetailData({
     isError: isFocusedContextCheckError,
     error: focusedContextCheckError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 10),
+    queryKey: queryKeys.commentContext(
+      focusedCommentId!,
+      5,
+      currentUser?.walletAddress,
+    ),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUser?.walletAddress ?? undefined,
-        max_depth: 10,
+        max_depth: 5,
       }),
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
@@ -194,9 +279,12 @@ export function useMediaPostDetailData({
     () => followedData?.followed_topics ?? [],
     [followedData],
   );
+  const optimisticPost = usePendingPostsStore((state) =>
+    id ? state.postsById[id.toLowerCase()] : undefined,
+  );
 
   const cachedPost = useMemo<Post | null>(() => {
-    if (!id) return null;
+    if (!id || isPostNotFound) return null;
 
     const cachedQueries = queryClient.getQueriesData({});
     for (const [, queryData] of cachedQueries) {
@@ -213,17 +301,28 @@ export function useMediaPostDetailData({
       }
     }
     return null;
-  }, [currentUser, followedUsers, id, queryClient]);
+  }, [currentUser, followedUsers, id, isPostNotFound, queryClient]);
 
   const basePost: Post | null = useMemo(() => {
-    if (!commentsData?.root) return cachedPost;
-    return transformApiPost(commentsData.root, {
+    if (isPostNotFound) return null;
+    const serverPost = commentsData?.root
+      ? transformApiPost(commentsData.root, {
       followedUsers,
       currentUser: currentUser
         ? { id: currentUser.id, username: currentUser.username ?? null }
         : undefined,
-    });
-  }, [cachedPost, commentsData, followedUsers, currentUser]);
+      })
+      : cachedPost;
+    if (!serverPost || !optimisticPost) return serverPost;
+    return {
+      ...serverPost,
+      optimisticStatus: optimisticPost.optimistic_status,
+      optimisticError: optimisticPost.optimistic_error,
+      optimisticActionId: optimisticPost.optimistic_action_id,
+      optimisticDraft: optimisticPost.optimistic_draft,
+      optimisticVideoPreviewUntil: optimisticPost.optimistic_video_preview_until,
+    };
+  }, [cachedPost, commentsData, followedUsers, currentUser, isPostNotFound, optimisticPost]);
 
   const sharedVoteOverride = useHomePostCardStore((state) =>
     id ? state.voteOverrides[id] : undefined,
@@ -639,6 +738,8 @@ export function useMediaPostDetailData({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isFocusedCommentNotFound,
+    isPostNotFound,
     post,
     recentContextDisabled,
     recentContextDone,

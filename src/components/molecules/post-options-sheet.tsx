@@ -19,7 +19,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { usePreferencesStore, getShareBaseUrl } from "@/src/stores";
-import { useAuthStore } from "@/src/stores/auth-store";
 import type { Post } from "./post-card";
 
 type PostOptionsSheetProps = {
@@ -237,11 +236,9 @@ export const PostOptionsSheet = forwardRef<
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const shareServer = usePreferencesStore((s) => s.apiServer);
-    const userLevel = useAuthStore((s) => s.userLevel);
-    const isAgent = userLevel >= 10;
 
     const present = useCallback(() => {
-      bottomSheetRef.current?.present(0);
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {
@@ -375,23 +372,6 @@ export const PostOptionsSheet = forwardRef<
     );
 
     // Menu handlers
-    const handleShowFewer = useCallback(() => {
-      triggerHaptic("light");
-      dismiss();
-      onShowFewer?.();
-    }, [dismiss, onShowFewer]);
-
-    const handleFollowUser = useCallback(() => {
-      triggerHaptic("medium");
-      dismiss();
-      onFollowUser?.();
-    }, [dismiss, onFollowUser]);
-
-    const handleFollowTopic = useCallback(() => {
-      dismiss();
-      onFollowTopic?.();
-    }, [dismiss, onFollowTopic]);
-
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -407,18 +387,6 @@ export const PostOptionsSheet = forwardRef<
       onCopyText?.();
     }, [dismiss, post?.body, onCopyText]);
 
-    const handleHidePost = useCallback(() => {
-      triggerHaptic("warning");
-      dismiss();
-      onHidePost?.();
-    }, [dismiss, onHidePost]);
-
-    const handleBlockUser = useCallback(() => {
-      triggerHaptic("warning");
-      dismiss();
-      onBlockUser?.();
-    }, [dismiss, onBlockUser]);
-
     const handleEdit = useCallback(() => {
       triggerHaptic("selection");
       dismiss();
@@ -430,12 +398,6 @@ export const PostOptionsSheet = forwardRef<
       dismiss();
       onDelete?.();
     }, [dismiss, onDelete]);
-
-    const handleReport = useCallback(() => {
-      triggerHaptic("warning");
-      dismiss();
-      onReport?.();
-    }, [dismiss, onReport]);
 
     const handleGiveAward = useCallback(() => {
       triggerHaptic("medium");
@@ -454,12 +416,6 @@ export const PostOptionsSheet = forwardRef<
       dismiss();
       onGiftSubscription?.();
     }, [dismiss, onGiftSubscription]);
-
-    const handleAnnotate = useCallback(() => {
-      triggerHaptic("medium");
-      dismiss();
-      onAnnotate?.();
-    }, [dismiss, onAnnotate]);
 
     const handleShare = useCallback(async () => {
       triggerHaptic("light");
@@ -496,7 +452,13 @@ export const PostOptionsSheet = forwardRef<
             <Text size="lg" weight="bold">
               Options
             </Text>
-            <Pressable onPress={dismiss} style={[styles.closeButton]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close post options"
+              onPress={dismiss}
+              style={[styles.closeButton]}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}

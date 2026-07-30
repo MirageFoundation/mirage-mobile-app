@@ -55,7 +55,9 @@ export {
   type UseWalletResult,
 } from "./use-wallet";
 export {
+  useIsConnected,
   useNetworkState,
+  useNetworkType,
   shouldAutoplayVideo,
   type NetworkType,
 } from "./use-network-state";

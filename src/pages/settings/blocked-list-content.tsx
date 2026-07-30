@@ -16,6 +16,21 @@ import Animated, {
   interpolateColor,
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+import { useUserBlocked, useUsernameFromAddress } from "@/src/api/read";
+import { queryKeys } from "@/src/api/read/query-keys";
+import type { UserBlockedResponse } from "@/src/api/types";
+import { useUnblockUser, useUnblockPost, useUnblockTopic } from "@/src/api/write";
+import { Avatar } from "@/src/components/atoms";
+import { ConfirmationPopup } from "@/src/components/molecules";
+import { Box, Icon, Text } from "@/src/components/ui/primitives";
+import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import {
+  usePowQueueStore,
+  generateActionId,
+} from "@/src/services/pow-queue";
 
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
@@ -92,21 +107,6 @@ function usePagerScrollHandler(handlers: { onPageScroll: (e: any, ctx: any) => v
     doDependenciesDiffer,
   );
 }
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-
-import { useUserBlocked, useUsernameFromAddress } from "@/src/api/read";
-import { queryKeys } from "@/src/api/read/query-keys";
-import type { UserBlockedResponse } from "@/src/api/types";
-import { useUnblockUser, useUnblockPost, useUnblockTopic } from "@/src/api/write";
-import { Avatar } from "@/src/components/atoms";
-import { ConfirmationPopup } from "@/src/components/molecules";
-import { Box, Icon, Text } from "@/src/components/ui/primitives";
-import { useAuthStore, useContentModerationStore } from "@/src/stores";
-import {
-  usePowQueueStore,
-  generateActionId,
-} from "@/src/services/pow-queue";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -373,7 +373,7 @@ export function BlockedListScreen() {
   const unblockTopicOptimistic = useContentModerationStore((s) => s.unblockTopic);
   const enqueue = usePowQueueStore((state) => state.enqueue);
 
-  const [activeTab, setActiveTab] = useState<BlockedTab>("users");
+  const [, setActiveTab] = useState<BlockedTab>("users");
   const [confirmTarget, setConfirmTarget] = useState<{
     type: "user" | "post" | "topic";
     id: string;

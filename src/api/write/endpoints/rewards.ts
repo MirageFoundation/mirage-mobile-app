@@ -10,7 +10,7 @@ import {
   buildSignedEnvelope,
   canonBaseClaimReward,
 } from "../signing";
-import type { WriteResponse, PoWProgressCallback } from "../signing";
+import type { PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
 
 export interface ClaimRewardInput {

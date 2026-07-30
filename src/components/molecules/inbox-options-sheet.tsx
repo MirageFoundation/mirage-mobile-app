@@ -4,10 +4,9 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
-  SCREEN_WIDTH,
 } from "@gorhom/bottom-sheet";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Dimensions, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -166,7 +165,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   divider: {
-    width: SCREEN_WIDTH,
+    width: Dimensions.get("window").width,
     alignSelf: "center",
     marginBottom: theme.sizing.md,
   },

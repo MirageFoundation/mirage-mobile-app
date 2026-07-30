@@ -8,6 +8,7 @@ const TAB_HOME_ROUTE = "/(tabs)";
 const KNOWN_APP_ROUTE_PREFIXES = [
   "/(auth)/",
   "/(tabs)",
+  "/p/",
   "/post/",
   "/user/",
   "/topic/",
@@ -94,10 +95,29 @@ export function isMirageScheme(scheme: string): boolean {
   return scheme.toLowerCase().startsWith(MIRAGE_SCHEME_PREFIX);
 }
 
+function matchesAppRoutePrefix(pathname: string, prefix: string): boolean {
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+
+  if (prefix.endsWith("/")) {
+    const rest = pathname.slice(prefix.length);
+    return rest.length > 0 && !rest.startsWith("/");
+  }
+
+  if (pathname.length === prefix.length) {
+    return true;
+  }
+
+  return pathname.charAt(prefix.length) === "/";
+}
+
 export function isAppRoute(path: string): boolean {
   const { pathname } = splitPathAndSearch(path);
 
-  return KNOWN_APP_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return KNOWN_APP_ROUTE_PREFIXES.some((prefix) =>
+    matchesAppRoutePrefix(pathname, prefix),
+  );
 }
 
 export function mapMiragePathToRoute(
@@ -121,12 +141,14 @@ export function mapMiragePathToRoute(
     const resourceId = segments[1];
 
     if (prefix === "p" || prefix === "c" || prefix === "comment") {
-      const postSearch = withDefaultSearchParam(search, "depth", "5");
+      const postSearch = prefix === "p"
+        ? search || ""
+        : withDefaultSearchParam(search, "depth", "5");
       return {
         type: "post",
         hostname: "",
-        route: `/post/${resourceId}${postSearch}`,
-        requiresAuth: true,
+        route: `/p/${resourceId}${postSearch}`,
+        requiresAuth: false,
         resourceId,
       };
     }

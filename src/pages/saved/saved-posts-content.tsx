@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View, type ViewToken } from "react-native";
@@ -25,6 +25,7 @@ import {
   type PostOptionsSheetRef,
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
+  FeedDensityToggle,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -34,7 +35,7 @@ import { TimeAgo } from "@/src/components/atoms";
 import {
   useAppState,
   useAuthGuard,
-  useNetworkState,
+  useNetworkType,
   useVoteHandler,
   shouldAutoplayVideo,
   type VoteResult,
@@ -377,7 +378,7 @@ export function SavedPostsScreen() {
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
-  const { networkType } = useNetworkState();
+  const networkType = useNetworkType();
 
   const allowAutoplay = useMemo(
     () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
@@ -619,11 +620,13 @@ export function SavedPostsScreen() {
     (postId: string) => {
       const post = visiblePosts.find((p) => p.id === postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        requireAuth(() => {
+          setSelectedPost(post);
+          postOptionsSheetRef.current?.present();
+        });
       }
     },
-    [visiblePosts],
+    [visiblePosts, requireAuth],
   );
 
   const handleLikePress = useCallback(
@@ -702,10 +705,12 @@ export function SavedPostsScreen() {
 
   const handleSavedCommentLongPress = useCallback(
     (comment: SavedComment) => {
-      setSelectedComment(comment);
-      commentOptionsSheetRef.current?.present();
+      requireAuth(() => {
+        setSelectedComment(comment);
+        commentOptionsSheetRef.current?.present();
+      });
     },
-    [],
+    [requireAuth],
   );
 
   const renderPostItem = useCallback(
@@ -917,7 +922,7 @@ export function SavedPostsScreen() {
         <Text size="lg" weight="bold">
           Saved
         </Text>
-        <View style={styles.placeholder} />
+        <FeedDensityToggle />
       </View>
 
       <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.subtle }]} />

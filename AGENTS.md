@@ -218,3 +218,22 @@ Onboarding funnel: `onboarding_started` → `username_set` → `recovery_phrase_
 Creation funnel: `post_create_opened` → `post_created`.
 
 Super properties: `platform`, `app_version`, `tier`. User profile: `username`, `tier`. No PII, no wallet balances.
+
+## Error Reporting (Sentry)
+
+Sentry event filtering and sampling are configured centrally in `src/navigation/root-layout.tsx`.
+
+### Severity rules
+- Use `Sentry.captureException(error)` for unexpected failures that indicate a defect or prevent a user operation from completing.
+- Use error-level events for crashes, broken invariants, corrupted state, unrecoverable failures, and failures that require engineering action.
+- Use warning-level events only for abnormal, actionable states that may recover. Warning messages are sampled, so they are not guaranteed to reach Sentry.
+- Use `Sentry.addBreadcrumb()` for expected failures, retries, navigation diagnostics, lifecycle transitions, and other debugging context. Breadcrumbs do not create events by themselves.
+- Do not use info-level `captureMessage()` calls for routine telemetry. Info events are dropped centrally; use breadcrumbs or Mixpanel as appropriate.
+- If a warning becomes important enough that every occurrence must be retained, promote it to an error-level event or explicitly allowlist it in the central Sentry filter.
+
+### Current sampling policy
+- Error and fatal events, including ordinary `captureException()` calls, are retained.
+- Info events are dropped.
+- Warning messages are sampled at 10%.
+- Performance traces are sampled at 2%.
+- Error session replays are sampled at 10%; replay sampling does not prevent the underlying error event from being sent.

@@ -72,8 +72,7 @@ function SkeletonBox({
 }
 
 function QuestsSummarySkeleton() {
-  const { theme, rt } = useUnistyles();
-  const isLightTheme = rt.themeName !== "dark";
+  const { theme } = useUnistyles();
 
   return (
     <>
@@ -210,7 +209,7 @@ function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
 }
 
 export function QuestsSummaryCard() {
-  const { theme, rt } = useUnistyles();
+  const { theme } = useUnistyles();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showBars } = useScrollAnimationContext();
@@ -229,8 +228,6 @@ export function QuestsSummaryCard() {
   const setQuestsCardExpanded = usePreferencesStore(
     (s) => s.setQuestsCardExpanded,
   );
-
-  const isLightTheme = rt.themeName !== "dark";
 
   const rotation = useDerivedValue(() => {
     return withTiming(questsCardExpanded ? 0 : 180, { duration: 200 });
@@ -278,17 +275,17 @@ export function QuestsSummaryCard() {
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   useEffect(() => {
-    if (questsCardExpanded) {
-      setTimeout(() => triggerScrollToTop(), 100);
-    }
-  }, []);
+    if (!questsCardExpanded) return;
+
+    const timeout = setTimeout(() => triggerScrollToTop(), 100);
+    return () => clearTimeout(timeout);
+  }, [questsCardExpanded, triggerScrollToTop]);
 
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");
     showBars();
     setQuestsCardExpanded(!questsCardExpanded);
-    setTimeout(() => triggerScrollToTop(), 50);
-  }, [questsCardExpanded, setQuestsCardExpanded, showBars, triggerScrollToTop]);
+  }, [questsCardExpanded, setQuestsCardExpanded, showBars]);
 
   if (!isLoggedIn) return null;
   if (!questsEnabled) return null;

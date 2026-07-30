@@ -104,10 +104,16 @@ export type ChainConfigResponse = ConfigResponse;
 
 export interface NodeConfigResponse {
   giphy_api_key: string;
+  auto_enabled_agents?: string[];
+  open_browsing_enabled?: boolean;
   quest_payouts_enabled: boolean;
   quests_enabled: boolean;
   registration_enabled: boolean;
   registration_invite_code_required: boolean;
+  uploads_disabled?: boolean;
+  max_video_bytes?: number;
+  max_video_size_mb?: number;
+  max_video_duration_seconds?: number;
   validator_account_address: string;
   validator_consensus_address: string;
   validator_moniker: string;
@@ -162,6 +168,7 @@ export interface ProfileResponse {
 
 export interface UserFollowedResponse {
   enabled_agents: string[];
+  auto_enabled_agents?: string[];
   followed_topics: string[];
   followed_users: string[];
 }
@@ -226,7 +233,14 @@ export interface Post {
   edited_at: number; // 0 if never edited
   thumbnail: string;
   media?: string[];
-  media_meta?: Array<{ w?: number; h?: number }>;
+  media_meta?: {
+    w?: number;
+    h?: number;
+    poster_url?: string;
+    posterUrl?: string;
+    download_url?: string;
+    downloadUrl?: string;
+  }[];
   points: number;
   comments: number;
   user_vote: number; // -1, 0, 1
@@ -239,6 +253,7 @@ export interface Post {
   optimistic_action_id?: string;
   optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
   optimistic_video_preview_until?: number;
+  optimistic_cached_until?: number;
   appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 
@@ -591,6 +606,13 @@ export interface VideoUploadResponse {
   // API may return snake_case
   stream_customer?: string;
   uid: string;
+  url?: string;
+  thumbnail_url?: string;
+  thumbnailUrl?: string;
+  download_url?: string;
+  downloadUrl?: string;
+  poster_url?: string;
+  posterUrl?: string;
 }
 
 export type UploadUrlResponse = ImageUploadResponse | VideoUploadResponse;

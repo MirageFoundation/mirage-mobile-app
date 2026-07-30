@@ -17,7 +17,7 @@ import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useSendTokens } from "@/src/api/write/hooks/use-send-tokens";
 import { useToast } from "@/src/providers/toast-provider";
 import { formatCompactNumber } from "@/src/utils/format-number";
-import axios from "axios";
+import { isAxiosError } from "axios";
 
 type GiftMirageSheetProps = {
   recipientAddress: string;
@@ -152,7 +152,7 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
         triggerHaptic("error");
         Sentry.captureException(err, { tags: { feature: "gift-mirage" } });
         let errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (axios.isAxiosError(err)) {
+        if (isAxiosError(err)) {
           const data = err.response?.data;
           if (typeof data === "string" && data.trim()) {
             errorMessage = data;

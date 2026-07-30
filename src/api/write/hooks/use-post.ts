@@ -10,6 +10,13 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { getPosts } from "@/src/api/read/endpoints/posts";
+import { removePostAliasesFromData } from "@/src/api/cache/remove-post-aliases";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
+import {
+  mergeRefreshedPostPreservingOrder,
+  setTransientPostSuccessInData,
+} from "@/src/api/cache/transient-post-success";
 import type {
   CommentsResponse,
   PostFilters,
@@ -53,6 +60,7 @@ export type CreatePostMutationInput = CreatePostInput & {
   optimisticMediaUrl?: string | null;
   optimisticMediaUrls?: string[];
   optimisticPreviewMediaUrls?: string[];
+  optimisticMediaMeta?: ApiPost["media_meta"];
   optimisticDraft?: PostDraft;
 };
 
@@ -64,6 +72,45 @@ type UpsertHomePostOptions = {
   address?: string;
   allowedTags?: string;
   limit?: number;
+};
+
+const TRANSIENT_POST_SUCCESS_MS = 2000;
+const transientPostSuccessTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const transientPostSuccessExpiresAt = new Map<string, number>();
+
+const isTransientPostSuccessActive = (postId: string) =>
+  (transientPostSuccessExpiresAt.get(postId) ?? 0) > Date.now();
+
+const cancelTransientPostSuccess = (postId: string, reportCancellation = true) => {
+  const timer = transientPostSuccessTimers.get(postId);
+  if (timer) clearTimeout(timer);
+  if (reportCancellation && (timer || transientPostSuccessExpiresAt.has(postId))) {
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: "Transient post success cancelled",
+      level: "info",
+      data: { postId, hadTimer: !!timer },
+    });
+  }
+  transientPostSuccessTimers.delete(postId);
+  transientPostSuccessExpiresAt.delete(postId);
+};
+
+const clearTransientPostSuccess = (queryClient: QueryClient, postId: string) => {
+  const wasRegistered = transientPostSuccessExpiresAt.has(postId);
+  const expired = !isTransientPostSuccessActive(postId);
+  cancelTransientPostSuccess(postId, false);
+  queryClient.setQueriesData({ queryKey: queryKeys.postsRoot() }, (data) =>
+    setTransientPostSuccessInData(data, postId, false),
+  );
+  if (wasRegistered) {
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: expired ? "Transient post success expired" : "Transient post success cleared",
+      level: "info",
+      data: { postId },
+    });
+  }
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -88,9 +135,6 @@ const getFirstMediaUrl = (content: string): string | null => {
   for (const url of matches) {
     try {
       const parsedUrl = new URL(url);
-      if (parsedUrl.hostname.includes("videodelivery.net")) {
-        return url;
-      }
       const path = parsedUrl.pathname.toLowerCase();
       const extension = path.split(".").pop() ?? "";
       if (IMAGE_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension)) {
@@ -99,7 +143,6 @@ const getFirstMediaUrl = (content: string): string | null => {
     } catch {
       const path = url.toLowerCase().split("?")[0];
       const extension = path.split(".").pop() ?? "";
-      if (url.includes("videodelivery.net")) return url;
       if (IMAGE_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension)) {
         return url;
       }
@@ -152,10 +195,11 @@ export const buildOptimisticPost = (
     edited_at: 0,
     thumbnail,
     media,
-    points: 0,
+    media_meta: input.optimisticMediaMeta,
+    points: 1,
     comments: 0,
     user_vote: 1,
-    user_weight: 0,
+    user_weight: 1,
     optimistic_status: status,
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
@@ -192,18 +236,18 @@ const upsertPostIntoPostsResponse = (
   optimisticPost.optimistic_action_id === existingPost.optimistic_action_id;
  if (
   isStaleLocalOptimisticPost ||
-  existingPost.post_id === optimisticPost.post_id ||
   (optimisticPost.optimistic_status === "pending" &&
    existingPost.optimistic_status !== "pending")
  ) {
   return queryData;
  }
 
- const posts = [...queryData.posts];
- posts[matchingPostIndex] = optimisticPost;
  return {
   ...queryData,
-  posts,
+  posts: [
+   optimisticPost,
+   ...queryData.posts.filter((_, index) => index !== matchingPostIndex),
+  ],
  };
 };
 
@@ -296,7 +340,86 @@ export const upsertHomePost = (
   });
 };
 
+const refreshHomeFeedsPreservingPost = (
+  queryClient: QueryClient,
+  post: ApiPost,
+  options: UpsertHomePostOptions,
+) => {
+  upsertHomePost(queryClient, post, options);
+  useHomePostCardStore.getState().triggerScrollToTop();
+
+  const homeQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() })
+    .filter(([queryKey]) => (queryKey[1] as PostFilters | undefined)?.feed === "home");
+  void Promise.all(homeQueries.map(async ([queryKey, currentData]) => {
+    const filters = queryKey[1] as PostFilters;
+    const refreshedFirstPage = await getPosts({ ...filters, page: 1 });
+    const pendingPost = usePendingPostsStore.getState().getPost(post.post_id);
+    const preserveProcessingPost = isPostVideoProcessing(pendingPost);
+    const postToPreserve = preserveProcessingPost
+      ? pendingPost!
+      : {
+          ...post,
+          optimistic_status: undefined,
+          optimistic_error: undefined,
+          optimistic_draft: undefined,
+          optimistic_video_preview_until: undefined,
+          optimistic_cached_until: undefined,
+        };
+    const transientSuccessActive = isTransientPostSuccessActive(post.post_id);
+    const mergedFirstPage = mergeRefreshedPostPreservingOrder(
+      refreshedFirstPage,
+      postToPreserve,
+      transientSuccessActive,
+      preserveProcessingPost,
+    );
+    const refreshedMatch = refreshedFirstPage.posts.some((item) => item.post_id === post.post_id);
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: "Home refresh merged confirmed post",
+      level: "info",
+      data: {
+        postId: post.post_id,
+        by: filters.by,
+        refreshedMatch,
+        usedTemporaryFallback: !refreshedMatch && (transientSuccessActive || preserveProcessingPost),
+        preservedProcessingPost: preserveProcessingPost,
+        transientSuccessActive,
+      },
+    });
+    queryClient.setQueryData(queryKey, (latestData: unknown) => {
+      const data = latestData ?? currentData;
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "pages" in data
+      ) {
+        const infiniteData = data as { pages: PostsResponse[]; pageParams: unknown[] };
+        return {
+          ...infiniteData,
+          pages: [
+            mergedFirstPage,
+            ...infiniteData.pages.slice(1),
+          ],
+        };
+      }
+      return mergedFirstPage;
+    });
+  })).catch((error) => {
+    Sentry.captureException(error, {
+      tags: { feature: "posts", operation: "refresh-home-after-create" },
+      extra: { postId: post.post_id },
+    });
+  });
+};
+
 export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Removing optimistic post from cache",
+    level: "info",
+    data: { postId },
+  });
+  clearTransientPostSuccess(queryClient, postId);
   usePendingPostsStore.getState().removePost(postId);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => removePostFromPostsData(data, postId));
 };
@@ -306,6 +429,15 @@ export const markOptimisticPostError = (
   postId: string,
   errorMessage: string,
 ) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Marking optimistic post as error",
+    level: "warning",
+    data: {
+      postId,
+      errorMessage,
+    },
+  });
   usePendingPostsStore.getState().markPostError(postId, errorMessage);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
@@ -361,6 +493,18 @@ const setOptimisticPostStatus = (
           : persistedPost.optimistic_video_preview_until,
       });
     }
+  } else if (options.previewMediaUrls?.length) {
+    const persistedPost = usePendingPostsStore
+      .getState()
+      .posts.find((post) => post.post_id === postId);
+    if (persistedPost) {
+      usePendingPostsStore.getState().upsertPost({
+        ...persistedPost,
+        optimistic_status: undefined,
+        optimistic_error: undefined,
+        optimistic_cached_until: undefined,
+      });
+    }
   } else {
     usePendingPostsStore.getState().removePost(postId);
   }
@@ -373,7 +517,9 @@ const setOptimisticPostStatus = (
             ...post,
             optimistic_status: status,
             optimistic_error: options.errorMessage,
-            optimistic_draft: options.keepDraft || status === "success" ? post.optimistic_draft : undefined,
+            optimistic_draft: options.keepDraft || options.previewMediaUrls?.length
+              ? post.optimistic_draft
+              : undefined,
             optimistic_video_preview_until: options.previewMediaUrls?.length
               ? Date.now() + 45000
               : post.optimistic_video_preview_until,
@@ -405,11 +551,19 @@ const setOptimisticPostStatus = (
 const scheduleClearOptimisticPostStatus = (
   queryClient: QueryClient,
   postId: string,
-  previewMediaUrls?: string[],
 ) => {
-  setTimeout(() => {
-    setOptimisticPostStatus(queryClient, postId, undefined, { previewMediaUrls });
-  }, 2000);
+  cancelTransientPostSuccess(postId);
+  transientPostSuccessExpiresAt.set(postId, Date.now() + TRANSIENT_POST_SUCCESS_MS);
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Transient post success registered",
+    level: "info",
+    data: { postId, durationMs: TRANSIENT_POST_SUCCESS_MS },
+  });
+  const timer = setTimeout(() => {
+    clearTransientPostSuccess(queryClient, postId);
+  }, TRANSIENT_POST_SUCCESS_MS);
+  transientPostSuccessTimers.set(postId, timer);
 };
 
 export const markOptimisticPostSuccess = (
@@ -417,59 +571,26 @@ export const markOptimisticPostSuccess = (
   postId: string,
   previewMediaUrls?: string[],
 ) => {
-  setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
-  scheduleClearOptimisticPostStatus(queryClient, postId, previewMediaUrls);
-};
-
-export const markOptimisticVideoProcessingComplete = (
-  queryClient: QueryClient,
-  postId: string,
-) => {
-  const persistedPost = usePendingPostsStore
-    .getState()
-    .posts.find((post) => post.post_id === postId);
-  if (persistedPost) {
-    usePendingPostsStore.getState().upsertPost({
-      ...persistedPost,
-      optimistic_video_preview_until: undefined,
-    });
-  }
-
-  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
-    if (!data) return { nextData: data, didUpdate: false };
-    const updatePost = (post: ApiPost) =>
-      post.post_id === postId
-        ? { ...post, optimistic_video_preview_until: undefined }
-        : post;
-    if (isInfinitePostsData(data)) {
-      let didUpdate = false;
-      const pages = data.pages.map((page) => {
-        const posts = page.posts.map((post) => {
-          if (post.post_id !== postId) return post;
-          didUpdate = true;
-          return updatePost(post);
-        });
-        return didUpdate ? { ...page, posts } : page;
-      });
-      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
-    }
-    const singleData = data as PostsResponse;
-    let didUpdate = false;
-    const posts = singleData.posts.map((post) => {
-      if (post.post_id !== postId) return post;
-      didUpdate = true;
-      return updatePost(post);
-    });
-    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Marking optimistic post as success",
+    level: "info",
+    data: {
+      postId,
+      previewCount: previewMediaUrls?.length ?? 0,
+    },
   });
+  setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
+  scheduleClearOptimisticPostStatus(queryClient, postId);
 };
+
+export { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 
 const replaceOrUpdateOptimisticPost = (
   queryClient: QueryClient,
   optimisticId: string,
   nextPost: ApiPost,
 ) => {
-  const nextPostId = nextPost.post_id;
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const replace = (post: ApiPost) =>
@@ -496,33 +617,6 @@ const replaceOrUpdateOptimisticPost = (
     return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
   });
 
-  useHomePostCardStore.setState((state) => {
-    const replaceId = (id: string | null | undefined) =>
-      id === optimisticId ? nextPostId : id ?? null;
-    const replaceSet = (ids?: Set<string>) => {
-      if (!ids?.has(optimisticId)) return ids;
-      const next = new Set(ids);
-      next.delete(optimisticId);
-      next.add(nextPostId);
-      return next;
-    };
-
-    const activeVideoPostIds = Object.fromEntries(
-      Object.entries(state.activeVideoPostIds).map(([screen, id]) => [screen, replaceId(id)]),
-    );
-    const visibleVideoPostIds = Object.fromEntries(
-      Object.entries(state.visibleVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
-    );
-    const nearbyVideoPostIds = Object.fromEntries(
-      Object.entries(state.nearbyVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
-    );
-
-    return {
-      activeVideoPostIds,
-      visibleVideoPostIds,
-      nearbyVideoPostIds,
-    };
-  });
 };
 
 const preserveLocalPreviewMedia = (
@@ -531,6 +625,8 @@ const preserveLocalPreviewMedia = (
   previewMediaUrls: string[],
 ) => {
   if (!previewMediaUrls.length) return;
+  const pendingPost = usePendingPostsStore.getState().getPost(postId);
+  if (!isPostVideoProcessing(pendingPost)) return;
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const preserve = (post: ApiPost) =>
@@ -571,37 +667,6 @@ const preserveLocalPreviewMedia = (
   });
 };
 
-const buildOptimisticComment = (
-  commentId: string,
-  input: CreateCommentInput,
-  address: string | null,
-  username: string | null | undefined,
-  rootPost: PostWithChildren,
-): PostWithChildren => {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-
-  return {
-    post_id: commentId,
-    user_id: address ?? "unknown",
-    username: username ?? address ?? "you",
-    timestamp: nowSeconds,
-    topic: "",
-    root_topic: rootPost.root_topic,
-    root_post_id: rootPost.root_post_id || rootPost.post_id,
-    title: input.title ?? "",
-    content: input.content,
-    tag: input.tag ?? "",
-    edited_at: 0,
-    thumbnail: "",
-    media: input.media ?? [],
-    points: 1,
-    comments: 0,
-    user_vote: 1,
-    user_weight: 0,
-    children: [],
-  };
-};
-
 const isInfinitePostsData = (
   data: unknown,
 ): data is { pages: PostsResponse[]; pageParams: unknown[] } => {
@@ -622,77 +687,6 @@ const commentTreeContainsId = (
       comment.post_id === targetId ||
       commentTreeContainsId(comment.children ?? [], targetId),
   );
-};
-
-const insertReplyIntoTree = (
-  comments: PostWithChildren[],
-  parentId: string,
-  reply: PostWithChildren,
-): PostWithChildren[] => {
-  let didUpdate = false;
-
-  const nextComments = comments.map((comment) => {
-    if (comment.post_id === parentId) {
-      didUpdate = true;
-      return {
-        ...comment,
-        children: [...(comment.children ?? []), reply],
-      };
-    }
-
-    if (!comment.children || comment.children.length === 0) {
-      return comment;
-    }
-
-    const updatedChildren = insertReplyIntoTree(comment.children, parentId, reply);
-    if (updatedChildren !== comment.children) {
-      didUpdate = true;
-      return {
-        ...comment,
-        children: updatedChildren,
-      };
-    }
-
-    return comment;
-  });
-
-  return didUpdate ? nextComments : comments;
-};
-
-const replaceCommentIdInTree = (
-  comments: PostWithChildren[],
-  oldId: string,
-  newId: string,
-): PostWithChildren[] => {
-  let didUpdate = false;
-
-  const nextComments = comments.map((comment) => {
-    const nextCommentId = comment.post_id === oldId ? newId : comment.post_id;
-    if (nextCommentId !== comment.post_id) {
-      didUpdate = true;
-    }
-
-    let nextChildren = comment.children;
-    if (comment.children && comment.children.length > 0) {
-      const updatedChildren = replaceCommentIdInTree(comment.children, oldId, newId);
-      if (updatedChildren !== comment.children) {
-        didUpdate = true;
-        nextChildren = updatedChildren;
-      }
-    }
-
-    if (nextCommentId !== comment.post_id || nextChildren !== comment.children) {
-      return {
-        ...comment,
-        post_id: nextCommentId,
-        children: nextChildren,
-      };
-    }
-
-    return comment;
-  });
-
-  return didUpdate ? nextComments : comments;
 };
 
 const removeCommentFromTree = (
@@ -962,7 +956,7 @@ export const applyOptimisticPostEdit = (
 
 const restoreQuerySnapshots = (
   queryClient: QueryClient,
-  snapshots: Array<[QueryKey, unknown]> | undefined,
+  snapshots: [QueryKey, unknown][] | undefined,
 ) => {
   snapshots?.forEach(([queryKey, queryData]) => {
     queryClient.setQueryData(queryKey, queryData);
@@ -996,8 +990,26 @@ export function usePost(options: UsePostOptions = {}) {
     mutationKey: mutationKeys.post.create(),
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
-      return createPost(wallet, postInput, options.onPoWProgress);
+      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticMediaMeta, optimisticDraft, ...postInput } = input;
+      const result = await createPost(wallet, postInput, options.onPoWProgress);
+      if (result.code !== undefined && result.code !== 0) {
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Create post transaction rejected",
+          level: "warning",
+          data: {
+            code: result.code,
+            hasRawLog: !!result.raw_log,
+            optimisticId,
+            optimisticActionId,
+          },
+        });
+        throw Object.assign(
+          new Error(result.raw_log || "Transaction was rejected by the chain."),
+          { response: { data: { error_code: "transaction_rejected", error_details: result.raw_log } } },
+        );
+      }
+      return result;
     },
     onSuccess: (data, input) => {
       Sentry.addBreadcrumb({
@@ -1018,8 +1030,9 @@ export function usePost(options: UsePostOptions = {}) {
         has_content_warning: !!input.tag,
         content_warning: input.tag || undefined,
       });
+      const confirmedPostId = (data?.post_id ?? data?.tx_hash)?.toLowerCase();
       const optimisticPost = buildOptimisticPost(
-        data?.tx_hash,
+        confirmedPostId,
         input,
         address,
         username,
@@ -1062,10 +1075,24 @@ export function usePost(options: UsePostOptions = {}) {
             ? Date.now() + 45000
             : confirmedPost.optimistic_video_preview_until,
         };
-        usePendingPostsStore.getState().removePost(input.optimisticId);
+        usePendingPostsStore.getState().removePost(
+          input.optimisticId,
+          input.optimisticActionId,
+        );
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
-        upsertHomePost(queryClient, postAfterNetworkConfirmation, upsertOptions);
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Optimistic post ID transitioned to confirmed ID",
+          level: "info",
+          data: {
+            optimisticId: input.optimisticId,
+            confirmedPostId: confirmedPost.post_id,
+            isVideo: !!videoPreviewMediaUrls?.length,
+          },
+        });
+        scheduleClearOptimisticPostStatus(queryClient, confirmedPost.post_id);
+        refreshHomeFeedsPreservingPost(queryClient, postAfterNetworkConfirmation, upsertOptions);
         if (videoPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
@@ -1083,19 +1110,15 @@ export function usePost(options: UsePostOptions = {}) {
             }, delay);
           });
         }
-        scheduleClearOptimisticPostStatus(
-          queryClient,
-          confirmedPost.post_id,
-          videoPreviewMediaUrls,
-        );
       } else {
-        upsertHomePost(queryClient, optimisticPost, upsertOptions);
+        scheduleClearOptimisticPostStatus(queryClient, optimisticPost.post_id);
+        refreshHomeFeedsPreservingPost(queryClient, optimisticPost, upsertOptions);
       }
 
      // Invalidate user posts
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }
@@ -1104,6 +1127,17 @@ export function usePost(options: UsePostOptions = {}) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.topicsRoot(),
         refetchType: "inactive",
+      });
+    },
+    onError: (error, input) => {
+      Sentry.captureException(error, {
+        tags: { feature: "posts", operation: "create" },
+        extra: {
+          optimisticId: input.optimisticId,
+          optimisticActionId: input.optimisticActionId,
+          mediaCount: input.media?.length ?? 0,
+          hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+        },
       });
     },
   });
@@ -1146,7 +1180,6 @@ export function usePostWithConfirmation(options: UsePostOptions = {}) {
 export function useComment(options: UsePostOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
-  const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
     mutationKey: mutationKeys.post.comment(),
@@ -1161,7 +1194,7 @@ export function useComment(options: UsePostOptions = {}) {
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: queryKeys.commentsRoot(),
-      }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      }) as [QueryKey, CommentsResponse | undefined][];
       const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
       const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
 
@@ -1230,7 +1263,7 @@ export function useComment(options: UsePostOptions = {}) {
 
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }
@@ -1286,12 +1319,12 @@ export function useEdit(options: UsePostOptions = {}) {
       await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       if (address) {
-        await queryClient.cancelQueries({ queryKey: queryKeys.userPosts(address) });
+        await queryClient.cancelQueries({ queryKey: queryKeys.userPostsForOwner(address) });
       }
 
-      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<[QueryKey, unknown]>;
-      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as Array<[QueryKey, unknown]>;
-      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
+      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as [QueryKey, unknown][];
 
       applyOptimisticPostEdit(queryClient, input, "pending");
 
@@ -1422,19 +1455,35 @@ export function useDelete(options: UsePostOptions = {}) {
       throw new Error("Delete failed");
     },
     onMutate: async (input) => {
+      clearTransientPostSuccess(queryClient, input.postId);
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: queryKeys.commentsRoot(),
-      }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<
-        [QueryKey, unknown]
-      >;
+      }) as [QueryKey, CommentsResponse | undefined][];
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
       const previousUserPosts = queryClient.getQueriesData({
         queryKey: queryKeys.userPostsRoot(),
-      }) as Array<[QueryKey, unknown]>;
+      }) as [QueryKey, unknown][];
+      const previousPendingPosts = usePendingPostsStore.getState().posts;
+      const pendingMatch = previousPendingPosts.find((post) =>
+        post.post_id.toLowerCase() === input.postId.toLowerCase(),
+      );
+      const optimisticActionId = pendingMatch?.optimistic_action_id;
+
+      usePendingPostsStore.getState().removePost(input.postId, optimisticActionId);
+      Sentry.addBreadcrumb({
+        category: "delete-post",
+        message: "Delete aliases removed optimistically",
+        level: "info",
+        data: {
+          postId: input.postId,
+          hasOptimisticActionId: !!optimisticActionId,
+          pendingMatch: !!pendingMatch,
+        },
+      });
 
       const affectedRootPostIds = findRootPostIdsForCachedComment(queryClient, input.postId);
       if (input.rootPostId) {
@@ -1472,11 +1521,22 @@ export function useDelete(options: UsePostOptions = {}) {
       updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
+      [
+        queryKeys.postsRoot(),
+        queryKeys.userPostsRoot(),
+        queryKeys.commentsRoot(),
+        queryKeys.commentContextRoot(),
+      ].forEach((queryKey) => {
+        queryClient.setQueriesData({ queryKey }, (data) =>
+          removePostAliasesFromData(data, input.postId, optimisticActionId),
+        );
+      });
 
       return {
         previousComments,
         previousPosts,
         previousUserPosts,
+        previousPendingPosts,
       };
     },
     onError: (_error, _input, context) => {
@@ -1487,6 +1547,22 @@ export function useDelete(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
+      clearTransientPostSuccess(queryClient, _input.postId);
+      if (context?.previousPendingPosts) {
+        usePendingPostsStore.setState({ posts: context.previousPendingPosts });
+      }
+      Sentry.addBreadcrumb({
+        category: "delete-post",
+        message: "Failed delete state restored",
+        level: "warning",
+        data: {
+          postId: _input.postId,
+          restoredComments: context?.previousComments?.length ?? 0,
+          restoredPostQueries: context?.previousPosts?.length ?? 0,
+          restoredUserPostQueries: context?.previousUserPosts?.length ?? 0,
+          restoredPendingPosts: context?.previousPendingPosts?.length ?? 0,
+        },
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot(), refetchType: "inactive" });
@@ -1494,7 +1570,7 @@ export function useDelete(options: UsePostOptions = {}) {
 
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }

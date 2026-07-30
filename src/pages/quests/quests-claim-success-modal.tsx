@@ -42,7 +42,7 @@ export function ClaimSuccessModal({
       opacityAnim.value = withTiming(0, { duration: 200 });
       scaleAnim.value = withTiming(0, { duration: 200 });
     }
-  }, [visible]);
+  }, [opacityAnim, scaleAnim, visible]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: opacityAnim.value * 0.7,
@@ -205,4 +205,3 @@ export function ClaimSuccessModal({
     </Modal>
   );
 }
-

@@ -1,7 +1,6 @@
-import { ContentWarningBadge, type ContentWarningType } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
@@ -12,7 +11,6 @@ type PostCardContentProps = {
   displayDomain: string | null;
   bodyVideoUrl: string | null;
   shouldBlurContent: boolean;
-  contentWarnings?: ContentWarningType[];
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
   disabled?: boolean;
@@ -26,26 +24,15 @@ export const PostCardContent = memo(function PostCardContent({
   displayDomain,
   bodyVideoUrl,
   shouldBlurContent,
-  contentWarnings,
   showUrlCard = true,
   disabled = false,
   onRevealContent,
   onPlayNowPress,
 }: PostCardContentProps) {
   const { theme } = useUnistyles();
-  const hasContentWarning = contentWarnings && contentWarnings.length > 0;
 
   return (
     <>
-      {hasContentWarning && (
-        <View style={styles.warningBadge}>
-          <ContentWarningBadge
-            types={contentWarnings}
-            compact
-          />
-        </View>
-      )}
-
       <Text
         size="lg"
         weight="bold"
@@ -83,9 +70,6 @@ export const PostCardContent = memo(function PostCardContent({
 });
 
 const styles = StyleSheet.create((theme) => ({
-  warningBadge: {
-    marginTop: theme.spacing.sm,
-  },
   title: {
     marginTop: theme.spacing.xs,
     lineHeight: 20,

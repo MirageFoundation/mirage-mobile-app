@@ -25,6 +25,7 @@ export function CreateHeader({
   return (
     <Box style={styles.header}>
       <Button
+        accessibilityLabel="Close post composer"
         variant="ghost"
         size="auto"
         onPress={onClose}

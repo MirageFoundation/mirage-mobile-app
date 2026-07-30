@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
-import { View, type StyleProp, type ViewStyle } from "react-native";
-import Animated from "react-native-reanimated";
+import { View, type ViewStyle } from "react-native";
+import Animated, { type AnimatedStyle } from "react-native-reanimated";
 
 import type { Post } from "@/src/components/molecules";
 import { Text } from "@/src/components/ui/primitives";
@@ -13,7 +13,7 @@ type PostDetailTheme = {
 };
 
 type PostDetailStickySummaryProps = {
-  animatedStyle: StyleProp<ViewStyle>;
+  animatedStyle: AnimatedStyle<ViewStyle>;
   formatCount: (value: number) => string;
   insetsTop: number;
   isInteractive: boolean;

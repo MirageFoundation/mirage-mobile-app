@@ -1,7 +1,7 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,30 +11,46 @@ import { TransactionProgressModal } from "@/src/components/molecules";
 import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
-import { useWallet } from "@/src/hooks/use-wallet";
-import { deleteUser } from "@/src/api/write/endpoints/delete-user";
-import { useAuthStore } from "@/src/stores";
+import { useDeleteUser } from "@/src/api/write";
+import {
+  ensureLocallyLoggedOutAfterAccountDeletion,
+  useAuthStore,
+} from "@/src/stores/auth-store";
 import { useToast } from "@/src/providers/toast-provider";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { AccountDeletionCompletionCoordinator } from "@/src/services/account-deletion-completion";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+
+class AccountDeletionRequestError extends Error {}
 
 export function DeleteAccountScreen() {
   const router = useRouter();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const { getWallet } = useWallet();
   const toast = useToast();
   const { closeSideMenu } = useSideMenu();
 
   const [confirmText, setConfirmText] = useState("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isConfirmed = confirmText === "DELETE";
   const txProgress = useTransactionProgress();
+  const deleteMutation = useDeleteUser({
+    onPoWProgress: txProgress.updatePoWProgress,
+  });
+  const completionCoordinatorRef = useRef<AccountDeletionCompletionCoordinator | null>(null);
+  if (!completionCoordinatorRef.current) {
+    completionCoordinatorRef.current = new AccountDeletionCompletionCoordinator();
+  }
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      completionCoordinatorRef.current?.cancel();
+    };
   }, []);
 
   const handleBack = useCallback(() => {
@@ -43,30 +59,40 @@ export function DeleteAccountScreen() {
   }, [router]);
 
   const handleDelete = useCallback(async () => {
-    if (!isConfirmed) return;
+    if (!isConfirmed || isSubmitting) return;
+    setIsSubmitting(true);
     triggerHaptic("medium");
+    const deletedWalletAddress = useAuthStore.getState().walletAddress;
 
-    try {
-      const txResult = await executeWithProgress(
-        txProgress,
-        async (onPoWProgress) => {
-          const wallet = await getWallet();
-          return deleteUser(wallet, { target: wallet.address }, onPoWProgress);
-        },
-      );
+    const result = await completionCoordinatorRef.current!.run({
+      requestDeletion: async () => {
+        const txResult = await executeWithProgress(
+          txProgress,
+          () => deleteMutation.mutateAsync(),
+        );
+        if (!txResult.success) {
+          throw new AccountDeletionRequestError(
+            txResult.error ?? "Please try again.",
+          );
+        }
+      },
+      successDelayMs: 500,
+      logout: () => useAuthStore.getState().logout(),
+      ensureLoggedOut: () =>
+        ensureLocallyLoggedOutAfterAccountDeletion(deletedWalletAddress),
+      onCompleted: () => {
+        txProgress.hideModal();
+        closeSideMenu();
+        toast.success("Delete account requested");
+        router.replace("/(tabs)");
+      },
+    });
 
-      if (txResult.success) {
-        setTimeout(async () => {
-          txProgress.hideModal();
-          closeSideMenu();
-          await useAuthStore.getState().logout();
-          toast.success("Delete account requested");
-          router.replace("/(tabs)");
-        }, 500);
-      } else {
-        toast.error("Failed to delete account", txResult.error ?? "Please try again.");
-      }
-    } catch (err) {
+    if (result.status === "cancelled") return;
+    setIsSubmitting(false);
+
+    if (result.status === "request_failed") {
+      const err = result.error;
       Sentry.captureException(err, {
         tags: { feature: "delete-account", operation: "delete-account" },
       });
@@ -83,8 +109,38 @@ export function DeleteAccountScreen() {
             ? err.message
             : "Please try again.";
       toast.error("Failed to delete account", errorMessage);
+      return;
     }
-  }, [isConfirmed, txProgress, getWallet, router, toast, closeSideMenu]);
+
+    if (result.status === "logout_failed") {
+      txProgress.hideModal();
+      triggerHaptic("error");
+      Sentry.captureException(
+        new Error("Account deletion completed but logout cleanup failed"),
+        {
+          tags: {
+            feature: "delete-account",
+            operation: "logout-after-deletion",
+            fallback: result.fallbackError ? "failed" : "completed",
+          },
+        },
+      );
+      toast.error(
+        "Account deleted and signed out",
+        result.fallbackError
+          ? "Restart the app before signing in again."
+          : "Some device cleanup failed. Restart the app before signing in again.",
+      );
+    }
+  }, [
+    closeSideMenu,
+    deleteMutation,
+    isConfirmed,
+    isSubmitting,
+    router,
+    toast,
+    txProgress,
+  ]);
 
   return (
     <Box flex background="base">
@@ -155,7 +211,7 @@ export function DeleteAccountScreen() {
               size="lg"
               mode="error"
               rounded="full"
-              disabled={!isConfirmed}
+              disabled={!isConfirmed || isSubmitting}
               onPress={handleDelete}
               style={[
                 styles.deleteButton,

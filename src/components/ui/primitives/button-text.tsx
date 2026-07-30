@@ -1,9 +1,4 @@
 import { Text as RNText } from "react-native";
-import type {
-  TextStyle,
-  StyleProp,
-  TextProps as RNTextProps,
-} from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { forwardRef, useMemo } from "react";
 import type { TextProps } from "./text";

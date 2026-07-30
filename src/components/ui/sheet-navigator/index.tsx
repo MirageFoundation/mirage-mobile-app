@@ -130,7 +130,7 @@ const SheetNavigator: React.FC<SheetNavigatorProps> = ({
       // Update previous step index
       prevStepIndex.value = currentIndex;
     }
-  }, [navigation.currentStepIndex]);
+  }, [contentTranslateX, navigation.currentStepIndex, prevStepIndex]);
 
   // Reset navigation when modal closes
   useEffect(() => {
@@ -140,7 +140,7 @@ const SheetNavigator: React.FC<SheetNavigatorProps> = ({
       contentOpacity.value = 1;
       prevStepIndex.value = 0;
     }
-  }, [visible]);
+  }, [contentOpacity, contentTranslateX, prevStepIndex, visible]);
 
   useEffect(() => {
     if (visible) {

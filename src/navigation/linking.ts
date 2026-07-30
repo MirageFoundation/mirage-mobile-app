@@ -111,21 +111,15 @@ function isShareIntentPath(path: string): boolean {
   return path.includes("dataUrl=") && path.includes("ShareKey");
 }
 
-function hasSharePayload(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return !!(
-    (typeof record.text === "string" && record.text.trim().length > 0) ||
-    (typeof record.webUrl === "string" && record.webUrl.trim().length > 0) ||
-    (Array.isArray(record.files) && record.files.length > 0)
-  );
-}
-
 function recoverInitialShareIntent(path: string): boolean {
   try {
     const result = ExpoShareIntentModule?.getShareIntent(path);
-    if (hasSharePayload(result)) {
-      persistPendingShareIntent(result, "initial-native-intent", path);
+    const pending = persistPendingShareIntent(
+      result,
+      "initial-native-intent",
+      path,
+    );
+    if (pending) {
       return true;
     }
 

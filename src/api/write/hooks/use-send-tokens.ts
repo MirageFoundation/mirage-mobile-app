@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useAuthStore } from "@/src/stores";
+import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import {
   sendTokens,
   upgradeLevel,
@@ -39,15 +40,14 @@ export function useSendTokens(options: UseSendTokensOptions = {}) {
       return sendTokens(wallet, input, options.onPoWProgress);
     },
     onSuccess: (data, { recipient }) => {
+      if (!address || !isCurrentAuthWallet(address)) return;
       // Invalidate sender's status (balance changed)
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userStatus(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.parameters(address),
-        });
-      }
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.userStatus(address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.parameters(address),
+      });
 
       // Invalidate recipient's status if viewing their profile
       queryClient.invalidateQueries({
@@ -73,21 +73,20 @@ export function useUpgradeLevel() {
       return upgradeLevel(wallet, level);
     },
     onSuccess: (data, level) => {
+      if (!address || !isCurrentAuthWallet(address)) return;
       // Update local state
-      setUserLevel(level);
+      setUserLevel(level, address);
 
       // Invalidate user status
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userStatus(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profile(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.parameters(address),
-        });
-      }
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.userStatus(address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.profile(address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.parameters(address),
+      });
     },
   });
 }
@@ -107,14 +106,13 @@ export function useSetAutoRenewal() {
       return setAutoRenewal(wallet, autoRenew);
     },
     onSuccess: () => {
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userStatus(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profile(address),
-        });
-      }
+      if (!address || !isCurrentAuthWallet(address)) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.userStatus(address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.profile(address),
+      });
     },
   });
 }

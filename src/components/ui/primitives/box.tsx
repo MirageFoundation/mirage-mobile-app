@@ -176,7 +176,7 @@ const useAnimations = (
     }, 16);
 
     return () => clearTimeout(timer);
-  }, [animations, duration, delay, repeat, onComplete]);
+  }, [animations, delay, duration, onComplete, opacity, repeat, scale, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const transforms = [];

@@ -58,7 +58,7 @@ export const NewPostsButton = ({
       translateY.value = withSpring(-60, { damping: 15, stiffness: 150 });
       opacity.value = withTiming(0, { duration: 150 });
     }
-  }, [visible]);
+  }, [opacity, translateY, visible]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
