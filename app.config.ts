@@ -85,7 +85,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     [
       "expo-image-picker",
       {
-        photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
+        photosPermission:
+          "$(PRODUCT_NAME) uses your photo library so you can select photos and videos to share in posts. For example, you can choose a photo to attach to a new post.",
       },
     ],
     [
