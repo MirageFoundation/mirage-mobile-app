@@ -3,6 +3,7 @@
  */
 
 import { queryKeys } from "@/src/api/read/query-keys";
+import { toggleFollowedTopics } from "@/src/domain/topics";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,6 +32,28 @@ const addFollowBreadcrumb = (
   });
 };
 
+/**
+ * A duplicate follow means the user's intent is already satisfied — keep the
+ * optimistic state instead of rolling back and reporting an error.
+ *
+ * The node's duplicate-follow guard predates its error_code registry and still
+ * responds `{"error": "topic is already followed"}` with no `error_code`
+ * (`routes/core.py` follow_user/follow_topic), so `parseApiError` yields
+ * `errorCode: null` and a code-only check never matches. Match the message text
+ * too, the same way the web client does.
+ */
+function isAlreadyFollowedError(error: unknown, isCurrentlyFollowing: boolean) {
+  if (isCurrentlyFollowing) return false;
+
+  const parsed = parseApiError(error);
+  if (
+    parsed.errorCode === "user_already_followed" ||
+    parsed.errorCode === "topic_already_followed"
+  ) return true;
+
+  return parsed.message.toLowerCase().includes("already follow");
+}
+
 const markPostsStaleAfterFollow = (queryClient: ReturnType<typeof useQueryClient>) => {
   queryClient.invalidateQueries({
     queryKey: queryKeys.postsRoot(),
@@ -40,7 +63,9 @@ const markPostsStaleAfterFollow = (queryClient: ReturnType<typeof useQueryClient
     queryKey: queryKeys.postsRoot(),
     refetchType: "active",
     predicate: (query) => {
-      const filters = query.queryKey[1];
+      // Posts keys are ["server", <url>, "posts", "viewer", <addr>, filters]:
+      // the filters object is the LAST element, not queryKey[1].
+      const filters = query.queryKey.at(-1);
       return !!filters
         && typeof filters === "object"
         && (filters as { feed?: unknown }).feed === "following";
@@ -281,7 +306,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
           }>(queryKeys.userFollowed(address))
         : undefined;
 
-      // Optimistically update the followed list
+      // Optimistically update the followed list. The entry MUST be normalized:
+      // the server only ever stores lowercase topics, so an entry keyed by the
+      // display casing silently disappears on the next refetch and the button
+      // snaps back to "Follow" (then a retry fails with "already followed").
       if (address) {
         queryClient.setQueryData<{
           followed_users: string[];
@@ -291,13 +319,15 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
           if (!old) {
             return {
               followed_users: [],
-              followed_topics: isCurrentlyFollowing ? [] : [topic],
+              followed_topics: toggleFollowedTopics([], topic, !isCurrentlyFollowing),
               enabled_agents: [],
             };
           }
-          const newFollowedTopics = isCurrentlyFollowing
-            ? old.followed_topics.filter((t) => t !== topic)
-            : [...old.followed_topics, topic];
+          const newFollowedTopics = toggleFollowedTopics(
+            old.followed_topics,
+            topic,
+            !isCurrentlyFollowing,
+          );
 
           console.log(
             `[FollowTopic] Optimistic update: ${old.followed_topics.length} -> ${newFollowedTopics.length} topics`
@@ -341,15 +371,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
 
       console.log(`[FollowTopic] Error received: ${errorCode ?? parsed.message}`);
 
-      const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorCode === "topic_already_followed";
-      const isNotFollowingError =
-        isCurrentlyFollowing && errorCode === "topic_already_followed";
-
-      if (isAlreadyFollowedError || isNotFollowingError) {
-        console.log(
-          `[FollowTopic] State already matches desired state, no rollback needed`
-        );
+      if (isAlreadyFollowedError(err, isCurrentlyFollowing)) {
+        addFollowBreadcrumb("Topic already followed; optimistic state kept", {
+          topic,
+        });
         return;
       }
 
@@ -365,19 +390,14 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         );
       }
     },
-    onSettled: (_data, error) => {
+    onSettled: (_data, error, { isCurrentlyFollowing }) => {
       markPostsStaleAfterFollow(queryClient);
 
-      if (error) {
-        const parsed = parseApiError(error);
-        const isStateMismatch = parsed.errorCode === "topic_already_followed";
-
-        if (!isStateMismatch && address) {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userFollowed(address),
-            refetchType: "none",
-          });
-        }
+      if (error && !isAlreadyFollowedError(error, isCurrentlyFollowing) && address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userFollowed(address),
+          refetchType: "none",
+        });
       }
     },
   });
@@ -503,15 +523,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
 
       console.log(`[Follow] Error received: ${errorCode ?? parsed.message}`);
 
-      const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorCode === "user_already_followed";
-      const isNotFollowingError =
-        isCurrentlyFollowing && errorCode === "user_already_followed";
-
-      if (isAlreadyFollowedError || isNotFollowingError) {
-        console.log(
-          `[Follow] State already matches desired state, no rollback needed`
-        );
+      if (isAlreadyFollowedError(err, isCurrentlyFollowing)) {
+        addFollowBreadcrumb("User already followed; optimistic state kept", {
+          userAddress,
+        });
         return;
       }
 
@@ -527,19 +542,14 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         );
       }
     },
-    onSettled: (_data, error) => {
+    onSettled: (_data, error, { isCurrentlyFollowing }) => {
       markPostsStaleAfterFollow(queryClient);
 
-      if (error) {
-        const parsed = parseApiError(error);
-        const isStateMismatch = parsed.errorCode === "user_already_followed";
-
-        if (!isStateMismatch && address) {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userFollowed(address),
-            refetchType: "none",
-          });
-        }
+      if (error && !isAlreadyFollowedError(error, isCurrentlyFollowing) && address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userFollowed(address),
+          refetchType: "none",
+        });
       }
     },
   });

@@ -35,6 +35,7 @@ import {
   type Comment,
 } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
+import { isTopicFollowed } from "@/src/domain/topics";
 import {
   useAuthGuard,
   useFollowHandler,
@@ -756,7 +757,7 @@ export default function MediaPostDetailScreen({
                   ),
                 followTopic: () => {
                   if (post.topic) {
-                    followTopic(post.topic, followedTopics.includes(post.topic));
+                    followTopic(post.topic, isTopicFollowed(followedTopics, post.topic));
                   }
                 },
                 upvote: handleUpvote,

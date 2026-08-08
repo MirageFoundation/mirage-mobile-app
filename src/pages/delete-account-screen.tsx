@@ -84,7 +84,7 @@ export function DeleteAccountScreen() {
         txProgress.hideModal();
         closeSideMenu();
         toast.success("Delete account requested");
-        router.replace("/(tabs)");
+        router.replace("/");
       },
     });
 

@@ -6,13 +6,14 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useDraftStore } from "@/src/stores/draft-store";
+import type { MediaUploadPhase } from "@/src/api/read/endpoints/media";
 
 import { IMAGE_UPLOADS } from "./create-upload-state";
 import { styles } from "./create-screen-styles";
 
 type ImageUploadState = Record<
   string,
-  { progress: number; uploading: boolean; done: boolean; error: string | null }
+  { progress: number; phase: MediaUploadPhase; uploading: boolean; done: boolean; error: string | null }
 >;
 
 type CreateImagePreviewCarouselProps = {
@@ -77,6 +78,8 @@ export function CreateImagePreviewCarousel({
                   <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
                     {!isNetworkOnline
                       ? "Low connectivity…"
+                      : upload.phase === "processing"
+                        ? `Processing… ${Math.round(upload.progress)}%`
                       : `Uploading… ${Math.round(upload.progress)}%`}
                   </Text>
                 </View>

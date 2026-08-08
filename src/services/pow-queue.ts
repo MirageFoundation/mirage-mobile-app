@@ -48,9 +48,23 @@ export type PowActionType =
   | "block"
   | "unblock"
   | "report"
-  | "annotate";
+  | "annotate"
+  | "send_tokens"
+  | "gift_subscription"
+  | "award";
 
-const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set(["comment", "post", "edit", "annotate"]);
+// Non-idempotent writes: never auto-retry network errors (a duplicate POST
+// could double-post content or double-spend tokens) and never force-cancel
+// mid-flight on app background (the POST may already be committed).
+const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set([
+  "comment",
+  "post",
+  "edit",
+  "annotate",
+  "send_tokens",
+  "gift_subscription",
+  "award",
+]);
 
 export interface PowAction<T = unknown> {
   id: string;
@@ -93,7 +107,11 @@ export interface PowQueueActions {
 
 type PowQueueStore = PowQueueState & PowQueueActions;
 
-const NATIVE_CLEANUP_TIMEOUT_MS = 500;
+// After cancelling a PoW mid-computation, wait for the native module to
+// actually settle before starting the next action. The native Argon2 workers
+// only support one computation at a time; on low-end devices teardown can take
+// well over 500ms, and overlapping computations have frozen the device.
+const NATIVE_CLEANUP_TIMEOUT_MS = 2000;
 const SUCCESS_OVERLAY_DURATION_MS = 500;
 const MAX_NETWORK_RETRIES = 3;
 const NETWORK_RETRY_BACKOFF_MS = 2000;
@@ -144,6 +162,12 @@ export const getActionLabel = (type: PowActionType): string => {
       return "Reporting";
     case "annotate":
       return "Annotating";
+    case "send_tokens":
+      return "Sending gift";
+    case "gift_subscription":
+      return "Gifting subscription";
+    case "award":
+      return "Sending award";
     default:
       return "Processing";
   }
@@ -183,6 +207,12 @@ export const getSuccessLabel = (type: PowActionType): string => {
       return "Reported";
     case "annotate":
       return "Annotated";
+    case "send_tokens":
+      return "Gift sent";
+    case "gift_subscription":
+      return "Subscription gifted";
+    case "award":
+      return "Award sent";
     default:
       return "Done";
   }

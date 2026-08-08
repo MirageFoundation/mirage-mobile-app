@@ -2,7 +2,11 @@ import * as Sentry from "@sentry/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { getBootstrap, type BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
-import { getNodeConfig, getSafeApiErrorContext } from "@/src/api/read/endpoints/parameters";
+import {
+  getChainConfig,
+  getNodeConfig,
+  getSafeApiErrorContext,
+} from "@/src/api/read/endpoints/parameters";
 import {
   getInviteCodes,
   getUserBlocked,
@@ -11,7 +15,8 @@ import {
   mergeUserFollowedEnabledAgents,
 } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
-import type { UserFollowedResponse } from "@/src/api/types";
+import type { NodeConfigResponse, UserFollowedResponse } from "@/src/api/types";
+import { walletService } from "@/src/services/wallet-service";
 
 type BootstrapSection = keyof BootstrapResponse;
 
@@ -28,14 +33,14 @@ function summarizeBootstrapResponse(
   hasAddress: boolean,
 ) {
   const nullSections = (Object.keys(response) as BootstrapSection[]).filter(
-    (section) => response[section] === null,
+    (section) => response[section] == null,
   );
 
   return {
     hasAddress,
     nullSections,
     hydratedSections: (Object.keys(response) as BootstrapSection[]).filter(
-      (section) => response[section] !== null,
+      (section) => response[section] != null,
     ),
     expectedUserSections: hasAddress,
   };
@@ -58,6 +63,9 @@ export function hydrateBootstrapCache(
   response: BootstrapResponse,
   address?: string,
 ) {
+  if (response.chain_config) {
+    queryClient.setQueryData(queryKeys.config(), response.chain_config);
+  }
   if (response.node_config) {
     queryClient.setQueryData(queryKeys.nodeConfig(), response.node_config);
     Sentry.addBreadcrumb({
@@ -102,6 +110,15 @@ function scheduleBootstrapFallbacks(
   response: BootstrapResponse,
   address?: string,
 ) {
+  if (!response.chain_config) {
+    addBootstrapFallbackBreadcrumb("chain_config", Boolean(address));
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.config(),
+      queryFn: getChainConfig,
+      staleTime: 1000 * 60 * 60 * 4,
+    });
+  }
+
   if (!response.node_config) {
     addBootstrapFallbackBreadcrumb("node_config", Boolean(address));
     queryClient.prefetchQuery({
@@ -189,11 +206,25 @@ function scheduleBootstrapFallbacks(
       queryFn: () => getUserBlocked({ address }),
     });
   }
-  if (!response.invite_codes) {
+  // Invite codes are feature-gated: when registration_invite_code_required is
+  // false the endpoint always returns an empty list, so a null bootstrap
+  // section is expected and not worth a request. Only fall back when the
+  // feature is explicitly enabled.
+  const inviteCodesEnabled =
+    (response.node_config ??
+      queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig()))
+      ?.registration_invite_code_required === true;
+  if (!response.invite_codes && inviteCodesEnabled) {
     addBootstrapFallbackBreadcrumb("invite_codes", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.inviteCodes(address),
-      queryFn: () => getInviteCodes({ address }),
+      queryFn: async () => {
+        const wallet = await walletService.getWallet();
+        if (!wallet || wallet.address.toLowerCase() !== address.toLowerCase()) {
+          throw new Error("Active wallet changed before invite-code fallback");
+        }
+        return getInviteCodes(wallet);
+      },
     });
   }
 }
@@ -213,7 +244,26 @@ export async function primeBootstrap(
   });
 
   try {
-    const response = await getBootstrap(address ? { address } : undefined);
+    let wallet = null;
+    if (address) {
+      try {
+        const candidate = await walletService.getWallet();
+        if (candidate?.address.toLowerCase() === address.toLowerCase()) {
+          wallet = candidate;
+        }
+      } catch (error) {
+        Sentry.addBreadcrumb({
+          category: "bootstrap",
+          message: "Bootstrap identity proof unavailable; continuing without invite codes",
+          level: "warning",
+          data: { error: error instanceof Error ? error.name : "unknown" },
+        });
+      }
+    }
+    const response = await getBootstrap(
+      address ? { address } : undefined,
+      wallet ?? undefined,
+    );
     if (!isCurrent()) return null;
     hydrateBootstrapCache(queryClient, response, address);
     scheduleBootstrapFallbacks(queryClient, response, address);
@@ -228,7 +278,7 @@ export async function primeBootstrap(
 
     if (!hasAddress) {
       const unexpectedAnonymousSections = USER_SECTIONS.filter(
-        (section) => response[section] !== null,
+        (section) => response[section] != null,
       );
 
       if (unexpectedAnonymousSections.length > 0) {

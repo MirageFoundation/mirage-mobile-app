@@ -1525,7 +1525,6 @@ export function useDelete(options: UsePostOptions = {}) {
         queryKeys.postsRoot(),
         queryKeys.userPostsRoot(),
         queryKeys.commentsRoot(),
-        queryKeys.commentContextRoot(),
       ].forEach((queryKey) => {
         queryClient.setQueriesData({ queryKey }, (data) =>
           removePostAliasesFromData(data, input.postId, optimisticActionId),

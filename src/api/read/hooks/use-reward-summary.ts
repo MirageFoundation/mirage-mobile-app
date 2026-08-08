@@ -41,8 +41,10 @@ export function useRewardSummary(
       !isInitializing &&
       !isBootstrapping &&
       (options?.enabled ?? true),
-    staleTime: 1000 * 60,
-    gcTime: 1000 * 60 * 5,
+    // Hydrated from `bootstrap` (`rewards_summary`) on startup; explicit
+    // refetch() on the quests screen bypasses staleTime when freshness matters.
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 30,
   });
 }
 
@@ -54,8 +56,8 @@ export function useRewardSummaryByAddress(address: string | undefined) {
         address: address!,
       }),
     enabled: !!address,
-    staleTime: 1000 * 60,
-    gcTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 30,
   });
 }
 

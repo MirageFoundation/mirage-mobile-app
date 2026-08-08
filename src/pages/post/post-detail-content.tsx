@@ -1,7 +1,6 @@
 import { useComments, useUserFollowed } from "@/src/api/read";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
-import { queryKeys } from "@/src/api/read/query-keys";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import type { CommentsResponse } from "@/src/api/types";
 import { MediaPostDetailSkeleton } from "@/src/components/molecules";
@@ -93,13 +92,11 @@ export default function PostDetailScreen() {
       reportedStalePostDetailRef.current !== stalePostDetailKey
     ) {
       reportedStalePostDetailRef.current = stalePostDetailKey;
-      Sentry.captureMessage("Stale post detail suppressed during notification flow", {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Stale post detail suppressed during notification flow",
         level: "warning",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "stale-post-detail-suppressed",
-        },
-        extra: {
+        data: {
           id: params.id,
           highlight: params.highlight,
           routeRootPostId,
@@ -184,13 +181,9 @@ function LegacyPostDetailScreen() {
 
   const isFocused = useIsFocused();
 
-  useEffect(() => {
-    if (highlight && id) {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.comments(id, currentUser?.walletAddress ?? undefined),
-      });
-    }
-  }, [currentUser?.walletAddress, highlight, id, queryClient]);
+  // Note: no invalidate-on-highlight here. The inbox seed already marks the
+  // comments key stale (refetchType "none"), the mount fetch below picks that
+  // up, and the highlight-scroll hook retries if the comment is still missing.
 
   // Fetch comments from API
   const {
@@ -381,7 +374,6 @@ function LegacyPostDetailScreen() {
     id,
     isFocused,
     isViewingComment,
-    queryClient,
   });
   const {
     actualRootPost,

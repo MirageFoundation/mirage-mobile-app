@@ -170,7 +170,10 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);
 
-  const { composedGesture, animatedStyle, resetTransforms } = usePreviewZoomGesture();
+  const { composedGesture, animatedStyle, resetTransforms } = usePreviewZoomGesture(
+    screenWidth,
+    screenHeight,
+  );
 
   const handleClose = useCallback(() => {
     if (!hasGallery && media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 0.5) {

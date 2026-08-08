@@ -12,43 +12,6 @@ export type CommentVoteOverrides = Record<
 
 export type CommentEditOverrides = Record<string, string>;
 
-export const MIN_FOCUSED_COMMENT_COUNT = 5;
-
-function collectCommentIds(comment: Comment, ids: Set<string>) {
-  ids.add(comment.id);
-  comment.replies?.forEach((reply) => collectCommentIds(reply, ids));
-}
-
-function commentTreeContainsId(comment: Comment, targetIds: Set<string>): boolean {
-  if (targetIds.has(comment.id)) return true;
-  return comment.replies?.some((reply) => commentTreeContainsId(reply, targetIds)) ?? false;
-}
-
-export function appendSupplementalCommentsForMinimum(
-  focusedComments: Comment[],
-  candidateComments: Comment[],
-  minimumCount = MIN_FOCUSED_COMMENT_COUNT,
-): Comment[] {
-  const focusedCount = countCommentsInTree(focusedComments);
-  if (focusedCount >= minimumCount) return focusedComments;
-
-  const focusedIds = new Set<string>();
-  focusedComments.forEach((comment) => collectCommentIds(comment, focusedIds));
-
-  const supplemental: Comment[] = [];
-  let totalCount = focusedCount;
-  for (const candidate of candidateComments) {
-    if (commentTreeContainsId(candidate, focusedIds)) continue;
-    supplemental.push(candidate);
-    totalCount += countCommentsInTree([candidate]);
-    if (totalCount >= minimumCount) break;
-  }
-
-  return supplemental.length > 0
-    ? [...focusedComments, ...supplemental]
-    : focusedComments;
-}
-
 export function findCommentById(
   items: Comment[],
   targetId?: string | null,
@@ -92,11 +55,9 @@ type BuildPostDetailCommentsInput = {
   actualRootPostId?: string | null;
   commentsData?: CommentsResponse;
   contextComments: ApiPost[];
-  contextDepth: number;
   focusedCommentData?: CommentsResponse;
   focusedCommentId?: string | null;
   fullThreadCommentsData?: CommentsResponse;
-  isLoadingContext: boolean;
   isViewingComment: boolean;
   showFocusedThread: boolean;
 };
@@ -105,11 +66,9 @@ export function buildPostDetailComments({
   actualRootPostId,
   commentsData,
   contextComments,
-  contextDepth,
   focusedCommentData,
   focusedCommentId,
   fullThreadCommentsData,
-  isLoadingContext,
   isViewingComment,
   showFocusedThread,
 }: BuildPostDetailCommentsInput): Comment[] {
@@ -126,7 +85,10 @@ export function buildPostDetailComments({
   if (focusedCommentId && !focusedApiRoot) return [];
 
   if (focusedCommentId && focusedApiRoot) {
-    if (contextDepth > 0 && isLoadingContext) return [];
+    // Render the focused comment immediately, even while ancestor context is
+    // still loading. Loaded ancestors wrap around it once they arrive instead
+    // of blanking the whole list (previously caused a seconds-long empty gap
+    // between the post/banner and the comments).
     const contextRootId = actualRootPostId?.toLowerCase();
     const focusedPostId = focusedApiRoot.post_id.toLowerCase();
     const context = contextComments
@@ -150,10 +112,10 @@ export function buildPostDetailComments({
       focusedCommentId,
     );
     if (expandedFocusedBranch) {
-      return appendSupplementalCommentsForMinimum(
-        [expandedFocusedBranch],
-        supplementalComments,
-      );
+      // Show only the focused branch; unrelated comments are reachable via
+      // the "Full thread" affordance rather than silently padded in (which
+      // made users think they were looking at the wrong comment).
+      return [expandedFocusedBranch];
     }
     const focusedFromFullBranch = context.length > 5
       ? findCommentById(supplementalComments, focusedCommentId)
@@ -178,11 +140,7 @@ export function buildPostDetailComments({
         replyCount: Math.max(context[index].replyCount ?? 0, 1),
       };
     }
-    const focusedThread = [{ ...thread, isFocusedContext: true }];
-    return appendSupplementalCommentsForMinimum(
-      focusedThread,
-      supplementalComments,
-    );
+    return [{ ...thread, isFocusedContext: true }];
   }
 
   if (!commentsData?.children) return [];
@@ -307,8 +265,17 @@ export function mergePostDetailComments({
   optimisticTopLevelComments,
 }: MergePostDetailCommentsInput): Comment[] {
   const localIds = new Set(optimisticTopLevelComments.map((comment) => comment.id));
+  const serverCommentsById = new Map(comments.map((comment) => [comment.id, comment]));
   const dedupedComments = comments.filter((comment) => !localIds.has(comment.id));
-  const merged = [...optimisticTopLevelComments, ...dedupedComments];
+  // Once the server knows a confirmed optimistic comment, adopt its server
+  // timestamp so the sort below is stable across the optimistic -> server
+  // handoff (prevents a post-hoc reorder jump when the optimistic copy is
+  // pruned and the client clock disagreed with the chain timestamp).
+  const stabilizedOptimistic = optimisticTopLevelComments.map((comment) => {
+    const serverCopy = serverCommentsById.get(comment.id);
+    return serverCopy ? { ...comment, createdAt: serverCopy.createdAt } : comment;
+  });
+  const merged = [...stabilizedOptimistic, ...dedupedComments];
   return filterComments(
     merged
       .map((comment) => applyOptimisticReplies(comment, optimisticReplyComments))

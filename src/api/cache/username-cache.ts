@@ -110,7 +110,6 @@ export function updateUsernameAcrossCaches(
   updateMatchingQueries(queryClient, queryKeys.postsRoot(), updateContent);
   updateMatchingQueries(queryClient, queryKeys.userPostsRoot(), updateContent);
   updateMatchingQueries(queryClient, queryKeys.commentsRoot(), updateContent);
-  updateMatchingQueries(queryClient, queryKeys.commentContextRoot(), updateContent);
   updateMatchingQueries(queryClient, queryKeys.batchUsernamesRoot(), (old) => {
     if (!old || typeof old !== "object") return old;
     return { ...(old as Record<string, unknown>), [walletAddress.toLowerCase()]: username };
@@ -127,7 +126,6 @@ export function cancelUsernameRelatedQueries(
     queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() }),
     queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() }),
     queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() }),
-    queryClient.cancelQueries({ queryKey: queryKeys.commentContextRoot() }),
   ]);
 }
 
@@ -143,6 +141,5 @@ export function invalidateUsernameRelatedQueries(
     queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.userPostsRoot() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.commentsRoot() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.commentContextRoot() }),
   ]);
 }

@@ -9,6 +9,7 @@ import type {
 } from "react-native-reanimated";
 
 import type { Comment, Post } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 
 export type MediaPostDetailFocusedMode = "single" | "context" | "full";
 
@@ -146,7 +147,7 @@ export function createMediaPostDetailFooterContract(
     presentation,
     followState: {
       isFollowing: post.isFollowing ?? followedUsers.includes(post.author.id),
-      isTopicFollowed: post.topic ? followedTopics.includes(post.topic) : false,
+      isTopicFollowed: isTopicFollowed(followedTopics, post.topic),
       topic: post.topic,
       isOwnAuthor: currentUserId === post.author.id,
     },

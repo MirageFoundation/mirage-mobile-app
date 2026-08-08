@@ -1,10 +1,10 @@
 import * as Sentry from "@sentry/react-native";
 import { useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useComments } from "@/src/api/read";
-import { getRootPostId } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { readThreadAncestors } from "@/src/api/read/thread-ancestors";
 import type { CommentsResponse } from "@/src/api/types";
 import {
   useAuthStore,
@@ -34,34 +34,22 @@ export function usePostDetailMediaRoute(params: PostDetailRouteParams) {
   const savedPostsForRouting = useSavedPostsStore((s) => s.savedPosts as RoutablePost[]);
   const historyEntriesForRouting = useHistoryStore((s) => s.entries as RoutablePost[]);
 
+  // B-2.6: this single response carries the focused comment, its reply subtree,
+  // AND its ancestor chain (root post first). Routing needs nothing else — the
+  // old `get_root_post_id` lookup and second `get_comments(rootId)` are gone.
   const routeCommentsQuery = useComments(params.id!, {
     enabled: !!params.id && (!!params.highlight || !!params.depth),
   });
-  const routeRootIdQuery = useQuery({
-    queryKey: queryKeys.rootPostId(params.id!),
-    queryFn: () => getRootPostId({ comment_id: params.id! }),
-    enabled: !!params.id && (!!params.highlight || !!params.depth) && !routeCommentsQuery.data,
-    staleTime: 1000 * 60 * 60,
-  });
-  const routeCommentRoot = routeCommentsQuery.data?.root;
-  const isRouteComment = !!(
-    routeCommentRoot?.post_id &&
-    routeCommentRoot.root_post_id &&
-    routeCommentRoot.root_post_id.toLowerCase() !== routeCommentRoot.post_id.toLowerCase()
-  );
-  const routeRootPostId = isRouteComment
-    ? routeCommentRoot?.root_post_id
-    : routeRootIdQuery.data?.root_post_id ?? null;
+  const thread = readThreadAncestors(routeCommentsQuery.data);
+  const isRouteComment = thread.isComment;
+  const routeRootPostId = thread.rootPostId;
   const routeHighlightCommentId =
     params.highlight ??
     (isRouteComment
-      ? routeCommentRoot?.post_id
+      ? routeCommentsQuery.data?.root?.post_id
       : routeRootPostId && params.id !== routeRootPostId
       ? params.id
       : undefined);
-  const routeRootCommentsQuery = useComments(routeRootPostId!, {
-    enabled: !!routeRootPostId,
-  });
   const unresolvedFocusedRouteCapturedRef = useRef(false);
 
   useEffect(() => {
@@ -75,45 +63,18 @@ export function usePostDetailMediaRoute(params: PostDetailRouteParams) {
         },
       });
     }
-    if (routeRootIdQuery.isError) {
-      Sentry.captureException(routeRootIdQuery.error, {
-        tags: { feature: "post-routing", operation: "focused-route-root-id" },
-        extra: {
-          routePostId: params.id,
-          highlight: params.highlight,
-          depth: params.depth,
-        },
-      });
-    }
-    if (routeRootCommentsQuery.isError) {
-      Sentry.captureException(routeRootCommentsQuery.error, {
-        tags: { feature: "post-routing", operation: "focused-route-root-comments" },
-        extra: {
-          routePostId: params.id,
-          rootPostId: routeRootPostId,
-          highlight: params.highlight,
-          depth: params.depth,
-        },
-      });
-    }
   }, [
     routeCommentsQuery.isError,
     routeCommentsQuery.error,
-    routeRootIdQuery.isError,
-    routeRootIdQuery.error,
-    routeRootCommentsQuery.isError,
-    routeRootCommentsQuery.error,
     params.id,
     params.highlight,
     params.depth,
-    routeRootPostId,
   ]);
 
   const cachedRoot = useMemo(() => {
     if (!params.id) return null;
-    if (!isRouteComment && routeCommentsQuery.data?.root) {
-      return routeCommentsQuery.data.root;
-    }
+    // The thread response carries the root post directly.
+    if (thread.rootPost) return thread.rootPost;
     if (routeRootPostId) {
       const rootComments = queryClient.getQueryData<CommentsResponse>(
         queryKeys.comments(routeRootPostId, currentUserWallet ?? undefined),
@@ -129,36 +90,42 @@ export function usePostDetailMediaRoute(params: PostDetailRouteParams) {
     const historyPost = historyEntriesForRouting.find((post) => post.id === params.id);
     if (historyPost) return historyPost;
 
-    const cachedQueries = queryClient.getQueriesData({});
-    for (const [, queryData] of cachedQueries) {
-      const matched = findPostInCachedData(queryData, params.id);
-      if (matched) return matched;
+    // Bounded fallback: only scan the query families that can actually
+    // contain posts, instead of iterating the entire query cache with a
+    // deep recursive search on the post-open render path (B-2.8).
+    const postBearingRoots = [
+      queryKeys.postsRoot(),
+      queryKeys.userPostsRoot(),
+      queryKeys.commentsRoot(),
+    ];
+    for (const rootKey of postBearingRoots) {
+      const cachedQueries = queryClient.getQueriesData({ queryKey: rootKey });
+      for (const [, queryData] of cachedQueries) {
+        const matched = findPostInCachedData(queryData, params.id);
+        if (matched) return matched;
+      }
     }
     return null;
   }, [
     params.id,
-    isRouteComment,
-    routeCommentsQuery.data?.root,
     routeRootPostId,
+    thread.rootPost,
     currentUserWallet,
     queryClient,
     savedPostsForRouting,
     historyEntriesForRouting,
   ]);
 
-  const routingRoot = routeRootCommentsQuery.data?.root ?? cachedRoot;
-  const useImmersive = cachedPostHasImmersiveMedia(routingRoot);
+  const useImmersive = cachedPostHasImmersiveMedia(cachedRoot);
   const isResolvingFocusedMediaRoute = !!(
     params.id &&
     (params.highlight || params.depth) &&
-    (routeCommentsQuery.isLoading ||
-      routeRootIdQuery.isLoading ||
-      (routeRootPostId && routeRootCommentsQuery.isLoading))
+    routeCommentsQuery.isLoading
   );
 
   useEffect(() => {
     if (!params.id || (!params.highlight && !params.depth)) return;
-    if (isResolvingFocusedMediaRoute || routingRoot || unresolvedFocusedRouteCapturedRef.current) return;
+    if (isResolvingFocusedMediaRoute || cachedRoot || unresolvedFocusedRouteCapturedRef.current) return;
     unresolvedFocusedRouteCapturedRef.current = true;
     Sentry.captureMessage("Focused post route resolved without root post", {
       level: "warning",
@@ -169,8 +136,7 @@ export function usePostDetailMediaRoute(params: PostDetailRouteParams) {
         highlight: params.highlight,
         depth: params.depth,
         hasRouteCommentsData: !!routeCommentsQuery.data,
-        hasRouteRootIdData: !!routeRootIdQuery.data,
-        hasRouteRootCommentsData: !!routeRootCommentsQuery.data,
+        threadResolved: thread.resolved,
       },
     });
   }, [
@@ -178,11 +144,10 @@ export function usePostDetailMediaRoute(params: PostDetailRouteParams) {
     params.highlight,
     params.depth,
     isResolvingFocusedMediaRoute,
-    routingRoot,
+    cachedRoot,
     routeRootPostId,
     routeCommentsQuery.data,
-    routeRootIdQuery.data,
-    routeRootCommentsQuery.data,
+    thread.resolved,
   ]);
 
   return {

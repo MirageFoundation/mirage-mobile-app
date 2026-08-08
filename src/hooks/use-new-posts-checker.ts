@@ -9,6 +9,9 @@ export type NewPostAvatar = {
   username: string;
 };
 
+// Let the list settle (and any explicit refresh land) before the first poll.
+const INITIAL_CHECK_DELAY_MS = 800;
+
 type UseNewPostsCheckerOptions = {
   feed?: "home" | "following";
   by?: "magic" | "newest";
@@ -36,6 +39,7 @@ export function useNewPostsChecker({
   latestPostTimestampRef.current = latestPostTimestamp;
   const hasNewPostsRef = useRef(false);
   const checkGenerationRef = useRef(0);
+  const lastCheckedAtRef = useRef(Number.NEGATIVE_INFINITY);
   const prefetchedNewPostsResponseRef = useRef<PostsResponse | null>(null);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -68,6 +72,7 @@ export function useNewPostsChecker({
   const checkForNewPosts = useCallback(async () => {
     if (baselineTimestampRef.current == null) return;
     const checkGeneration = checkGenerationRef.current;
+    lastCheckedAtRef.current = Date.now();
     try {
       const result = await getPosts({
         limit: 10,
@@ -105,10 +110,21 @@ export function useNewPostsChecker({
     } catch {}
   }, [feed, by, topic, allowed_tags, walletAddress]);
 
+  // Feed queries never refetch themselves (see infinite-posts-policy), so this
+  // poll is the only thing that discovers new posts. Run one check shortly
+  // after the feed gains focus — otherwise a hydrated or previously visited
+  // feed sits on cached posts for a full interval with no pill to tap.
   useEffect(() => {
     if (!enabled || !isFocused) return;
+    const initialCheck = setTimeout(() => {
+      if (Date.now() - lastCheckedAtRef.current < intervalMs) return;
+      void checkForNewPosts();
+    }, INITIAL_CHECK_DELAY_MS);
     const interval = setInterval(checkForNewPosts, intervalMs);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialCheck);
+      clearInterval(interval);
+    };
   }, [enabled, isFocused, checkForNewPosts, intervalMs]);
 
   useAppState({
@@ -127,7 +143,13 @@ export function useNewPostsChecker({
     setNewPostAvatars([]);
     setNewPostCount(0);
     prefetchedNewPostsResponseRef.current = null;
-    baselineTimestampRef.current = null;
+    // Re-arm against the current top of the feed rather than parking on null.
+    // A manual refresh that returns the same newest post leaves
+    // `latestPostTimestamp` unchanged, so the dependency-driven effect below
+    // would never fire again and the checker would stay dormant for the rest
+    // of the session.
+    pendingBaselineRestore.current = true;
+    baselineTimestampRef.current = latestPostTimestampRef.current;
   }, []);
 
   const resetBaseline = useCallback((newTimestamp: number | null) => {

@@ -16,8 +16,14 @@ import { Text } from "@/src/components/ui/primitives";
 import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useSendTokens } from "@/src/api/write/hooks/use-send-tokens";
 import { useToast } from "@/src/providers/toast-provider";
+import {
+  generateActionId,
+  getActionLabel,
+  usePowQueueStore,
+} from "@/src/services/pow-queue";
 import { formatCompactNumber } from "@/src/utils/format-number";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 
 type GiftMirageSheetProps = {
   recipientAddress: string;
@@ -38,52 +44,39 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
     const insets = useSafeAreaInsets();
     const toast = useToast();
     const amountInputRef = useRef<any>(null);
-    const keyboardRestoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [isPresented, setIsPresented] = useState(false);
-    const { data: userStatus } = useUserStatus({ enabled: isPresented });
-    const sendTokensMutation = useSendTokens();
+    const { data: userStatus, isPending: isBalanceLoading } = useUserStatus({
+      enabled: isPresented,
+    });
 
     const [amountText, setAmountText] = useState("");
-    const [isSending, setIsSending] = useState(false);
     const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    const sendTokensMutation = useSendTokens();
+    const sendAsyncRef = useRef(sendTokensMutation.mutateAsync);
+    const sendGuardRef = useRef(createDuplicateActionGuard());
+    useEffect(() => {
+      sendAsyncRef.current = sendTokensMutation.mutateAsync;
+    }, [sendTokensMutation.mutateAsync]);
+    const enqueue = usePowQueueStore((state) => state.enqueue);
 
     useEffect(() => {
       const showSub = Keyboard.addListener(
         Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-        () => {
-          if (keyboardRestoreTimeoutRef.current) {
-            clearTimeout(keyboardRestoreTimeoutRef.current);
-            keyboardRestoreTimeoutRef.current = null;
-          }
-          setKeyboardVisible(true);
-        },
+        () => setKeyboardVisible(true),
       );
-      const hideSub = Keyboard.addListener(
-        "keyboardDidHide",
-        () => {
-          setKeyboardVisible(false);
-          if (keyboardRestoreTimeoutRef.current) {
-            clearTimeout(keyboardRestoreTimeoutRef.current);
-          }
-          keyboardRestoreTimeoutRef.current = setTimeout(() => {
-            bottomSheetRef.current?.snapToIndex(0);
-            keyboardRestoreTimeoutRef.current = null;
-          }, Platform.OS === "ios" ? 60 : 0);
-        },
+      const hideSub = Keyboard.addListener("keyboardDidHide", () =>
+        setKeyboardVisible(false),
       );
       return () => {
-        if (keyboardRestoreTimeoutRef.current) {
-          clearTimeout(keyboardRestoreTimeoutRef.current);
-          keyboardRestoreTimeoutRef.current = null;
-        }
         showSub.remove();
         hideSub.remove();
       };
     }, []);
 
-    const balance = userStatus?.balance ?? 0;
-    const balanceMirage = balance / 1_000_000;
+    const balanceKnown = userStatus != null;
+    const balanceMirage = (userStatus?.balance ?? 0) / 1_000_000;
 
     const parsedAmount = useMemo(() => {
       const n = Number(amountText);
@@ -91,16 +84,17 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
       return n;
     }, [amountText]);
 
-    const insufficientBalance = parsedAmount > 0 && parsedAmount > balanceMirage;
-    const canSend = parsedAmount > 0 && !insufficientBalance && !isSending;
+    // Only flag insufficient balance once we actually know the balance;
+    // an unknown balance must not block sending (server validates anyway).
+    const insufficientBalance =
+      balanceKnown && parsedAmount > 0 && parsedAmount > balanceMirage;
+    const canSend = parsedAmount > 0 && !insufficientBalance;
 
     const present = useCallback(() => {
       setIsPresented(true);
       setAmountText("");
-      setIsSending(false);
-      sendTokensMutation.reset();
       bottomSheetRef.current?.present();
-    }, [sendTokensMutation]);
+    }, []);
 
     const dismiss = useCallback(() => {
       bottomSheetRef.current?.dismiss();
@@ -125,47 +119,49 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
-          pressBehavior={isSending ? "none" : "close"}
+          pressBehavior="close"
         />
       ),
-      [isSending],
+      [],
     );
 
-    const handleSend = useCallback(async () => {
-      if (!canSend || !recipientAddress) return;
-      setIsSending(true);
+    // C-3: gifts go through the shared PoW queue like votes/comments — the
+    // sheet dismisses immediately and the queue toast owns progress and the
+    // success/failure overlay. No blocking modal transaction.
+    const handleSend = useCallback(() => {
+      if (!canSend || !recipientAddress || !sendGuardRef.current.tryAcquire()) return;
+      const amountMirage = parsedAmount;
+      const umirage = Math.floor(amountMirage * 1_000_000);
       triggerHaptic("medium");
+      amountInputRef.current?.blur();
+      Keyboard.dismiss();
+      dismiss();
 
-      try {
-        const umirage = Math.floor(parsedAmount * 1_000_000);
-        await sendTokensMutation.mutateAsync({
-          recipient: recipientAddress,
-          amount: umirage,
-        });
-        triggerHaptic("success");
-        toast.success(`${parsedAmount} MIRAGE sent!`);
-        amountInputRef.current?.blur();
-        Keyboard.dismiss();
-        dismiss();
-        onSuccess?.();
-      } catch (err) {
-        triggerHaptic("error");
-        Sentry.captureException(err, { tags: { feature: "gift-mirage" } });
-        let errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (isAxiosError(err)) {
-          const data = err.response?.data;
-          if (typeof data === "string" && data.trim()) {
-            errorMessage = data;
-          } else if (data && typeof data === "object") {
-            const msg = (data as any).error ?? (data as any).message;
-            if (msg) errorMessage = String(msg);
-          }
-        }
-        toast.error(errorMessage);
-      } finally {
-        setIsSending(false);
-      }
-    }, [canSend, recipientAddress, parsedAmount, sendTokensMutation, toast, dismiss, onSuccess]);
+      enqueue({
+        id: generateActionId(),
+        type: "send_tokens",
+        label: getActionLabel("send_tokens"),
+        execute: () =>
+          sendAsyncRef.current({
+            recipient: recipientAddress,
+            amount: umirage,
+          }),
+        onSuccess: () => {
+          sendGuardRef.current.release();
+          triggerHaptic("success");
+          onSuccess?.();
+        },
+        onError: (err) => {
+          sendGuardRef.current.release();
+          triggerHaptic("error");
+          Sentry.captureException(err, { tags: { feature: "gift-mirage" } });
+          toast.error("Gift wasn't sent", getApiErrorMessage(err));
+        },
+        onRollback: () => {
+          sendGuardRef.current.release();
+        },
+      });
+    }, [canSend, recipientAddress, parsedAmount, enqueue, toast, dismiss, onSuccess]);
 
     const footerHeight = keyboardVisible ? 8 : (Platform.OS === "ios" ? insets.bottom : insets.bottom + 30);
 
@@ -173,9 +169,7 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing
-        enablePanDownToClose={!isSending}
-        enableHandlePanningGesture={!isSending}
-        enableContentPanningGesture={!isSending}
+        enablePanDownToClose
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustPan"
@@ -189,20 +183,24 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
             <Text size="lg" weight="bold">
               Gift Mirage
             </Text>
-            <Pressable
-              onPress={dismiss}
-              disabled={isSending}
-              style={[styles.closeButton, isSending && { opacity: 0.5 }]}
-            >
+            <Pressable onPress={dismiss} style={styles.closeButton}>
               <EvilIcons name="close" size={24} color={theme.colors.text.default} />
             </Pressable>
           </View>
 
           <View style={styles.balanceRow}>
             <Text size="md" mode="subtle">Balance: </Text>
-            <Text size="md" weight="bold">
-              {formatCompactNumber(balanceMirage)} MIRAGE
-            </Text>
+            {balanceKnown ? (
+              <Text size="md" weight="bold">
+                {formatCompactNumber(balanceMirage)} MIRAGE
+              </Text>
+            ) : isBalanceLoading ? (
+              <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+            ) : (
+              <Text size="md" weight="bold" mode="subtle">
+                — MIRAGE
+              </Text>
+            )}
           </View>
 
           <View
@@ -263,17 +261,13 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
               !canSend && { opacity: 0.5 },
             ]}
           >
-            {isSending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text
-                size="md"
-                weight="bold"
-                style={{ color: canSend ? "#fff" : theme.colors.text.subtle }}
-              >
-                Send
-              </Text>
-            )}
+            <Text
+              size="md"
+              weight="bold"
+              style={{ color: canSend ? "#fff" : theme.colors.text.subtle }}
+            >
+              Send
+            </Text>
           </Pressable>
 
           <View style={{ height: footerHeight }} />
@@ -347,5 +341,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: theme.spacing.sm,
+  },
+  sendingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
   },
 }));

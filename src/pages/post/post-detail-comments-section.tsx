@@ -45,6 +45,7 @@ type PostDetailCommentsSectionProps = {
   onRefreshComments: () => void;
   onReplyToComment: (comment: Comment) => void;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onScrollBeginDrag?: () => void;
 };
 
 export const PostDetailCommentsSection = forwardRef<
@@ -79,6 +80,7 @@ export const PostDetailCommentsSection = forwardRef<
       onRefreshComments,
       onReplyToComment,
       onScroll,
+      onScrollBeginDrag,
     },
     ref,
   ) => {
@@ -182,6 +184,7 @@ export const PostDetailCommentsSection = forwardRef<
         }}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
         refreshControl={
@@ -192,13 +195,22 @@ export const PostDetailCommentsSection = forwardRef<
           />
         }
         onScrollToIndexFailed={(info) => {
+          if (info.index < 0 || info.index >= commentsLengthRef.current) return;
+          // averageItemLength x index is wildly wrong for variable-height
+          // media comments, so only use it as a rough jump to force the
+          // target into the render window, then retry the precise scroll.
+          flatListRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: false,
+          });
           setTimeout(() => {
             if (info.index < 0 || info.index >= commentsLengthRef.current) return;
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
+            flatListRef.current?.scrollToIndex({
+              index: info.index,
               animated: true,
+              viewPosition: 0.1,
             });
-          }, 100);
+          }, 250);
         }}
         // Disabled on all platforms: nested CommentThread rows with Reanimated
         // `entering` (FadeInUp) + `layout` animations get incorrectly clipped on

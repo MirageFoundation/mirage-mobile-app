@@ -1,12 +1,17 @@
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { router } from "@/src/navigation/guarded-router";
+import { isTabRoute } from "@/src/navigation/route-map";
 
+// Legacy group-qualified form, kept for compatibility with any stored routes.
 const AUTH_ROUTE_PREFIX = "/(auth)/";
-const LOGGED_OUT_FALLBACK_ROUTE = "/(tabs)";
+const AUTH_ROUTE_PATHS = ["/login", "/username", "/recovery-phrase"] as const;
+const LOGGED_OUT_FALLBACK_ROUTE = "/";
 
 export function isAuthRoute(route: string): boolean {
-  return route.startsWith(AUTH_ROUTE_PREFIX);
+  if (route.startsWith(AUTH_ROUTE_PREFIX)) return true;
+  const pathname = route.split("?", 1)[0] ?? route;
+  return (AUTH_ROUTE_PATHS as readonly string[]).includes(pathname);
 }
 
 export function resolveAuthNavigationTarget(route: string): string {
@@ -52,7 +57,7 @@ export function flushPendingRouteAfterAuth(): boolean {
     return false;
   }
 
-  if (pendingRoute.startsWith("/(tabs)")) {
+  if (isTabRoute(pendingRoute)) {
     router.navigate(pendingRoute as any);
   } else {
     router.push(pendingRoute as any);

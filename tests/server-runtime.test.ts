@@ -70,10 +70,6 @@ describe("viewer query identity", () => {
         queryKeys.comments("post-1", viewerB),
       ],
       [
-        queryKeys.commentContext("comment-1", 5, viewerA),
-        queryKeys.commentContext("comment-1", 5, viewerB),
-      ],
-      [
         queryKeys.search("mirage", "posts", 20, "sensitive", viewerA),
         queryKeys.search("mirage", "posts", 20, "sensitive", viewerB),
       ],

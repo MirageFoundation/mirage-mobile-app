@@ -20,10 +20,6 @@ import { identifyUser, isAnalyticsActive, setAnalyticsTrackingEnabled, trackEven
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
-import {
-  flushPendingAuthRoute,
-  flushPendingRouteAfterAuth,
-} from "@/src/navigation/auth-navigation";
 import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { Alert, AppState } from "react-native";
@@ -138,20 +134,6 @@ export const RootProvider = memo(
       });
       return () => sub.remove();
     }, []);
-
-    const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
-
-    useEffect(() => {
-      const timer = setTimeout(() => flushPendingAuthRoute(), 1000);
-      return () => clearTimeout(timer);
-    }, []);
-
-    useEffect(() => {
-      if (!isLoggedIn) return;
-      if (!hasSeenAdultPrompt) return;
-      const timer = setTimeout(() => flushPendingRouteAfterAuth(), 1000);
-      return () => clearTimeout(timer);
-    }, [isLoggedIn, hasSeenAdultPrompt]);
 
     useEffect(() => {
       if (isLoggedIn) {

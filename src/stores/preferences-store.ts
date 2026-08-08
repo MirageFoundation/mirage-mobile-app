@@ -211,22 +211,24 @@ export const usePreferencesStore = create<PreferencesState>()(
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
       setAdultPromptDismissedAt: (timestamp) =>
         set({ adultPromptDismissedAt: timestamp }),
+      // User keys are lowercased so the dismiss/snooze state survives any
+      // address-casing differences across sessions (BUG-016).
       dismissModerationReminder: (userId) =>
         set((state) => ({
           moderationReminderUnderstoodByUser: {
             ...state.moderationReminderUnderstoodByUser,
-            [userId]: true,
+            [userId.toLowerCase()]: true,
           },
           moderationReminderSnoozedUntilByUser: {
             ...state.moderationReminderSnoozedUntilByUser,
-            [userId]: 0,
+            [userId.toLowerCase()]: 0,
           },
         })),
       snoozeModerationReminder: (userId, until) =>
         set((state) => ({
           moderationReminderSnoozedUntilByUser: {
             ...state.moderationReminderSnoozedUntilByUser,
-            [userId]: until,
+            [userId.toLowerCase()]: until,
           },
         })),
       setSelectedContentTypes: (types) => {
@@ -284,7 +286,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 7,
+      version: 8,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -338,6 +340,24 @@ export const usePreferencesStore = create<PreferencesState>()(
             level: "info",
             data: { from: version, to: 7 },
           });
+        }
+
+        if (version < 8) {
+          // Lowercase moderation-reminder user keys so lookups are
+          // case-insensitive across sessions (BUG-016).
+          const lowerKeys = <T,>(map?: Record<string, T>): Record<string, T> => {
+            const out: Record<string, T> = {};
+            for (const [key, value] of Object.entries(map ?? {})) {
+              out[key.toLowerCase()] = value;
+            }
+            return out;
+          };
+          state.moderationReminderUnderstoodByUser = lowerKeys(
+            state.moderationReminderUnderstoodByUser,
+          );
+          state.moderationReminderSnoozedUntilByUser = lowerKeys(
+            state.moderationReminderSnoozedUntilByUser,
+          );
         }
 
         return state as PreferencesState;

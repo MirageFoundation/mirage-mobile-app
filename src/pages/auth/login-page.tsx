@@ -140,8 +140,11 @@ export default function LoginScreen() {
 
       triggerHaptic("success");
 
-      // Navigate to home
-      router.dismissAll();
+      // Exit the auth modal decisively. `dismissAll()` only unwinds to the
+      // first screen of the *nearest* stack — the (auth) modal's own Stack —
+      // so when Login was reached from the "Hello Friend" username screen the
+      // user landed back on Registration with a live session (BUG-004).
+      router.replace("/");
     } catch (error) {
       console.error("[Login] Failed to import wallet:", error);
       triggerHaptic("error");
@@ -396,7 +399,7 @@ export default function LoginScreen() {
                   setShowRegPopup(false);
                   toast.success(`Switched to ${target}`);
                   if (config.registration_enabled) {
-                    router.replace("/(auth)/username");
+                    router.replace("/username");
                   }
                 } catch {
                   apiClient.setBaseUrl(`https://${activeServer}`);
@@ -451,7 +454,7 @@ export default function LoginScreen() {
               setShowRegPopup(true);
               return;
             }
-            router.replace("/(auth)/username");
+            router.replace("/username");
           }}
           style={styles.createAccountButton}
         >

@@ -4,14 +4,8 @@
  * POST /upload_media - Upload media through the mobile backend
  */
 
-import { api, apiClient } from "@/src/api/client";
+import { apiClient } from "@/src/api/client";
 import * as Sentry from "@sentry/react-native";
-import {
-  createUploadTask,
-  FileSystemUploadType,
-  FileSystemSessionType,
-} from "expo-file-system/legacy";
-import type { FileSystemUploadResult } from "expo-file-system/legacy";
 import { AppState, Platform } from "react-native";
 import {
   backgroundUpload,
@@ -20,7 +14,6 @@ import {
   UploaderHttpMethod,
   UploadType,
 } from "react-native-compressor";
-import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
 import { classifyUploadError } from "@/src/api/read/utils/media-upload-telemetry";
 
 // ============================================
@@ -28,10 +21,6 @@ import { classifyUploadError } from "@/src/api/read/utils/media-upload-telemetry
 // ============================================
 
 export type MediaType = "image" | "video";
-
-export interface GetUploadUrlParams {
-  type: MediaType;
-}
 
 interface UploadMediaResponse {
   url?: string;
@@ -299,23 +288,6 @@ async function withRetry<T>(
 // Endpoints
 // ============================================
 
-export async function getUploadUrl(
-  params: GetUploadUrlParams
-): Promise<ImageUploadResponse | VideoUploadResponse> {
-  return api.post<ImageUploadResponse | VideoUploadResponse>(
-    "/get_upload_url",
-    params
-  );
-}
-
-export async function getImageUploadUrl(): Promise<ImageUploadResponse> {
-  return api.post<ImageUploadResponse>("/get_upload_url", { type: "image" });
-}
-
-export async function getVideoUploadUrl(): Promise<VideoUploadResponse> {
-  return api.post<VideoUploadResponse>("/get_upload_url", { type: "video" });
-}
-
 export async function uploadMedia(
   localUri: string,
   mediaType: MediaType,
@@ -432,77 +404,12 @@ export async function uploadMedia(
   });
 }
 
-// ============================================
-// Image Upload (expo-file-system with retry)
-// ============================================
-
-export async function uploadToSignedUrl(
-  uploadUrl: string,
-  localUri: string,
-  contentType: string,
-  signal?: AbortSignal
-): Promise<FileSystemUploadResult> {
-  console.log("[MediaUpload] Starting upload to signed URL");
-
-  const normalizedUri = normalizeFileUri(localUri);
-
-  const uploadFn = async (): Promise<FileSystemUploadResult> => {
-    const task = createUploadTask(
-      uploadUrl,
-      normalizedUri,
-      {
-        uploadType: FileSystemUploadType.MULTIPART,
-        fieldName: "file",
-        mimeType: contentType,
-        parameters: {},
-        headers: {},
-        sessionType: FileSystemSessionType.FOREGROUND,
-        httpMethod: "POST",
-      }
-    );
-
-    if (signal) {
-      const onAbort = () => {
-        task.cancelAsync();
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        task.cancelAsync();
-        reject(new Error(`Image upload timed out after ${IMAGE_UPLOAD_TIMEOUT_MS / 1000}s`));
-      }, IMAGE_UPLOAD_TIMEOUT_MS);
-    });
-
-    try {
-      const result = await Promise.race([
-        task.uploadAsync(),
-        timeoutPromise,
-      ]);
-      if (!result) throw new Error("Upload returned no result");
-      if (result.status < 200 || result.status >= 300) {
-        throw Object.assign(
-          new Error(`Upload failed: ${result.status}`),
-          { status: result.status, responseText: result.body }
-        );
-      }
-      console.log("[MediaUpload] Upload complete, status:", result.status);
-      return result;
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  };
-
-  return withRetry(uploadFn, { label: "image-upload", signal });
-}
-
-export function getImageUrl(
-  uploadResponse: ImageUploadResponse,
-  variant: string = "public"
+function getImageUrl(
+  accountHash: string,
+  id: string,
+  variant: string = "public",
 ): string {
-  return `https://imagedelivery.net/${uploadResponse.accountHash}/${uploadResponse.id}/${variant}`;
+  return `https://imagedelivery.net/${accountHash}/${id}/${variant}`;
 }
 
 // ============================================
@@ -532,22 +439,23 @@ export async function uploadImage(
   });
 
   try {
+    onProgress?.(0, "processing");
     const preparedImage = await prepareImageForUpload(localUri, contentType);
+    onProgress?.(100, "processing");
+    onProgress?.(0, "uploading");
     const uploadResponse = await uploadMedia(
       preparedImage.uri,
       "image",
       preparedImage.contentType,
-      onProgress,
+      (progress) => {
+        onProgress?.(progress, "uploading");
+      },
     );
     console.log("[MediaUpload] File uploaded successfully");
     const accountHash = uploadResponse.accountHash ?? uploadResponse.account_hash;
     const assetId = uploadResponse.asset_id ?? uploadResponse.id;
     const finalUrl = uploadResponse.url ?? (accountHash && assetId
-      ? getImageUrl({
-          uploadURL: "",
-          id: assetId,
-          accountHash,
-        })
+      ? getImageUrl(accountHash, assetId)
       : "");
     if (!finalUrl) throw new Error("Upload service did not return an image URL.");
     Sentry.addBreadcrumb({
@@ -613,8 +521,10 @@ export function getContentTypeFromUri(uri: string): string {
 // ============================================
 
 export interface UploadProgressCallback {
-  (progress: number): void;
+  (progress: number, phase?: MediaUploadPhase): void;
 }
+
+export type MediaUploadPhase = "processing" | "uploading";
 
 export interface UploadVideoResult {
   url: string;
@@ -664,13 +574,17 @@ export async function uploadVideo(
   });
 
   try {
+    onProgress?.(100, "processing");
     const uploadUrlStartedAt = Date.now();
     const videoParameters = await getVideoUploadParameters(localUri);
+    onProgress?.(0, "uploading");
     const uploadResponse = await uploadMedia(
       localUri,
       "video",
       contentType,
-      onProgress,
+      (progress) => {
+        onProgress?.(progress, "uploading");
+      },
       signal,
       videoParameters,
     );

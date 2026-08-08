@@ -15,9 +15,17 @@ import {
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
 import { isAppRoute, resolveMirageUrl } from "./route-map";
-import { router } from "@/src/navigation/guarded-router";
+import {
+  navigateBypass,
+  pushBypass,
+  router,
+} from "@/src/navigation/guarded-router";
+import {
+  resolveInitialHomeAnchor,
+  resolveStartupRouteAction,
+} from "@/src/navigation/startup-route-policy";
 
-function showLoginRequiredAlert(): void {
+export function showLoginRequiredAlert(): void {
   Alert.alert(
     "Login Required",
     "Log in to view this content.",
@@ -25,7 +33,7 @@ function showLoginRequiredAlert(): void {
       { text: "Cancel", style: "cancel" },
       {
         text: "Log In",
-        onPress: () => router.push("/(auth)/login" as any),
+        onPress: () => router.push("/login" as any),
       },
     ],
   );
@@ -43,7 +51,7 @@ function showAlreadyLoggedInForLoginAlert(route: string): void {
         onPress: async () => {
           try {
             await useAuthStore.getState().logout();
-            setTimeout(() => router.push(route as any), 500);
+            pushBypass(route as any);
           } catch (error) {
             Sentry.captureException(error, {
               tags: { feature: "deep-link", operation: "logout-for-login" },
@@ -71,7 +79,7 @@ function showAlreadyLoggedInAlert(route: string): void {
         onPress: async () => {
           try {
             await useAuthStore.getState().logout();
-            setTimeout(() => router.push(route as any), 500);
+            pushBypass(route as any);
           } catch (error) {
             Sentry.captureException(error, {
               tags: { feature: "deep-link", operation: "logout-for-signup" },
@@ -95,17 +103,9 @@ function resolveSelfRoute(route: string): string | null {
   return route.replace("__SELF__", walletAddress);
 }
 
-function isTabRoute(route: string): boolean {
-  return route.startsWith("/(tabs)");
-}
-
 const LAST_SHARE_PATH_KEY = "last-share-path";
 const LAST_SHARE_PATH_AT_KEY = "last-share-path-at";
-const LAST_CREATE_DEEP_LINK_AT_KEY = "last-create-deep-link-at";
-const LAST_INITIAL_TAB_DEEP_LINK_AT_KEY = "last-initial-tab-deep-link-at";
 const REPEATED_SHARE_PATH_TTL_MS = 2 * 60_000;
-const RECENT_CREATE_DEEP_LINK_TTL_MS = 60_000;
-const RECENT_INITIAL_TAB_DEEP_LINK_TTL_MS = 60_000;
 
 function isShareIntentPath(path: string): boolean {
   return path.includes("dataUrl=") && path.includes("ShareKey");
@@ -175,26 +175,6 @@ export function clearLastSharePath(expectedPath?: string | null): void {
   storage.remove(LAST_SHARE_PATH_AT_KEY);
 }
 
-export function isRecentCreateDeepLink(
-  withinMs = RECENT_CREATE_DEEP_LINK_TTL_MS,
-): boolean {
-  const lastHandledAt = storage.getNumber(LAST_CREATE_DEEP_LINK_AT_KEY) ?? 0;
-  if (lastHandledAt <= 0) return false;
-
-  const age = Date.now() - lastHandledAt;
-  return age >= 0 && age < withinMs;
-}
-
-export function isRecentInitialTabDeepLink(
-  withinMs = RECENT_INITIAL_TAB_DEEP_LINK_TTL_MS,
-): boolean {
-  const lastHandledAt = storage.getNumber(LAST_INITIAL_TAB_DEEP_LINK_AT_KEY) ?? 0;
-  if (lastHandledAt <= 0) return false;
-
-  const age = Date.now() - lastHandledAt;
-  return age >= 0 && age < withinMs;
-}
-
 function shouldSkipRepeatedSharePath(path: string): boolean {
   const ageMs = getRepeatedSharePathAgeMs(path);
   return ageMs !== null && ageMs < REPEATED_SHARE_PATH_TTL_MS;
@@ -207,26 +187,6 @@ function summarizeSharePath(path: string): string {
 function rememberSharePath(path: string): void {
   storage.set(LAST_SHARE_PATH_KEY, path);
   storage.set(LAST_SHARE_PATH_AT_KEY, Date.now());
-}
-
-function rememberCreateDeepLink(path: string): void {
-  storage.set(LAST_CREATE_DEEP_LINK_AT_KEY, Date.now());
-  Sentry.addBreadcrumb({
-    category: "deep-link",
-    message: "Routing create deep link to create tab",
-    data: { path: summarizeSharePath(path) },
-    level: "info",
-  });
-}
-
-function rememberInitialTabDeepLink(path: string, route: string): void {
-  storage.set(LAST_INITIAL_TAB_DEEP_LINK_AT_KEY, Date.now());
-  Sentry.addBreadcrumb({
-    category: "deep-link",
-    message: "Routing initial tab deep link",
-    data: { path: summarizeSharePath(path), route },
-    level: "info",
-  });
 }
 
 export async function redirectSystemPath({
@@ -244,8 +204,12 @@ export async function redirectSystemPath({
   if (isShareIntentPath(path)) {
     const repeatedSharePathAgeMs = getRepeatedSharePathAgeMs(path);
 
-    if (initial && !recoverInitialShareIntent(path)) {
-      return "/(tabs)";
+    if (initial) {
+      if (!recoverInitialShareIntent(path)) {
+        return "/";
+      }
+      rememberSharePath(path);
+      return "/";
     }
 
     if (!initial && shouldSkipRepeatedSharePath(path)) {
@@ -259,7 +223,7 @@ export async function redirectSystemPath({
         },
         level: "info",
       });
-      return "/(tabs)/create";
+      return "/create";
     }
 
     Sentry.addBreadcrumb({
@@ -274,16 +238,16 @@ export async function redirectSystemPath({
     });
 
     rememberSharePath(path);
-    return "/(tabs)/create";
+    return "/create";
   }
 
   if (isAppRoute(path)) {
-    if (initial && isAuthRoute(path)) {
-      useDeepLinkStore.getState().setPendingRoute(path);
-      return "/(tabs)";
-    }
-    if (initial && isTabRoute(path)) {
-      rememberInitialTabDeepLink(path, path);
+    if (initial) {
+      const anchor = resolveInitialHomeAnchor(path);
+      if (anchor.pendingRoute) {
+        useDeepLinkStore.getState().setPendingRoute(anchor.pendingRoute);
+      }
+      return anchor.route;
     }
     return path;
   }
@@ -291,6 +255,17 @@ export async function redirectSystemPath({
   const match = resolveMirageUrl(path, getAdditionalMirageHosts());
   if (!match) {
     return "";
+  }
+
+  // Cold starts always enter through Home. Auth is resolved there first, and
+  // only then is this route pushed/navigated by LaunchRouteOrchestrator. This
+  // gives every launch target a deterministic Home back destination.
+  if (initial) {
+    const anchor = resolveInitialHomeAnchor(match.route);
+    if (anchor.pendingRoute) {
+      useDeepLinkStore.getState().setPendingRoute(anchor.pendingRoute);
+    }
+    return anchor.route;
   }
 
   const resolvedRoute = resolveSelfRoute(match.route);
@@ -301,15 +276,11 @@ export async function redirectSystemPath({
   if (!match.requiresAuth) {
     if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
       showAlreadyLoggedInAlert(resolvedRoute);
-      return "/(tabs)";
+      return "/";
     }
     if (match.type === "login" && useAuthStore.getState().isLoggedIn) {
       showAlreadyLoggedInForLoginAlert(resolvedRoute);
-      return "/(tabs)";
-    }
-    if (initial && isAuthRoute(resolvedRoute)) {
-      useDeepLinkStore.getState().setPendingRoute(resolvedRoute);
-      return "/(tabs)";
+      return "/";
     }
     return resolvedRoute;
   }
@@ -320,20 +291,56 @@ export async function redirectSystemPath({
     return "";
   }
 
-  if (initial && !isTabRoute(target)) {
-    useDeepLinkStore.getState().setPendingRoute(target);
-    return "/(tabs)";
-  }
-
-  if (match.type === "create") {
-    rememberCreateDeepLink(path);
-  }
-
-  if (initial && isTabRoute(target)) {
-    rememberInitialTabDeepLink(path, target);
-  }
-
   return target;
+}
+
+export type PendingLaunchRouteResult =
+  | "none"
+  | "dispatched"
+  | "auth_required"
+  | "waiting";
+
+export function flushPendingLaunchRoute(state: {
+  isInitializing: boolean;
+  isLoggedIn: boolean;
+  hasSeenAdultPrompt: boolean;
+}): PendingLaunchRouteResult {
+  const pendingRoute = useDeepLinkStore.getState().pendingRoute;
+  const action = resolveStartupRouteAction(pendingRoute, state);
+
+  if (action === "none") {
+    if (pendingRoute) useDeepLinkStore.getState().consumePendingRoute();
+    return "none";
+  }
+  if (action === "wait_for_auth" || action === "wait_for_adult_prompt") {
+    return "waiting";
+  }
+  if (action === "auth_required") {
+    showLoginRequiredAlert();
+    return "auth_required";
+  }
+
+  const route = resolveSelfRoute(pendingRoute!);
+  if (!route) return "waiting";
+  useDeepLinkStore.getState().consumePendingRoute();
+
+  if (state.isLoggedIn && isAuthRoute(route)) {
+    if ((route.split("?", 1)[0] ?? route) === "/login") {
+      showAlreadyLoggedInForLoginAlert(route);
+    } else if ((route.split("?", 1)[0] ?? route) === "/username") {
+      showAlreadyLoggedInAlert(route);
+    } else {
+      pushBypass(route as any);
+    }
+    return "dispatched";
+  }
+
+  if (action === "navigate_tab") {
+    navigateBypass(route as any);
+  } else {
+    pushBypass(route as any);
+  }
+  return "dispatched";
 }
 
 export async function handleMirageLink(url: string): Promise<boolean> {

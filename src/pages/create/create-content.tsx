@@ -263,7 +263,7 @@ export function CreateScreen() {
   });
 
   // Handle video returned from editor (via consumePendingVideoResult on focus).
-  // This avoids `router.replace("/(tabs)/create", ...)` which can land on the
+  // This avoids `router.replace("/create", ...)` which can land on the
   // wrong tab. The video editor now uses `router.back()` + a shared pending result.
   useFocusEffect(
     useCallback(() => {
@@ -421,7 +421,7 @@ export function CreateScreen() {
               uri: asset.uri,
               width: asset.width?.toString() ?? "1920",
               height: asset.height?.toString() ?? "1080",
-              returnTo: "/(tabs)/create",
+              returnTo: "/create",
             },
           });
         }, 100);

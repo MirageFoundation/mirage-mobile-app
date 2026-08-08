@@ -3,7 +3,8 @@ import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import type { Href } from "expo-router";
 import { AppState, Platform } from "react-native";
-import { navigateBypass, pushBypass, replaceBypass } from "@/src/navigation/guarded-router";
+import { navigateBypass, pushBypass } from "@/src/navigation/guarded-router";
+import { waitForStartupHomeReady } from "@/src/navigation/startup-navigation-readiness";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -137,6 +138,11 @@ export function isInboxNotificationNavigationActive(): boolean {
     inboxNotificationNavigationInFlight &&
     Date.now() - lastInboxNotificationNavigationAt < INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS
   );
+}
+
+/** Cold-start ownership signal without the short UI race timeout. */
+export function isInboxNotificationNavigationPending(): boolean {
+  return inboxNotificationNavigationInFlight;
 }
 
 function markInboxNotificationNavigationActive(): void {
@@ -589,6 +595,15 @@ async function performInboxCheck(
       await Notifications.dismissAllNotificationsAsync();
     }
 
+    // When server push is active, the backend delivers reply notifications and
+    // every JSON response already carries `new_inbox_items` for the unread
+    // badge — timer/signal `get_inbox` polls would fetch data we already have.
+    // Local polling remains the fallback whenever push is unavailable.
+    if (trigger !== "manual" && isPushEnabled()) {
+      storage.set(LAST_CHECK_KEY, Date.now().toString());
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
     if (trigger !== "background") {
       useInboxStore.setState({ _suppressUntil: Date.now() + 30_000 });
     }
@@ -859,6 +874,7 @@ function deferNotificationResponseUntilWallet(
 
   if (ageMs > DEFERRED_NOTIFICATION_RESPONSE_MAX_AGE_MS) {
     clearDeferredNotificationResponse(notificationId);
+    clearInboxNotificationNavigationActive();
     Sentry.captureMessage("Inbox notification response expired before wallet ready", {
       level: "warning",
       tags: {
@@ -1019,7 +1035,7 @@ function handleNotificationResponse(
       });
       captureInboxNotificationNavigationEvent(
         "Inbox notification response ignored because it was already handled",
-        "warning",
+        "info",
         "duplicate-notification-response",
         {
           ...responseDebugData,
@@ -1202,8 +1218,8 @@ function handleNotificationResponse(
           notificationId,
           replyId,
           rootPostId,
-          action: canOpenReplyDetailImmediately || canOpenPostDetailImmediately ? "replace" : "navigate",
-          openReply: canOpenReplyDetailImmediately || canOpenPostDetailImmediately ? "0" : "1",
+          action: "navigate",
+          openReply: "1",
         });
         Sentry.addBreadcrumb({
           category: "navigation",
@@ -1213,20 +1229,16 @@ function handleNotificationResponse(
             notificationId,
             replyId,
             rootPostId,
-            action: canOpenReplyDetailImmediately || canOpenPostDetailImmediately ? "replace" : "navigate",
-            openReply: canOpenReplyDetailImmediately || canOpenPostDetailImmediately ? "0" : "1",
+            action: "navigate",
+            openReply: "1",
             ...getNavigationReadinessDebugData(),
           },
         });
         const inboxHref = (
-          `/(tabs)/inbox?fromNotification=${encodeURIComponent(notificationId)}` +
+          `/inbox?fromNotification=${encodeURIComponent(notificationId)}` +
           `${replyId ? `&replyId=${encodeURIComponent(replyId)}` : ""}` +
-          `&openReply=${canOpenReplyDetailImmediately || canOpenPostDetailImmediately ? "0" : "1"}`
+          "&openReply=1"
         ) as Href;
-        if (canOpenReplyDetailImmediately || canOpenPostDetailImmediately) {
-          replaceBypass(inboxHref);
-          return;
-        }
         navigateBypass(inboxHref);
       };
       const dispatchReplyDetail = () => {
@@ -1305,6 +1317,9 @@ function handleNotificationResponse(
         handledNotificationIdsInFlight.delete(notificationId);
         clearInboxNotificationNavigationActive();
       };
+      // Cold-start notification routes must never become the stack root.
+      // Auth resolves and Home commits before this promise is released.
+      await waitForStartupHomeReady();
       await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
       const areTabsReadyAtDispatch = _areTabsReady;
       Sentry.addBreadcrumb({
@@ -1327,11 +1342,9 @@ function handleNotificationResponse(
         retryNavigate: dispatchNavigate,
       });
       try {
-        dispatchNavigate();
         if (canOpenReplyDetailImmediately || canOpenPostDetailImmediately) {
-          // Push the detail route in the same tick as the inbox replace so no
-          // other navigation (share intent, deep link, app-state change) can
-          // interleave between the two dispatches.
+          // Home is the stack base. Push detail directly so one Back action
+          // returns to Home instead of exposing an intermediate startup tab.
           Sentry.addBreadcrumb({
             category: "navigation",
             message: canOpenReplyDetailImmediately
@@ -1341,6 +1354,8 @@ function handleNotificationResponse(
             data: { notificationId, replyId, rootPostId },
           });
           dispatchReplyDetail();
+        } else {
+          dispatchNavigate();
         }
       } catch (error) {
         clearPendingInboxNotificationNavigation(notificationId);

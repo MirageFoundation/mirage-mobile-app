@@ -225,7 +225,7 @@ export function VideoEditorScreen() {
       router.back();
     } else {
       router.replace({
-        pathname: "/(tabs)/create",
+        pathname: "/create",
         params: {
           videoUri: processedUri,
           originalVideoUri: videoUri,

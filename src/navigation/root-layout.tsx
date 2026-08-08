@@ -1,5 +1,5 @@
 import { RootProvider } from "@/src/providers/root-provider";
-import { Stack, useNavigationContainerRef } from "expo-router";
+import { Slot, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
 import { AuthSheet } from "@/src/components/molecules/auth-sheet";
@@ -22,6 +22,7 @@ import {
   markStartupRootReady,
   markStartupStable,
 } from "@/src/services/startup-diagnostics";
+import { resetStartupHomeReady } from "@/src/navigation/startup-navigation-readiness";
 
 const ANDROID_EXIT_BACK_PRESS_WINDOW_MS = 2000;
 const STARTUP_STABLE_DELAY_MS = 10_000;
@@ -98,6 +99,11 @@ function useAndroidDoubleBackExitGuard(ref: ReturnType<typeof useNavigationConta
   }, [ref]);
 }
 
+/**
+ * Root layout: providers and app-wide overlays around a Slot.
+ * All screens live in the (app) group's Stack (src/navigation/app-stack-layout),
+ * giving the canonical Slot (root) -> Stack -> Tabs structure.
+ */
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
@@ -115,6 +121,7 @@ export default Sentry.wrap(function RootLayout() {
     }
     return () => {
       clearTimeout(startupStableTimer);
+      resetStartupHomeReady();
       signalRootLayoutUnmounted();
     };
   }, [ref]);
@@ -123,90 +130,10 @@ export default Sentry.wrap(function RootLayout() {
     <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
     <AndroidShareIntentColdStartRefresh />
     <RootProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="(auth)"
-          options={{
-            presentation: "modal",
-            animation: "slide_from_bottom",
-          }}
-        />
-        <Stack.Screen
-          name="post/[id]"
-          options={{
-            animation: "fade",
-            animationDuration: 250,
-          }}
-        />
-        <Stack.Screen
-          name="settings"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="search"
-          options={{
-            animation: "fade",
-          }}
-        />
-        <Stack.Screen
-          name="video-editor"
-          options={{
-            animation: "slide_from_bottom",
-            presentation: "modal",
-          }}
-        />
-        <Stack.Screen
-          name="user-following/[id]"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-       <Stack.Screen
-         name="blocked-list"
-         options={{
-           animation: "slide_from_right",
-         }}
-       />
-      <Stack.Screen
-        name="comment-compose"
-        options={{
-          animation: "slide_from_bottom",
-          ...(Platform.OS === "android"
-            ? { animationDuration: 200 }
-            : { presentation: "fullScreenModal" as const }),
-        }}
-      />
-       <Stack.Screen
-         name="topic/[id]"
-         options={{
-           animation: "slide_from_right",
-         }}
-       />
-     <Stack.Screen
-       name="saved-posts"
-       options={{
-         animation: "slide_from_right",
-       }}
-     />
-     <Stack.Screen
-       name="delete-account"
-       options={{
-         animation: "slide_from_right",
-       }}
-     />
-     <Stack.Screen
-       name="agents"
-       options={{
-         animation: "slide_from_right",
-       }}
-     />
-     </Stack>
+      <Slot />
       <ThemedStatusBar />
       <AuthSheet />
-     <ForceUpdatePopup reason={forceUpdateReason} remoteVersion={remoteVersion} isRequired={isRequired} />
+      <ForceUpdatePopup reason={forceUpdateReason} remoteVersion={remoteVersion} isRequired={isRequired} />
     </RootProvider>
     </ShareIntentProvider>
   );

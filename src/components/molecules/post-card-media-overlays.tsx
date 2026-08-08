@@ -55,23 +55,21 @@ export function MediaBlurRevealOverlay({ visible, onRevealContent }: MediaBlurRe
 
   return (
     <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-      {Platform.OS === "ios" ? (
-        <BlurView intensity={80} tint="dark" style={styles.blurViewFill}>
-          <View style={styles.revealTextContainer}>
-            <Ionicons name="eye-outline" size={24} color="#fff" />
-            <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-              Tap to reveal
-            </Text>
-          </View>
-        </BlurView>
-      ) : (
-        <View style={styles.androidBlurOverlay}>
+      <BlurView
+        intensity={80}
+        tint="dark"
+        // Real blur on Android too (web parity, BUG-020); previously a
+        // near-opaque black box.
+        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={styles.blurViewFill}
+      >
+        <View style={styles.revealTextContainer}>
           <Ionicons name="eye-outline" size={24} color="#fff" />
           <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
             Tap to reveal
           </Text>
         </View>
-      )}
+      </BlurView>
     </Pressable>
   );
 }
@@ -133,14 +131,6 @@ const styles = StyleSheet.create((theme) => ({
   revealTextContainer: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
     gap: 8,
   },
   gifBadge: {

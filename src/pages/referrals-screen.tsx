@@ -163,6 +163,12 @@ export function ReferralsScreen() {
   const [toggleLoading, setToggleLoading] = useState(false);
   const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(null);
   const effectiveEnabled = optimisticEnabled ?? precheckEnabled;
+  // The precheck opt-in only exists on nodes that require invite codes (the
+  // toggle is only rendered there). On open-registration nodes the referral
+  // link works without it, so it must not gate copy/share (BUG-028: the copy
+  // button was permanently disabled with a hint pointing at a toggle that
+  // was never rendered).
+  const linkEnabled = !inviteCodeRequired || effectiveEnabled;
   const [linkCopied, setLinkCopied] = useState(false);
 
   const [referralPeriod, setReferralPeriod] = useState<ReferralPeriod>("7d");
@@ -229,25 +235,30 @@ export function ReferralsScreen() {
   }, [linkCopied]);
 
   const handleCopyReferralLink = useCallback(async () => {
-    if (!referralUrl || !effectiveEnabled) return;
+    if (!referralUrl || !linkEnabled) return;
     try {
       await Clipboard.setStringAsync(referralUrl);
       triggerHaptic("success");
       setLinkCopied(true);
     } catch (error) {
-      Sentry.addBreadcrumb({ category: "referral", message: "Copy link failed", data: { error: String(error) }, level: "warning" });
+      Sentry.captureException(error, {
+        tags: { feature: "referral", operation: "copy-link" },
+      });
+      triggerHaptic("error");
+      toast.error("Couldn't copy the link. Please try again.");
     }
-  }, [referralUrl, effectiveEnabled]);
+  }, [referralUrl, linkEnabled, toast]);
 
   const handleShareReferralLink = useCallback(async () => {
-    if (!referralUrl || !effectiveEnabled) return;
+    if (!referralUrl || !linkEnabled) return;
     try {
       triggerHaptic("light");
       await Share.share({ message: referralUrl, title: "Join Mirage" });
     } catch (error) {
+      // Share sheet dismissal also rejects on some platforms; only breadcrumb.
       Sentry.addBreadcrumb({ category: "referral", message: "Share link failed", data: { error: String(error) }, level: "warning" });
     }
-  }, [referralUrl, effectiveEnabled]);
+  }, [referralUrl, linkEnabled]);
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -297,8 +308,10 @@ export function ReferralsScreen() {
           <ReferralListHeader
             inviteCodeRequired={inviteCodeRequired}
             effectiveEnabled={effectiveEnabled}
+            linkEnabled={linkEnabled}
             toggleLoading={toggleLoading}
             referralUrl={referralUrl}
+            hasUsername={!!username}
             linkCopied={linkCopied}
             totalLabel={referralListModel.header.totalLabel}
             referralPeriod={referralPeriod}

@@ -51,7 +51,6 @@ export {
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
   canonBaseReport,
-  canonBaseClaimReward,
   canonBaseDeleteUser,
   canonBaseAward,
   canonBaseGiftSubscription,
@@ -75,7 +74,6 @@ export {
   type UpgradeLevelParams,
   type SetAutoRenewalParams,
   type ReportParams,
-  type ClaimRewardParams,
   type DeleteUserParams,
   type AwardParams,
   type GiftSubscriptionParams,
@@ -83,7 +81,3 @@ export {
 
 // Envelope builder
 export { buildSignedEnvelope, buildEnvelopeWithParams } from "./envelope";
-
-// Simple signing (no PoW, for push token and mark_inbox_viewed)
-export { buildSimpleSignedPayload } from "./simple-sign";
-export type { SimpleSignedPayload } from "./simple-sign";

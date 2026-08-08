@@ -113,8 +113,14 @@ export default function UsernameScreen() {
 
   const { data: config } = useConfig();
   const { data: nodeConfig } = useNodeConfig();
-  const registrationEnabled = nodeConfig?.registration_enabled ?? true;
-  const inviteCodeRequired = nodeConfig?.registration_invite_code_required ?? true;
+  // Web parity (useCreateAccount.js): no silent defaults. The invite
+  // requirement only exists when node_config explicitly says so, and signup
+  // stays blocked until node_config has loaded instead of guessing.
+  const nodeConfigLoaded =
+    typeof nodeConfig?.registration_enabled === "boolean" &&
+    typeof nodeConfig?.registration_invite_code_required === "boolean";
+  const registrationEnabled = nodeConfig?.registration_enabled === true;
+  const inviteCodeRequired = nodeConfig?.registration_invite_code_required === true;
   const [showRegPopup, setShowRegPopup] = useState(false);
   const [isSwitchingNode, setIsSwitchingNode] = useState(false);
   const otherServer = servers.find((s) => s !== activeServer) ?? servers[0];
@@ -142,7 +148,7 @@ export default function UsernameScreen() {
       setShowRegPopup(false);
       toast.success(`Switched to ${newServer}`);
       if (!freshNodeConfig.registration_enabled) {
-        router.replace("/(tabs)");
+        router.replace("/");
       }
     } catch (e) {
       console.error("[UsernameScreen] Failed to switch node:", e);
@@ -273,6 +279,7 @@ export default function UsernameScreen() {
 
   const handleContinue = useCallback(async () => {
     if (status !== "available") return;
+    if (!nodeConfigLoaded) return;
     if (inviteCodeRequired && !isReferralMode && !inviteCode.trim()) {
       setInviteStatus("invalid");
       setCreateError("Please enter an invite code");
@@ -393,6 +400,7 @@ export default function UsernameScreen() {
     status,
     username,
     inviteCode,
+    nodeConfigLoaded,
     inviteCodeRequired,
     isReferralMode,
     referrerUsername,
@@ -406,7 +414,7 @@ export default function UsernameScreen() {
     recoveryNavigationStartedRef.current = true;
     txProgress.hideModal();
     router.push({
-      pathname: "/(auth)/recovery-phrase",
+      pathname: "/recovery-phrase",
       params: { username: `anon-${username}` },
     });
   }, [router, txProgress, username]);
@@ -436,12 +444,12 @@ export default function UsernameScreen() {
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");
     apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
-    router.replace("/(auth)/login");
+    router.replace("/login");
   }, [router]);
 
   const handleRegistrationUnavailableCancel = useCallback(() => {
     setShowRegPopup(false);
-    router.replace("/(tabs)");
+    router.replace("/");
   }, [router]);
 
   const handleSelectServer = useCallback(
@@ -591,6 +599,7 @@ export default function UsernameScreen() {
 
   const isButtonEnabled =
     status === "available" &&
+    nodeConfigLoaded &&
     (inviteCodeRequired ? (isReferralMode || inviteCode.trim().length > 0) : true) &&
     !isCreatingWallet &&
     !isSettingUp &&

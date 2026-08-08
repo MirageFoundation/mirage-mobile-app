@@ -149,12 +149,4 @@ export const galleryStyles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: 8,
   },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
-    gap: 8,
-  },
 }));

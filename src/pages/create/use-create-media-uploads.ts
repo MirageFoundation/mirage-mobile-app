@@ -5,6 +5,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
+import type { MediaUploadPhase } from "@/src/api/read/endpoints/media";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
@@ -15,12 +16,12 @@ import { useUploadNetworkRetry } from "./use-upload-network-retry";
 
 export type CreateVideoUploadState = Record<
   string,
-  { progress: number; uploading: boolean; done: boolean; error: string | null }
+  { progress: number; phase: MediaUploadPhase; uploading: boolean; done: boolean; error: string | null }
 >;
 
 export type CreateImageUploadState = Record<
   string,
-  { progress: number; uploading: boolean; done: boolean; error: string | null }
+  { progress: number; phase: MediaUploadPhase; uploading: boolean; done: boolean; error: string | null }
 >;
 
 export function useCreateMediaUploads() {
@@ -31,6 +32,7 @@ export function useCreateMediaUploads() {
     for (const [uri, entry] of VIDEO_UPLOADS) {
       init[uri] = {
         progress: entry.progress,
+        phase: entry.phase ?? "uploading",
         uploading: entry.uploading,
         done: !!entry.url,
         error: entry.error,
@@ -46,6 +48,7 @@ export function useCreateMediaUploads() {
     for (const [uri, entry] of IMAGE_UPLOADS) {
       init[uri] = {
         progress: entry.progress,
+        phase: entry.phase ?? "uploading",
         uploading: entry.uploading,
         done: !!entry.url,
         error: entry.error,
@@ -137,15 +140,15 @@ export function useCreateMediaUploads() {
       },
     });
 
-    const promise = uploadImageAndGetUrl(uri, (progress) => {
+    const promise = uploadImageAndGetUrl(uri, (progress, phase = "uploading") => {
       const clamped = Math.min(100, Math.max(0, progress));
       const entry = IMAGE_UPLOADS.get(uri);
       if (entry) {
-        IMAGE_UPLOADS.set(uri, { ...entry, progress: clamped });
+        IMAGE_UPLOADS.set(uri, { ...entry, progress: clamped, phase });
       }
       imageUploadStateRef.current((prev) => ({
         ...prev,
-        [uri]: { ...prev[uri], progress: clamped },
+        [uri]: { ...prev[uri], progress: clamped, phase },
       }));
     })
       .then((url) => {
@@ -160,7 +163,7 @@ export function useCreateMediaUploads() {
         IMAGE_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 100, uploading: false, done: true, error: null },
+          [uri]: { progress: 100, phase: "uploading", uploading: false, done: true, error: null },
         }));
         imageUploadToastShownRef.current = false;
         return url;
@@ -194,7 +197,7 @@ export function useCreateMediaUploads() {
         IMAGE_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 0, uploading: false, done: false, error: msg },
+          [uri]: { progress: 0, phase: "processing", uploading: false, done: false, error: msg },
         }));
         if (!silent && !imageUploadToastShownRef.current) {
           imageUploadToastShownRef.current = true;
@@ -203,10 +206,10 @@ export function useCreateMediaUploads() {
         throw error;
       });
 
-    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null, isServerError: false, promise });
+    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, phase: "processing", error: null, isServerError: false, promise });
     imageUploadStateRef.current((prev) => ({
       ...prev,
-      [uri]: { progress: 0, uploading: true, done: false, error: null },
+      [uri]: { progress: 0, phase: "processing", uploading: true, done: false, error: null },
     }));
     return promise;
   }, [draft.attachmentType, draft.mediaUris, toast]);
@@ -293,12 +296,12 @@ export function useCreateMediaUploads() {
         silent,
       },
     });
-    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null, sessionId });
+    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, phase: "processing", error: null, sessionId });
     videoUploadStateRef.current((prev) => ({
       ...prev,
-      [uri]: { progress: 0, uploading: true, done: false, error: null },
+      [uri]: { progress: 0, phase: "processing", uploading: true, done: false, error: null },
     }));
-    uploadVideoAndGetUrl(uri, (progress) => {
+    uploadVideoAndGetUrl(uri, (progress, phase = "uploading") => {
       if (videoUploadSessionRef.current !== sessionId) {
         Sentry.addBreadcrumb({
           category: "video-upload",
@@ -314,11 +317,11 @@ export function useCreateMediaUploads() {
       const clamped = Math.min(100, Math.max(0, progress));
       const entry = VIDEO_UPLOADS.get(uri);
       if (entry?.sessionId === sessionId) {
-        VIDEO_UPLOADS.set(uri, { ...entry, progress: clamped });
+        VIDEO_UPLOADS.set(uri, { ...entry, progress: clamped, phase });
       }
       videoUploadStateRef.current((prev) => ({
         ...prev,
-        [uri]: { ...prev[uri], progress: clamped },
+        [uri]: { ...prev[uri], progress: clamped, phase },
       }));
     }, controller.signal)
       .then((url) => {
@@ -347,7 +350,7 @@ export function useCreateMediaUploads() {
         VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null, sessionId });
         videoUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 100, uploading: false, done: true, error: null },
+          [uri]: { progress: 100, phase: "uploading", uploading: false, done: true, error: null },
         }));
         videoUploadToastShownRef.current = false;
         triggerHaptic("success");
@@ -404,7 +407,7 @@ export function useCreateMediaUploads() {
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError, sessionId });
         videoUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 0, uploading: false, done: false, error: msg },
+          [uri]: { progress: 0, phase: "processing", uploading: false, done: false, error: msg },
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;

@@ -30,6 +30,7 @@ import {
   PostCardSkeletonList,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { buildFollowedTopicSet, isTopicFollowed } from "@/src/domain/topics";
 import {
   useAuthGuard,
   useNetworkType,
@@ -152,8 +153,8 @@ export function TopicFeedScreen() {
     boolean | null
   >(null);
 
-  const isTopicFollowed =
-    optimisticFollowedTopic ?? followedTopics.includes(topicName ?? "");
+  const isCurrentTopicFollowed =
+    optimisticFollowedTopic ?? isTopicFollowed(followedTopics, topicName);
 
   useEffect(() => {
     setOptimisticFollowedTopic(null);
@@ -335,8 +336,8 @@ export function TopicFeedScreen() {
 
   const handleHeaderFollowTopic = useCallback(() => {
     if (!topicName) return;
-    handleFollowTopicFromCard(topicName, isTopicFollowed);
-  }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
+    handleFollowTopicFromCard(topicName, isCurrentTopicFollowed);
+  }, [topicName, isCurrentTopicFollowed, handleFollowTopicFromCard]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const topicFeedSyncContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
@@ -549,7 +550,7 @@ export function TopicFeedScreen() {
     [followedUsers],
   );
   const followedTopicsSet = useMemo(
-    () => new Set(followedTopics),
+    () => buildFollowedTopicSet(followedTopics),
     [followedTopics],
   );
 
@@ -630,7 +631,7 @@ export function TopicFeedScreen() {
     <Box flex background="base">
       <TopicFeedHeader
         insetsTop={insets.top}
-        isTopicFollowed={isTopicFollowed}
+        isTopicFollowed={isCurrentTopicFollowed}
         onBack={router.back}
         onFollowTopic={handleHeaderFollowTopic}
         onSortChange={handleSortChange}
@@ -665,7 +666,7 @@ export function TopicFeedScreen() {
       />
 
       <NewPostsButton
-        visible={hasNewPosts}
+        visible={hasNewPosts && isFocused}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 52}
         avatars={newPostAvatars}

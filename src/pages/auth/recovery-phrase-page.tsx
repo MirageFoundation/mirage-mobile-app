@@ -33,7 +33,7 @@ export default function RecoveryPhraseScreen() {
 
 useEffect(() => {
     if (!recoveryPhrase && !isConfirming) {
-      router.dismissTo("/(auth)/username");
+      router.dismissTo("/username");
     }
  }, [recoveryPhrase, isConfirming, router]);
 
@@ -60,7 +60,7 @@ useEffect(() => {
       triggerHaptic("success");
      const currentServer = usePreferencesStore.getState().apiServer;
      apiClient.setBaseUrl(getApiBaseUrl(currentServer));
-      router.dismissTo("/(tabs)");
+      router.dismissTo("/");
     } catch (error) {
       console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
       triggerHaptic("error");

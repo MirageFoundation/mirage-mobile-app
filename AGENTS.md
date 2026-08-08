@@ -33,7 +33,7 @@ Navigation logic belongs in:
 - `src/navigation/guarded-router.ts`
 - `src/navigation/auth-navigation.ts`
 
-Note: `src/utils/guarded-router.ts` remains only as a compatibility re-export. New callers should use `src/navigation/guarded-router.ts`.
+Note: the legacy compatibility wrappers (`src/utils/guarded-router.ts`, `src/hooks/use-router.ts`) have been removed. All callers use `src/navigation/guarded-router.ts` directly (enforced by `check:navigation`).
 
 When touching deep links, route parsing, guarded navigation, or auth-aware navigation:
 - prefer changing `src/navigation/*`

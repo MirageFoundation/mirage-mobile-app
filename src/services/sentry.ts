@@ -58,18 +58,20 @@ Sentry.init({
     : "https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064",
   enabled: !IS_FDROID_BUILD,
   environment: appEnvironment,
-  release: `mirage@${appVersion}`,
-  dist: buildNumber,
   sendDefaultPii: !__DEV__ && !IS_FDROID_BUILD,
   tracesSampleRate: __DEV__ || IS_FDROID_BUILD ? 0 : SENTRY_TRACES_SAMPLE_RATE,
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate:
-    __DEV__ || IS_FDROID_BUILD ? 0 : SENTRY_ERROR_REPLAY_SAMPLE_RATE,
+    __DEV__ || IS_FDROID_BUILD || Platform.OS === "ios"
+      ? 0
+      : SENTRY_ERROR_REPLAY_SAMPLE_RATE,
   integrations: IS_FDROID_BUILD
     ? []
     : __DEV__
       ? [navigationIntegration]
-      : [Sentry.mobileReplayIntegration(), navigationIntegration],
+      : Platform.OS === "ios"
+        ? [navigationIntegration]
+        : [Sentry.mobileReplayIntegration(), navigationIntegration],
   enableAutoPerformanceTracing: !__DEV__ && !IS_FDROID_BUILD,
   beforeSend(event) {
     if (shouldDropSentryEvent(event)) return null;

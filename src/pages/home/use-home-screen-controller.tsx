@@ -12,6 +12,7 @@ import {
   useLatestRef,
   useNetworkType,
 } from "@/src/hooks";
+import { buildFollowedTopicSet } from "@/src/domain/topics";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
@@ -116,7 +117,10 @@ export function useHomeScreenController() {
     [followedUsers, followUserOverrides],
   );
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
-  const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
+  const followedTopicsSet = useMemo(
+    () => buildFollowedTopicSet(followedTopics),
+    [followedTopics],
+  );
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
     [savedPosts],
@@ -310,11 +314,13 @@ export function useHomeScreenController() {
 
   const showAdultPopup = Boolean(currentUser) && !hasSeenAdultPrompt;
   const currentUserId = currentUser?.id ?? "";
-  const reminderUnderstood = currentUserId
-    ? reminderUnderstoodByUser[currentUserId] === true
+  // Lowercased lookups match the store's normalized keys (BUG-016).
+  const reminderUserKey = currentUserId.toLowerCase();
+  const reminderUnderstood = reminderUserKey
+    ? reminderUnderstoodByUser[reminderUserKey] === true
     : false;
-  const reminderSnoozedUntil = currentUserId
-    ? reminderSnoozedUntilByUser[currentUserId] ?? 0
+  const reminderSnoozedUntil = reminderUserKey
+    ? reminderSnoozedUntilByUser[reminderUserKey] ?? 0
     : 0;
   const nowMs = Date.now();
   const adultPromptAgeMs = adultPromptDismissedAt > 0 ? nowMs - adultPromptDismissedAt : 0;
@@ -526,7 +532,10 @@ export function useHomeScreenController() {
     showModerationReminder,
     moderationReminderHeader,
     handleNewPostsChange,
-    hasNewPosts,
+    // Hide the banner whenever this screen isn't focused (e.g. a post detail
+    // is open above the feed) so it can't render over or steal taps from
+    // other screens (BUG-035).
+    hasNewPosts: hasNewPosts && isHomeFocused,
     handleNewPostsPress,
     newPostAvatars,
     newPostCount,

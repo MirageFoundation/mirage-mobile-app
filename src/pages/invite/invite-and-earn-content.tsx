@@ -31,6 +31,7 @@ import {
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useToast } from "@/src/providers/toast-provider";
 import {
   usePreferencesStore,
   getShareBaseUrl,
@@ -147,7 +148,10 @@ const InviteCodeCard = ({
       );
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy failed", data: { error: String(error) }, level: "warning" });
+      Sentry.captureException(error, {
+        tags: { feature: "invite", operation: "copy-code-card" },
+      });
+      triggerHaptic("error");
     }
   }, [code.code, isUsed, scale]);
 
@@ -264,10 +268,11 @@ const ShareCodeSheet = ({
 onDismiss: () => void;
 }) => {
   const { theme } = useUnistyles();
-const insets = useSafeAreaInsets();
-const shareServer = usePreferencesStore((s) => s.apiServer);
-const [copiedCode, setCopiedCode] = useState(false);
- const [copiedLink, setCopiedLink] = useState(false);
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const shareServer = usePreferencesStore((s) => s.apiServer);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const shareUrl = code
     ? `${getShareBaseUrl(shareServer)}/signup?invite=${code}`
@@ -281,22 +286,34 @@ const [copiedCode, setCopiedCode] = useState(false);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (error) {
-      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy code failed", data: { error: String(error) }, level: "warning" });
+      Sentry.captureException(error, {
+        tags: { feature: "invite", operation: "copy-code" },
+      });
+      triggerHaptic("error");
+      toast.error("Couldn't copy the code. Please try again.");
     }
-  }, [code]);
+  }, [code, toast]);
 
   const handleCopyLink = useCallback(async () => {
+    // Never copy an empty string and pretend it worked (BUG-028): without a
+    // code there is no link.
+    if (!shareUrl) return;
     try {
       await Clipboard.setStringAsync(shareUrl);
       triggerHaptic("success");
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (error) {
-      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy link failed", data: { error: String(error) }, level: "warning" });
+      Sentry.captureException(error, {
+        tags: { feature: "invite", operation: "copy-link" },
+      });
+      triggerHaptic("error");
+      toast.error("Couldn't copy the link. Please try again.");
     }
-  }, [shareUrl]);
+  }, [shareUrl, toast]);
 
   const handleNativeShare = useCallback(async () => {
+    if (!shareUrl) return;
     try {
       triggerHaptic("light");
       await Share.share({
@@ -305,6 +322,7 @@ const [copiedCode, setCopiedCode] = useState(false);
       });
       sheetRef.current?.dismiss();
     } catch (error) {
+      // Share sheet dismissal also rejects on some platforms; only breadcrumb.
       Sentry.addBreadcrumb({ category: "invite", message: "Native share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [shareUrl, sheetRef]);

@@ -79,14 +79,19 @@ function LoggedInContent({ controller }: { controller: Controller }) {
   const { theme } = useUnistyles();
   return (
     <>
-      <View style={styles.balanceCard}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Balance ${formatCompactNumber(controller.balance)} MIRAGE, open profile`}
+        onPress={controller.openBalance}
+        style={({ pressed }) => [styles.balanceCard, pressed && { opacity: 0.7 }]}
+      >
         <Text style={{ color: theme.colors.text.subtle, marginTop: 2 }} size="sm" weight="semibold">
           BALANCE
         </Text>
         <Text style={{ color: theme.colors.text.default }} size="xl" weight="bold">
           {formatCompactNumber(controller.balance)} MIRAGE
         </Text>
-      </View>
+      </Pressable>
       <SectionFooter />
       <NavigationSections controller={controller} />
       <FollowedUsersSection

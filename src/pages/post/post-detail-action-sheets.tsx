@@ -18,6 +18,7 @@ import {
   ReportSheetRef,
   type Post,
 } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 import {
   getBlockConfirmationMessage,
   useBlockHandler,
@@ -472,7 +473,7 @@ export const PostDetailActionSheets = forwardRef<
           ref={postOptionsSheetRef}
           post={post}
           isOwnPost={currentUserId === post?.author.id}
-          isTopicFollowed={post?.topic ? topicFollowOverride ?? followedTopics.includes(post.topic) : false}
+          isTopicFollowed={topicFollowOverride ?? isTopicFollowed(followedTopics, post?.topic)}
           isFollowingUser={
             post?.author.id
               ? postFollowOverride ?? followedUsers.includes(post.author.id)
@@ -491,7 +492,7 @@ export const PostDetailActionSheets = forwardRef<
             if (!post?.topic) return;
             handleFollowTopicViaQueue(
               post.topic,
-              topicFollowOverride ?? followedTopics.includes(post.topic),
+              topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic),
             );
           }}
           onSave={handleSavePost}

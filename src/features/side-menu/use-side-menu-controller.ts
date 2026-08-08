@@ -117,7 +117,7 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     delegateRoute(action);
   }, [delegateRoute]);
 
-  const beginAuth = useCallback((destination: "/(auth)/username" | "/(auth)/login", message: string) => {
+  const beginAuth = useCallback((destination: "/username" | "/login", message: string) => {
     triggerHaptic("light");
     shouldCloseAfterAuthRef.current = true;
     Sentry.addBreadcrumb({ category: "side-menu", message, level: "info" });
@@ -134,7 +134,7 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     setIsLoggingOut(true);
     try {
       await logout();
-      router.replace("/(tabs)");
+      router.replace("/");
       Sentry.addBreadcrumb({
         category: "side-menu",
         message: "Logout completed from side menu",
@@ -182,7 +182,7 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
         data: { fromServer: apiServer, toServer: server },
       });
       toast.success(`Switched to ${server}`);
-      router.replace("/(tabs)");
+      router.replace("/");
       setTimeout(() => {
         close();
         useHomePostCardStore.getState().setSideMenuOpen(false);
@@ -223,10 +223,17 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     triggerHaptic("light");
     router.push(getFollowedTopicDestination(topic) as never);
   }, [router]);
+  const openBalance = useCallback(() => {
+    // No dedicated wallet screen yet; the profile tab shows balance and
+    // reward details (BUG-030).
+    triggerHaptic("light");
+    router.push("/profile");
+  }, [router]);
 
   return {
     isLoggedIn,
     balance,
+    openBalance,
     apiServer,
     servers,
     switchingServer,
@@ -244,8 +251,8 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     openUser,
     openTopic,
     runAction,
-    createAccount: () => beginAuth("/(auth)/username", "Create account started from side menu"),
-    login: () => beginAuth("/(auth)/login", "Login started from side menu"),
+    createAccount: () => beginAuth("/username", "Create account started from side menu"),
+    login: () => beginAuth("/login", "Login started from side menu"),
     showLogoutPopup,
     setShowLogoutPopup,
     isLoggingOut,

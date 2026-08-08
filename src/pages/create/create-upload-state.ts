@@ -1,7 +1,10 @@
+import type { MediaUploadPhase } from "@/src/api/read/endpoints/media";
+
 export type VideoUploadEntry = {
   url: string | null;
   uploading: boolean;
   progress: number;
+  phase?: MediaUploadPhase;
   error: string | null;
   isServerError?: boolean;
   sessionId?: number;
@@ -11,6 +14,7 @@ export type ImageUploadEntry = {
   url: string | null;
   uploading: boolean;
   progress: number;
+  phase?: MediaUploadPhase;
   error: string | null;
   isServerError?: boolean;
   promise?: Promise<string>;

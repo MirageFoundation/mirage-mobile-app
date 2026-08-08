@@ -8,6 +8,7 @@ import {
   type PostOptionsSheetRef,
   type ReportSheetRef,
 } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 import {
   useBlockHandler,
   useDeleteHandler,
@@ -134,7 +135,7 @@ export function usePostActionController({
         if (!selectedPost?.topic) return;
         follow.handleFollowTopic(
           selectedPost.topic,
-          followedTopics.includes(selectedPost.topic),
+          isTopicFollowed(followedTopics, selectedPost.topic),
         );
       },
       save: () => {

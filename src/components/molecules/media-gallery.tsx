@@ -219,27 +219,20 @@ export const MediaGallery = memo(function MediaGallery({
       )}
       {shouldBlurContent && (
         <Pressable onPress={onRevealContent} style={galleryStyles.blurOverlay}>
-          {Platform.OS === "ios" ? (
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={galleryStyles.blurViewFill}
-            >
-              <View style={galleryStyles.revealTextContainer}>
-                <Ionicons name="eye-outline" size={24} color="#fff" />
-                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                  Tap to reveal
-                </Text>
-              </View>
-            </BlurView>
-          ) : (
-            <View style={galleryStyles.androidBlurOverlay}>
+          <BlurView
+            intensity={80}
+            tint="dark"
+            // Real blur on Android too (web parity, BUG-020).
+            experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+            style={galleryStyles.blurViewFill}
+          >
+            <View style={galleryStyles.revealTextContainer}>
               <Ionicons name="eye-outline" size={24} color="#fff" />
               <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
                 Tap to reveal
               </Text>
             </View>
-          )}
+          </BlurView>
         </Pressable>
       )}
     </View>

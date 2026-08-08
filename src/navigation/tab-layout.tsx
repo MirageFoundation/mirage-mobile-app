@@ -15,12 +15,9 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
-import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
-import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
-import { router, replaceBypass } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import {
   Pressable,
@@ -38,18 +35,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import {
-  isInboxNotificationNavigationActive,
-  isShareIntentNavigationActive,
-  markShareIntentNavigationActive,
   signalTabsReady,
   signalTabsUnmounted,
 } from "@/src/services/inbox-notifications";
-import {
-  isRecentCreateDeepLink,
-  isRecentInitialTabDeepLink,
-  isRecentSharePath,
-} from "@/src/navigation/linking";
-import { getPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -58,24 +46,6 @@ const REFRESH_TARGET_BY_ROUTE: Partial<Record<string, RefreshTargetKey>> = {
   following: "following",
   profile: "profile",
 };
-
-function getPendingShareIntentDiagnostics() {
-  const pending = getPendingShareIntent();
-  if (!pending) {
-    return { hasPendingShareIntent: false };
-  }
-
-  return {
-    hasPendingShareIntent: true,
-    pendingShareIntentAgeMs: Date.now() - pending.receivedAt,
-    pendingShareIntentSource: pending.source,
-    pendingShareIntentType: pending.type,
-    pendingHasText: !!pending.text,
-    pendingHasWebUrl: !!pending.webUrl,
-    pendingFileCount: pending.files?.length ?? 0,
-    pendingHasLaunchPath: !!pending.launchPath,
-  };
-}
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -324,6 +294,8 @@ function TabsContent() {
     <>
       <TabNavigationVisibilityReset />
       <Tabs
+        initialRouteName="index"
+        backBehavior="initialRoute"
         tabBar={(props) => <AnimatedTabBar {...props} />}
         screenOptions={{
           headerShown: false,
@@ -367,23 +339,22 @@ function TabsContent() {
 
 export default function TabLayout() {
   const pathname = usePathname();
-  const { hasShareIntent } = useShareIntentContext();
-  const hasHandledInitialRouteRef = useRef(false);
-  const initialShareIntentRef = useRef(hasShareIntent);
   const latestPathnameRef = useRef(pathname);
-  const latestShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
     latestPathnameRef.current = pathname;
-    latestShareIntentRef.current = hasShareIntent;
-  }, [pathname, hasShareIntent]);
+  }, [pathname]);
 
+  // Launch-intent navigation (share intents, notification recovery, stale
+  // initial routes) is orchestrated one level up in the (app) Stack layout
+  // (src/navigation/launch-route-orchestrator.tsx). This layout only owns
+  // tab concerns and the tabs-ready signal.
   useEffect(() => {
     Sentry.addBreadcrumb({
       category: "navigation",
       message: "Tabs layout mounted",
       level: "info",
-      data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+      data: { pathname: latestPathnameRef.current },
     });
     signalTabsReady();
     return () => {
@@ -391,258 +362,11 @@ export default function TabLayout() {
         category: "navigation",
         message: "Tabs layout unmounted",
         level: "info",
-        data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+        data: { pathname: latestPathnameRef.current },
       });
       signalTabsUnmounted();
     };
   }, []);
-
-  const prevShareIntentRef = useRef(hasShareIntent);
-  const hasForcedShareIntentRouteRef = useRef(false);
-  useEffect(() => {
-    const prev = prevShareIntentRef.current;
-    prevShareIntentRef.current = hasShareIntent;
-    if (!hasShareIntent) {
-      hasForcedShareIntentRouteRef.current = false;
-      return;
-    }
-    markShareIntentNavigationActive("tabs-share-intent");
-    if (pathname.endsWith("/create")) {
-      hasForcedShareIntentRouteRef.current = true;
-      return;
-    }
-    if (!hasForcedShareIntentRouteRef.current) {
-      const hasRecentInitialTabDeepLink = isRecentInitialTabDeepLink();
-      const isPostPath = pathname.startsWith("/post/");
-      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
-      const activeShareRedirectDiagnostics = {
-        pathname,
-        hadPreviousShareIntent: prev,
-        hasHandledInitialRoute: hasHandledInitialRouteRef.current,
-        isNotificationNavigationActive,
-        hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
-        hasRecentInitialTabDeepLink,
-        isPostPath,
-        detectedRecentSharePath: isRecentSharePath(10_000),
-        ...getPendingShareIntentDiagnostics(),
-      };
-      // Notification navigation owns the route while it is in flight. A share
-      // intent replayed by Android (cold start, activity recreation) must not
-      // steal the screen and strand the user on Create.
-      if (isNotificationNavigationActive) {
-        Sentry.captureMessage("Share intent create redirect blocked during notification navigation", {
-          level: "warning",
-          tags: {
-            feature: "share-intent",
-            operation: "create-redirect-blocked",
-          },
-          extra: activeShareRedirectDiagnostics,
-        });
-        return;
-      }
-      // An active post deep link also outranks a replayed share intent.
-      if (isPostPath || hasRecentInitialTabDeepLink) {
-        Sentry.captureMessage("Share intent create redirect blocked by active deep link", {
-          level: "warning",
-          tags: {
-            feature: "share-intent",
-            operation: "create-redirect-blocked",
-            route_kind: isPostPath ? "post" : "tab",
-          },
-          extra: activeShareRedirectDiagnostics,
-        });
-        return;
-      }
-      hasForcedShareIntentRouteRef.current = true;
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Forcing share intent to create tab",
-        level: "info",
-        data: activeShareRedirectDiagnostics,
-      });
-      replaceBypass("/(tabs)/create");
-    } else {
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Skipped repeated share intent create redirect",
-        level: "info",
-        data: { pathname, hadPreviousShareIntent: prev },
-      });
-    }
-  }, [hasShareIntent, pathname]);
-
-  useEffect(() => {
-    if (hasHandledInitialRouteRef.current || !pathname) return;
-
-    const handleInitial = () => {
-      if (hasHandledInitialRouteRef.current) return;
-      hasHandledInitialRouteRef.current = true;
-
-      const pendingShareIntentDiagnostics = getPendingShareIntentDiagnostics();
-      const hasPendingShareIntent = pendingShareIntentDiagnostics.hasPendingShareIntent;
-      const hasInitialShareIntent =
-        initialShareIntentRef.current ||
-        hasShareIntent ||
-        hasPendingShareIntent;
-      const hasInitialCreateIntent =
-        hasInitialShareIntent || isRecentCreateDeepLink();
-      const hasInitialTabDeepLink = isRecentInitialTabDeepLink();
-      const currentPathname = latestPathnameRef.current || pathname;
-      const isOnHomeTab =
-        currentPathname === "/" ||
-        currentPathname.endsWith("/(tabs)") ||
-        currentPathname.endsWith("/(tabs)/") ||
-        currentPathname.endsWith("/index");
-      const isOnCreate = currentPathname.endsWith("/create");
-      const isOnInbox = currentPathname.endsWith("/inbox");
-      const isOnPostDetail = currentPathname.startsWith("/post/");
-      const pendingDeepLinkRoute = useDeepLinkStore.getState().pendingRoute;
-      const pendingDeepLinkIsPost = pendingDeepLinkRoute?.startsWith("/post/") ?? false;
-      const isOnNonHomeTab =
-        isOnCreate ||
-        isOnInbox ||
-        currentPathname.endsWith("/following") ||
-        currentPathname.endsWith("/profile");
-      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
-      const isShareNavigationActive = isShareIntentNavigationActive();
-      const initialRouteDiagnostics = {
-        pathname: currentPathname,
-        hasInitialCreateIntent,
-        hasInitialShareIntent,
-        hasInitialTabDeepLink,
-        isOnHomeTab,
-        isOnCreate,
-        isOnInbox,
-        isOnPostDetail,
-        hasPendingDeepLinkRoute: !!pendingDeepLinkRoute,
-        pendingDeepLinkIsPost,
-        isOnNonHomeTab,
-        isNotificationNavigationActive,
-        isShareNavigationActive,
-        hasShareIntent,
-        hadInitialShareIntent: initialShareIntentRef.current,
-        detectedRecentSharePath: isRecentSharePath(10_000),
-        ...pendingShareIntentDiagnostics,
-      };
-
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Initial tab route check",
-        data: initialRouteDiagnostics,
-        level: "info",
-      });
-      console.log("[InboxNotifFlow] tab initial route check", initialRouteDiagnostics);
-
-      if (isNotificationNavigationActive && isOnPostDetail) {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Tab initial route recovery skipped on notification post detail",
-          level: "info",
-          data: initialRouteDiagnostics,
-        });
-      }
-
-      if (
-        isNotificationNavigationActive &&
-        !hasInitialShareIntent &&
-        !isOnInbox &&
-        !isOnPostDetail
-      ) {
-        console.log("[InboxNotifFlow] tab recovery replacing to inbox", {
-          pathname: currentPathname,
-          isNotificationNavigationActive,
-          isShareNavigationActive,
-        });
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Routing active notification launch to inbox tab",
-          data: {
-            pathname: currentPathname,
-            isNotificationNavigationActive,
-            isShareNavigationActive,
-          },
-          level: "info",
-        });
-        Sentry.captureMessage("Tab initial route recovery replacing to inbox", {
-          level: "warning",
-          tags: {
-            feature: "inbox-notifications",
-            operation: "tab-route-recovery-to-inbox",
-          },
-          extra: initialRouteDiagnostics,
-        });
-        replaceBypass("/(tabs)/inbox");
-        return;
-      }
-
-      if (hasInitialShareIntent && !isOnCreate) {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Routing initial share intent to create tab",
-          data: {
-            pathname: currentPathname,
-            hasShareIntent,
-            hasPendingShareIntent,
-            hadInitialShareIntent: initialShareIntentRef.current,
-            detectedRecentSharePath: isRecentSharePath(10_000),
-          },
-          level: "info",
-        });
-        if (isOnPostDetail || pendingDeepLinkIsPost || hasInitialTabDeepLink) {
-          Sentry.captureMessage("Stale share intent may override initial deep link", {
-            level: "warning",
-            tags: {
-              feature: "share-intent",
-              operation: "initial-deep-link-overridden",
-              route_kind: isOnPostDetail || pendingDeepLinkIsPost ? "post" : "tab",
-            },
-            extra: initialRouteDiagnostics,
-          });
-        }
-        Sentry.captureMessage("Android share intent initial route recovery", {
-          level: "info",
-          tags: { feature: "share-intent", operation: "initial-route-recovery" },
-          extra: {
-            pathname: currentPathname,
-            hasShareIntent,
-            hasPendingShareIntent,
-            hadInitialShareIntent: initialShareIntentRef.current,
-            detectedRecentSharePath: isRecentSharePath(10_000),
-          },
-        });
-        router.replace("/(tabs)/create");
-      }
-
-      if (
-        isOnNonHomeTab &&
-        !hasInitialTabDeepLink &&
-        !hasInitialCreateIntent &&
-        !isNotificationNavigationActive &&
-        !isShareNavigationActive
-      ) {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Redirecting stale initial tab route to home",
-          data: initialRouteDiagnostics,
-          level: "warning",
-        });
-        Sentry.captureMessage("Unexpected initial non-home tab route recovered", {
-          level: "warning",
-          tags: {
-            feature: "navigation",
-            operation: "initial-tab-route-recovery",
-            initial_tab_route: isOnCreate ? "create" : isOnInbox ? "inbox" : "other",
-          },
-          extra: initialRouteDiagnostics,
-        });
-        router.replace("/(tabs)");
-      }
-    };
-
-    const timer = setTimeout(handleInitial, 800);
-
-    return () => clearTimeout(timer);
-  }, [pathname, hasShareIntent]);
 
   return (
     <ScrollAnimationProvider>

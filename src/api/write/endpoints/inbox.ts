@@ -1,6 +1,6 @@
 import { api } from "@/src/api/client";
 import type { MirageWallet } from "@/src/wallet";
-import { buildSimpleSignedPayload } from "../signing/simple-sign";
+import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
 
 export interface MarkInboxViewedResponse {
   ok: boolean;

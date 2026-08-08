@@ -23,10 +23,24 @@ describe("infinite post reconciliation policy", () => {
     expect(restored).toEqual({
       enabled: true,
       staleTime: INFINITE_POSTS_STALE_TIME,
-      refetchOnMount: true,
+      refetchOnMount: false,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     });
+  });
+
+  test("never lets an automatic trigger replace loaded feed pages", () => {
+    const policy = getInfinitePostsQueryPolicy({
+      isInitializing: false,
+      isRestoring: false,
+    });
+
+    // New posts must arrive through the "New posts" pill, not by silently
+    // re-fetching every page under the user.
+    expect(policy.staleTime).toBe(Number.POSITIVE_INFINITY);
+    expect(policy.refetchOnMount).toBe(false);
+    expect(policy.refetchOnWindowFocus).toBe(false);
+    expect(policy.refetchOnReconnect).toBe(false);
   });
 
   test("respects explicit tab and auth gates only", () => {
@@ -46,8 +60,11 @@ describe("infinite post reconciliation policy", () => {
   });
 });
 
+// Documents *why* the policy above disables every automatic refetch trigger:
+// an infinite-query refetch rewrites page 1 in place, which would splice newly
+// published posts into the list the user is reading.
 describe("TanStack infinite first-page reconciliation", () => {
-  test("refreshes first-page membership/order while retaining loaded pages", async () => {
+  test("rewrites first-page membership/order while retaining loaded pages", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

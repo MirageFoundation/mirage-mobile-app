@@ -17,6 +17,7 @@ import {
   type Comment,
   type Post,
 } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 import {
   getBlockConfirmationMessage,
   useBlockHandler,
@@ -209,9 +210,7 @@ export const MediaPostDetailActionSheets = forwardRef<
         ref={postOptionsRef}
         post={post}
         isOwnPost={currentUser?.id === post.author.id}
-        isTopicFollowed={
-          post.topic ? followedTopics.includes(post.topic) : false
-        }
+        isTopicFollowed={isTopicFollowed(followedTopics, post.topic)}
         isFollowingUser={followedUsers.includes(post.author.id)}
         isSaved={savedPosts.some((savedPost) => savedPost.id === post.id)}
         onFollowUser={() =>
@@ -223,7 +222,7 @@ export const MediaPostDetailActionSheets = forwardRef<
         }
         onFollowTopic={() => {
           if (post.topic) {
-            followTopic(post.topic, followedTopics.includes(post.topic));
+            followTopic(post.topic, isTopicFollowed(followedTopics, post.topic));
           }
         }}
         onSave={() => {

@@ -187,13 +187,14 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     clearVideoPrepareMark(itemUri);
   }, [itemUri, shouldPrepare]);
 
-  // Returning from background can leave the video surface blank even though
-  // the player reports playing. A seek-in-place forces the native layer to
-  // repaint the current frame (same nudge as single-video cards).
+  // Returning from background/lock can leave the video frozen or blank. A
+  // seek-in-place + play on foreground recovers (same nudge as single-video
+  // cards). iOS screen lock often only reports `inactive`, so both states
+  // must arm the recovery (BUG-009).
   const wasBackgroundedRef = useRef(false);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "background") {
+      if (nextState.match(/inactive|background/)) {
         wasBackgroundedRef.current = true;
         return;
       }

@@ -30,14 +30,12 @@ type PostDetailCommentComposerProps = {
   baseCommentCount: number;
   currentUser?: CurrentUser | null;
   decrementCommentCount: (postId: string, baseComments: number) => void;
-  focusedCommentId?: string | null;
   id: string;
   implicitReplyRoot?: PostWithChildren | null;
   incrementCommentCount: (postId: string, baseComments: number) => void;
   isLoggedIn: boolean;
   isViewingComment: boolean;
   onAuthRequired: () => void;
-  onClearFocusedThread: () => void;
   onCommentCountDelta: (delta: number, fallbackBase: number) => void;
   onConfirmedCommentId: (optimisticId: string, confirmedId: string) => void;
   onHighlightComment: (commentId: string, suppressScroll?: boolean) => void;
@@ -49,7 +47,6 @@ type PostDetailCommentComposerProps = {
   replaceOptimisticCommentId: (threadId: string, optimisticId: string, confirmedId: string) => void;
   requireAuth: (action: () => void) => void;
   rootPostCommentCount: number;
-  showFocusedThread: boolean;
 };
 
 export const PostDetailCommentComposer = forwardRef<
@@ -63,14 +60,12 @@ export const PostDetailCommentComposer = forwardRef<
       baseCommentCount,
       currentUser,
       decrementCommentCount,
-      focusedCommentId,
       id,
       implicitReplyRoot,
       incrementCommentCount,
       isLoggedIn,
       isViewingComment,
       onAuthRequired,
-      onClearFocusedThread,
       onCommentCountDelta,
       onConfirmedCommentId,
       onHighlightComment,
@@ -82,7 +77,6 @@ export const PostDetailCommentComposer = forwardRef<
       replaceOptimisticCommentId,
       requireAuth,
       rootPostCommentCount,
-      showFocusedThread,
     },
     ref,
   ) => {
@@ -192,10 +186,11 @@ export const PostDetailCommentComposer = forwardRef<
             if (replyTargetId) {
               addReplyOptimisticComment(optimisticThreadId, replyTargetId, optimisticComment);
             } else {
+              // The optimistic comment is merged into whatever list is
+              // displayed (including a focused thread), so we never tear the
+              // focused thread down here — that full rebuild caused the list
+              // to jump while the scroll-to-end raced it.
               addTopLevelOptimisticComment(optimisticThreadId, optimisticComment);
-              if (focusedCommentId && showFocusedThread) {
-                onClearFocusedThread();
-              }
               onScrollToEndAfterLayout();
             }
             onHighlightComment(optimisticCommentId, shouldSuppressHighlightScroll);
@@ -258,12 +253,10 @@ export const PostDetailCommentComposer = forwardRef<
         currentUser,
         decrementCommentCount,
         enqueue,
-        focusedCommentId,
         id,
         implicitReplyRoot,
         incrementCommentCount,
         isViewingComment,
-        onClearFocusedThread,
         onCommentCountDelta,
         onConfirmedCommentId,
         onHighlightComment,
@@ -274,7 +267,6 @@ export const PostDetailCommentComposer = forwardRef<
         replaceOptimisticCommentId,
         replyingTo,
         rootPostCommentCount,
-        showFocusedThread,
       ],
     );
 

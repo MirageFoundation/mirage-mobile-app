@@ -130,9 +130,11 @@ export function usePostCardVideoHealth({
   // processing flow; anything else hides the card.
   const mediaSourceUri = resolvedMediaUri ?? "";
   useEffect(() => {
-    const subscription = videoPlayer.addListener(
-      "statusChange",
-      ({ status, error }) => {
+    let subscription: { remove(): void };
+    try {
+      subscription = videoPlayer.addListener(
+        "statusChange",
+        ({ status, error }) => {
         if (status !== "error" || !error) return;
         if (__DEV__) {
           console.log(
@@ -177,11 +179,24 @@ export function usePostCardVideoHealth({
           setVideoError(true);
         }
         setIsVideoLoading(false);
-      },
-    );
+        },
+      );
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "video-player",
+        message: "Skipped health listener on released video player",
+        level: "warning",
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+      return;
+    }
 
     return () => {
-      subscription.remove();
+      try {
+        subscription.remove();
+      } catch {
+        // The native shared player may already be released during recycling.
+      }
       if (videoErrorRetryRef.current) {
         clearTimeout(videoErrorRetryRef.current);
         videoErrorRetryRef.current = null;
@@ -216,10 +231,11 @@ export function usePostCardVideoHealth({
     }
   }, [videoError, isConnected, isVideoProcessing, clearLoadingFallback, setIsVideoLoading, setMediaRetryKey]);
 
-  // Returning from background with a stuck processing/error state: retry.
+  // Returning from background/lock with a stuck processing/error state:
+  // retry. iOS screen lock often only reports `inactive` (BUG-009).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "background") {
+      if (nextState.match(/inactive|background/)) {
         wasBackgroundedRef.current = true;
       } else if (nextState === "active" && wasBackgroundedRef.current) {
         wasBackgroundedRef.current = false;

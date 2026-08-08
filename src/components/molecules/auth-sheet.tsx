@@ -40,12 +40,12 @@ export const AuthSheet = () => {
 
   const handleCreateAccount = () => {
     hideAuthSheet();
-    router.push("/(auth)/username");
+    router.push("/username");
   };
 
   const handleLogin = () => {
     hideAuthSheet();
-    router.push("/(auth)/login");
+    router.push("/login");
   };
 
   if (!authSheetVisible) {

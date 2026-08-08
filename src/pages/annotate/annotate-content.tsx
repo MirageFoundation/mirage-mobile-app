@@ -21,6 +21,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
+import type { MediaUploadPhase } from "@/src/api/read/endpoints/media";
 import * as Sentry from "@sentry/react-native";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { useAnnotate } from "@/src/api/write";
@@ -49,7 +50,7 @@ import { AnnotateToggle } from "./annotate-toggle";
 
 type MediaType = "image" | "sticker" | "video" | null;
 
-type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean };
+type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; phase?: MediaUploadPhase; error: string | null; isServerError?: boolean };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
 
 export function AnnotateScreen() {
@@ -100,7 +101,7 @@ export function AnnotateScreen() {
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
   const [isNetworkOnline, setIsNetworkOnline] = useState(true);
   const [videoUploadState, setVideoUploadState] = useState<
-    Record<string, { progress: number; uploading: boolean; done: boolean; error: string | null }>
+    Record<string, { progress: number; phase: MediaUploadPhase; uploading: boolean; done: boolean; error: string | null }>
   >({});
   const videoUploadStateRef = useRef(setVideoUploadState);
   videoUploadStateRef.current = setVideoUploadState;
@@ -132,27 +133,27 @@ export function AnnotateScreen() {
   const hasFailedUploads = failedVideoUploads.length > 0;
 
   const startVideoUpload = useCallback((uri: string, silent = false) => {
-    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null });
+    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, phase: "processing", error: null });
     videoUploadStateRef.current((prev) => ({
       ...prev,
-      [uri]: { progress: 0, uploading: true, done: false, error: null },
+      [uri]: { progress: 0, phase: "processing", uploading: true, done: false, error: null },
     }));
-    uploadVideoAndGetUrl(uri, (progress) => {
+    uploadVideoAndGetUrl(uri, (progress, phase = "uploading") => {
       const clamped = Math.min(100, Math.max(0, progress));
       const entry = VIDEO_UPLOADS.get(uri);
       if (entry) {
-        VIDEO_UPLOADS.set(uri, { ...entry, progress: clamped });
+        VIDEO_UPLOADS.set(uri, { ...entry, progress: clamped, phase });
       }
       videoUploadStateRef.current((prev) => ({
         ...prev,
-        [uri]: { ...prev[uri], progress: clamped },
+        [uri]: { ...prev[uri], progress: clamped, phase },
       }));
     })
       .then((url) => {
         VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         videoUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 100, uploading: false, done: true, error: null },
+          [uri]: { progress: 100, phase: "uploading", uploading: false, done: true, error: null },
         }));
         videoUploadToastShownRef.current = false;
         triggerHaptic("success");
@@ -164,7 +165,7 @@ export function AnnotateScreen() {
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         videoUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { progress: 0, uploading: false, done: false, error: msg },
+          [uri]: { progress: 0, phase: "processing", uploading: false, done: false, error: msg },
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;
@@ -653,9 +654,9 @@ export function AnnotateScreen() {
                             <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
                               {!isNetworkOnline
                                 ? "Low connectivity…"
-                                : upload.progress >= 98
-                                  ? "Processing…"
-                                  : "Uploading…"}
+                                : upload.phase === "processing"
+                                    ? `Processing… ${Math.round(upload.progress)}%`
+                                    : `Uploading… ${Math.round(upload.progress)}%`}
                             </Text>
                           </View>
                         )}

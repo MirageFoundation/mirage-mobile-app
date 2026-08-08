@@ -16,7 +16,6 @@ import {
 import type { PostsResponse } from "@/src/api/types";
 import { useBlockUser, useUnblockUser } from "@/src/api/write";
 import type {
-  AwardPickerSheetRef,
   GiftMirageSheetRef,
   GiftSubscriptionSheetRef,
   ReportSheetRef,
@@ -99,7 +98,6 @@ export function useUserProfileController(
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const postActionSheetsRef = useRef<ProfilePostActionSheetsRef>(null);
   const userMenuSheetRef = useRef<UserProfileMenuSheetRef>(null);
-  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
   const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const lastFetchTime = useRef(0);
@@ -333,16 +331,15 @@ export function useUserProfileController(
       });
     }
   }, [shareServer, username]);
-  const presentGiftSheet = useCallback((kind: "award" | "mirage" | "subscription") => {
+  const presentGiftSheet = useCallback((kind: "mirage" | "subscription") => {
     if (!userAddress || isOwnProfile) return;
     Sentry.addBreadcrumb({
       category: "user-profile",
-      message: kind === "award" ? "Open give-award sheet" : `Open gift-${kind} sheet`,
+      message: `Open gift-${kind} sheet`,
       data: { target: userAddress },
       level: "info",
     });
     setTimeout(() => {
-      if (kind === "award") awardPickerSheetRef.current?.present();
       if (kind === "mirage") giftMirageSheetRef.current?.present();
       if (kind === "subscription") giftSubscriptionSheetRef.current?.present();
     }, 300);
@@ -444,7 +441,6 @@ export function useUserProfileController(
   const handleRequestBlockUser = useCallback(() => setShowBlockUserConfirmation(true), []);
   const handleCancelBlockUser = useCallback(() => setShowBlockUserConfirmation(false), []);
   const handleReportUser = useCallback(() => reportSheetRef.current?.present(), []);
-  const handleGiveAwardToUser = useCallback(() => presentGiftSheet("award"), [presentGiftSheet]);
   const handleGiftMirageToUser = useCallback(() => presentGiftSheet("mirage"), [presentGiftSheet]);
   const handleGiftSubscriptionToUser = useCallback(
     () => presentGiftSheet("subscription"),
@@ -466,7 +462,7 @@ export function useUserProfileController(
 
   return {
     activeTab, activeVideoPostId, animatedTabIndex, apiPosts, avatarUrl,
-    awardPickerSheetRef, contentAnimatedStyle, displayUsername, flatListRef,
+    contentAnimatedStyle, displayUsername, flatListRef,
     giftMirageSheetRef, giftSubscriptionSheetRef, gradientColors, handleAuthorPress,
     handleCommentPress, handleConfirmBlockUser, handleCopyProfileLink, handleDownvote,
     handleEndReached, handleFollow, handlePostMorePress, handleProfileMomentumScrollEnd,
@@ -482,7 +478,7 @@ export function useUserProfileController(
     userProfileFeedContext, userStatus, username, visibleVideoPostIds,
     handleBackPress, handleFollowersPress, handleMenuPress, handlePostPress,
     handleTopicPress, handleSettingsPress, handleRequestBlockUser,
-    handleCancelBlockUser, handleReportUser, handleGiveAwardToUser,
+    handleCancelBlockUser, handleReportUser,
     handleGiftMirageToUser, handleGiftSubscriptionToUser,
     handleBlockUserFromCard, handleBlockPostFromCard, handleReportFromCard,
   };

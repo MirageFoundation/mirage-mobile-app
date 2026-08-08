@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import { MEDIA_LOADED_CACHE } from "./post-card-media-constants";
 import {
   getAppliedVideoSourceUri,
@@ -60,6 +61,7 @@ export function usePostCardVideoListeners({
         }
       }
     };
+    const registerListeners = () => {
     const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
       currentVideoPositionRef.current = currentTime;
     });
@@ -69,6 +71,11 @@ export function usePostCardVideoListeners({
         if (!isPlaying) {
           if (
             shouldPlayNativeVideo &&
+            // While locked/backgrounded the OS pauses the player and silently
+            // rejects play(); retrying here wedges playback in a paused state
+            // that persists after unlock. The AppState foreground recovery in
+            // use-post-card-video-playback resumes instead (BUG-009).
+            AppState.currentState === "active" &&
             videoPlayer.status === "readyToPlay" &&
             // A newer lease holder (fullscreen) may have paused on purpose.
             !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)
@@ -116,18 +123,48 @@ export function usePostCardVideoListeners({
         }
       },
     );
-    if (
-      videoPlayer.status === "readyToPlay" &&
-      getAppliedVideoSourceUri(videoPlayer) === resolvedMediaUri
-    ) {
-      applySourceMetadata(videoPlayer.availableVideoTracks);
+    return [
+      timeSubscription,
+      playingSubscription,
+      sourceSubscription,
+      statusSubscription,
+    ];
+    };
+
+    // The player is a native shared object that an adopted lease (or list
+    // recycling) can release underneath this effect; addListener on a
+    // released player throws (Sentry: videoPlayer.addListener crash family).
+    let subscriptions: { remove: () => void }[];
+    try {
+      subscriptions = registerListeners();
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "video-player",
+        message: "Skipped listeners on released video player",
+        level: "warning",
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+      return;
+    }
+
+    try {
+      if (
+        videoPlayer.status === "readyToPlay" &&
+        getAppliedVideoSourceUri(videoPlayer) === resolvedMediaUri
+      ) {
+        applySourceMetadata(videoPlayer.availableVideoTracks);
+      }
+    } catch {
+      // Native player was released underneath us (shared-object teardown
+      // race); the mount gates will recreate it.
     }
 
     return () => {
-      timeSubscription.remove();
-      playingSubscription.remove();
-      sourceSubscription.remove();
-      statusSubscription.remove();
+      try {
+        subscriptions.forEach((subscription) => subscription.remove());
+      } catch {
+        // Listener removal on an already-released native player is a no-op.
+      }
     };
   }, [
     getPosition,

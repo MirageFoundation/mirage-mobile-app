@@ -1,10 +1,5 @@
 import { api } from "../../client";
-import type {
-  PostsResponse,
-  CommentsResponse,
-  RootPostIdResponse,
-  CommentContextResponse,
-} from "../../types";
+import type { PostsResponse, CommentsResponse } from "../../types";
 import { fetchCompleteCommentTree } from "../deep-comment-expansion";
 import { normalizeUserPostsQueryParams } from "../request-params";
 
@@ -68,14 +63,17 @@ export async function getUserPosts(
 // ============================================
 
 export interface GetCommentsParams {
-  post_id: string; // Required root txhash
+  post_id: string; // Required post OR comment txhash
   address?: string; // Viewer address
 }
 
-
 /**
- * Get comment tree for a post
- * Automatically resolves deeply nested replies that the API truncates
+ * Get the complete thread for a post or comment.
+ *
+ * One request returns everything the thread UI needs: `ancestors` (the chain
+ * from the root post down to the immediate parent), `root` (the focused post
+ * or comment), and `children` (its nested reply subtree). Deeply nested
+ * replies that the API truncates are resolved transparently.
  */
 export async function getComments(
   params: GetCommentsParams,
@@ -87,34 +85,6 @@ export async function getComments(
       api.get<CommentsResponse>("/get_comments", requestParams, { signal }),
     options?.signal,
   );
-}
-
-export interface GetRootPostIdParams {
-  comment_id: string;
-}
-
-/**
- * Get the root post ID for a comment
- */
-export async function getRootPostId(
-  params: GetRootPostIdParams
-): Promise<RootPostIdResponse> {
-  return api.get<RootPostIdResponse>("/get_root_post_id", params);
-}
-
-export interface GetCommentContextParams {
-  comment_id: string;
-  address?: string;
-  max_depth?: number; // 1-10
-}
-
-/**
- * Get parent context for a comment
- */
-export async function getCommentContext(
-  params: GetCommentContextParams
-): Promise<CommentContextResponse> {
-  return api.get<CommentContextResponse>("/get_comment_context", params);
 }
 
 // ============================================

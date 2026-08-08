@@ -57,10 +57,20 @@ export interface UseVoteHandlerReturn {
 }
 
 interface PendingVoteInfo {
-  actionId: string;
+  /** Set once the action is actually enqueued; null while debouncing. */
+  actionId: string | null;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
   previousState: VoteState;
   optimisticResult: VoteResult;
 }
+
+/**
+ * Rapid direction changes are coalesced: the optimistic UI updates on every
+ * tap, but the PoW action is only enqueued after the user settles. This keeps
+ * up->down toggles from launching (and then cancelling) native Argon2
+ * computations back-to-back, which saturated the CPU on low-end devices.
+ */
+const VOTE_ENQUEUE_DEBOUNCE_MS = 400;
 
 function calculateVoteResult(
   action: "upvote" | "downvote",
@@ -151,6 +161,75 @@ export function useVoteHandler(
     voteAsyncRef.current = voteMutation.mutateAsync;
   }, [voteMutation.mutateAsync]);
 
+  const enqueuePendingVote = useCallback(
+    (targetId: string) => {
+      const pending = pendingVotes.current.get(targetId);
+      if (!pending || pending.actionId) return;
+
+      const result = pending.optimisticResult;
+      const previousState = pending.previousState;
+      const actionType = getVoteActionType(result.direction);
+      const actionId = generateActionId();
+      pending.debounceTimer = null;
+      pending.actionId = actionId;
+
+      const clearIfCurrent = () => {
+        const current = pendingVotes.current.get(targetId);
+        if (current?.actionId === actionId) {
+          pendingVotes.current.delete(targetId);
+        }
+      };
+
+      enqueue({
+        id: actionId,
+        type: actionType,
+        label: getActionLabel(actionType),
+        execute: async () => {
+          return voteAsyncRef.current({
+            target: targetId,
+            direction: result.direction,
+          });
+        },
+        onSuccess: () => {
+          clearIfCurrent();
+          trackEvent("vote_cast", {
+            vote_type: getVoteTypeLabel(result.direction),
+          });
+          onSuccess?.(targetId);
+        },
+        onError: () => {
+          clearIfCurrent();
+        },
+        onRollback: () => {
+          clearIfCurrent();
+          onRollback?.(targetId, previousState);
+        },
+      });
+    },
+    [enqueue, onRollback, onSuccess]
+  );
+
+  const schedulePendingVote = useCallback(
+    (targetId: string, previousState: VoteState, result: VoteResult) => {
+      // Apply the optimistic UI immediately; the queue action is debounced so
+      // rapid direction changes never launch overlapping PoW computations.
+      onOptimisticUpdate?.(targetId, result);
+
+      const info: PendingVoteInfo = {
+        actionId: null,
+        debounceTimer: null,
+        previousState,
+        optimisticResult: result,
+      };
+      info.debounceTimer = setTimeout(() => {
+        info.debounceTimer = null;
+        enqueuePendingVote(targetId);
+      }, VOTE_ENQUEUE_DEBOUNCE_MS);
+      pendingVotes.current.set(targetId, info);
+    },
+    [enqueuePendingVote, onOptimisticUpdate]
+  );
+
   const handleVote = useCallback(
     (
       action: "upvote" | "downvote",
@@ -162,7 +241,15 @@ export function useVoteHandler(
       const pending = pendingVotes.current.get(targetId);
 
       if (pending) {
-        cancelAction(pending.actionId);
+        // Cancel whatever is outstanding for this target: a debounced vote
+        // that never reached the queue, or an already-enqueued action.
+        if (pending.debounceTimer) {
+          clearTimeout(pending.debounceTimer);
+          pending.debounceTimer = null;
+        }
+        if (pending.actionId) {
+          cancelAction(pending.actionId);
+        }
 
         pendingVotes.current.delete(targetId);
         onRollback?.(targetId, pending.previousState);
@@ -195,44 +282,7 @@ export function useVoteHandler(
             direction: desiredDirection as VoteDirection,
             newLikes: pending.previousState.likes + likeDelta,
           };
-
-          const actionType = getVoteActionType(newResult.direction);
-          const newActionId = generateActionId();
-
-          pendingVotes.current.set(targetId, {
-            actionId: newActionId,
-            previousState: pending.previousState,
-            optimisticResult: newResult,
-          });
-
-          enqueue({
-            id: newActionId,
-            type: actionType,
-            label: getActionLabel(actionType),
-            execute: async () => {
-              return voteAsyncRef.current({
-                target: targetId,
-                direction: newResult.direction,
-              });
-            },
-            onOptimisticUpdate: () => {
-              onOptimisticUpdate?.(targetId, newResult);
-            },
-            onSuccess: () => {
-              pendingVotes.current.delete(targetId);
-              trackEvent("vote_cast", {
-                vote_type: getVoteTypeLabel(newResult.direction),
-              });
-              onSuccess?.(targetId);
-            },
-            onError: () => {
-              pendingVotes.current.delete(targetId);
-            },
-            onRollback: () => {
-              pendingVotes.current.delete(targetId);
-              onRollback?.(targetId, pending.previousState);
-            },
-          });
+          schedulePendingVote(targetId, pending.previousState, newResult);
         });
 
         return;
@@ -252,48 +302,10 @@ export function useVoteHandler(
         };
 
         const newLikes = currentLikes + result.likeDelta;
-        const resultWithLikes: VoteResult = { ...result, newLikes };
-
-        const actionType = getVoteActionType(result.direction);
-        const actionId = generateActionId();
-
-        pendingVotes.current.set(targetId, {
-          actionId,
-          previousState,
-          optimisticResult: resultWithLikes,
-        });
-
-        enqueue({
-          id: actionId,
-          type: actionType,
-          label: getActionLabel(actionType),
-          execute: async () => {
-            return voteAsyncRef.current({
-              target: targetId,
-              direction: resultWithLikes.direction,
-            });
-          },
-          onOptimisticUpdate: () => {
-            onOptimisticUpdate?.(targetId, resultWithLikes);
-          },
-          onSuccess: () => {
-            pendingVotes.current.delete(targetId);
-            trackEvent("vote_cast", {
-              vote_type: getVoteTypeLabel(resultWithLikes.direction),
-            });
-            onSuccess?.(targetId);
-          },
-          onError: () => {
-            pendingVotes.current.delete(targetId);
-          },
-          onRollback: () => {
-            pendingVotes.current.delete(targetId);
-            onRollback?.(targetId, previousState);
-          },
-        });
+        schedulePendingVote(targetId, previousState, { ...result, newLikes });
       });
     },
-    [requireAuth, onOptimisticUpdate, onRollback, onSuccess, enqueue, cancelAction]
+    [requireAuth, onRollback, cancelAction, schedulePendingVote]
   );
 
   const handleUpvote = useCallback(

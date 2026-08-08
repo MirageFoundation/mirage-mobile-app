@@ -1,11 +1,9 @@
 import * as Sentry from "@sentry/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useComments } from "@/src/api/read";
-import { getCommentContext, getComments } from "@/src/api/read/endpoints/posts";
-import { queryKeys } from "@/src/api/read/query-keys";
-import type { CommentsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
+import { readThreadAncestors } from "@/src/api/read/thread-ancestors";
+import type { CommentsResponse } from "@/src/api/types";
 import { parseApiError } from "@/src/utils/parse-api-error";
 
 type UsePostDetailFocusedThreadInput = {
@@ -16,7 +14,6 @@ type UsePostDetailFocusedThreadInput = {
   id: string;
   isFocused: boolean;
   isViewingComment: boolean;
-  queryClient: QueryClient;
 };
 
 export function usePostDetailFocusedThread({
@@ -27,13 +24,17 @@ export function usePostDetailFocusedThread({
   id,
   isFocused,
   isViewingComment,
-  queryClient,
 }: UsePostDetailFocusedThreadInput) {
+  // B-2.6: `get_comments` returns the whole thread — ancestor chain (root post
+  // first), focused comment, and reply subtree — in one response. That is the
+  // only thread contract; there is no multi-call stitch any more.
+  const viewingThread = readThreadAncestors(commentsData);
   const actualRootPostId = useMemo(() => {
     const root = commentsData?.root;
     if (!root?.post_id) return null;
-    return isViewingComment ? root.root_post_id : root.post_id;
-  }, [commentsData?.root, isViewingComment]);
+    if (isViewingComment) return viewingThread.rootPostId ?? root.root_post_id;
+    return root.post_id;
+  }, [commentsData?.root, isViewingComment, viewingThread.rootPostId]);
   const optimisticThreadId = isViewingComment ? actualRootPostId ?? id : id;
 
   const highlightCommentId = typeof highlight === "string" && highlight.length > 0 ? highlight : null;
@@ -96,12 +97,29 @@ export function usePostDetailFocusedThread({
     data: fullThreadCommentsData,
     isLoading: isLoadingFullThreadComments,
   } = useComments(actualRootPostId, {
-    enabled: isFocused && isViewingComment && !!actualRootPostId,
+    // Match the web thread flow: the focused comment response already carries
+    // its ancestors and subtree. Fetch the root thread only after the user
+    // explicitly asks to leave the focused view and show the full thread.
+    enabled:
+      isFocused &&
+      isViewingComment &&
+      !showFocusedThread &&
+      !!actualRootPostId,
   });
-  const [actualRootPost, setActualRootPost] = useState<PostWithChildren | null>(null);
-  const [contextComments, setContextComments] = useState<ApiPost[]>([]);
-  const [isLoadingContext, setIsLoadingContext] = useState(false);
-  const [hasLoadedFocusedContext, setHasLoadedFocusedContext] = useState(false);
+  // The response that carries the focused comment's ancestor chain: when the
+  // route id IS the comment that is `commentsData`, otherwise it is the
+  // separately-fetched highlighted comment.
+  const focusedThread = readThreadAncestors(
+    isViewingComment ? commentsData : focusedCommentData,
+  );
+
+  // Root post, ancestor chain, and reply subtree all arrive together. These are
+  // plain derivations of one response — no state, no effects, no second fetch.
+  const actualRootPost = useMemo(() => {
+    if (!actualRootPostId) return null;
+    if (!isViewingComment && commentsData?.root?.post_id) return commentsData.root;
+    return focusedThread.rootPost;
+  }, [actualRootPostId, commentsData?.root, focusedThread.rootPost, isViewingComment]);
 
   const contextDepth = useMemo(() => {
     if (!depth) return focusedCommentId ? 5 : 0;
@@ -110,96 +128,24 @@ export function usePostDetailFocusedThread({
     return Math.min(parsed, 5);
   }, [depth, focusedCommentId]);
 
+  const contextComments = useMemo(() => {
+    if (!focusedCommentId || contextDepth <= 0) return [];
+    return focusedThread.parentChain;
+  }, [contextDepth, focusedCommentId, focusedThread.parentChain]);
+
   useEffect(() => {
     setShowFocusedThread(true);
   }, [id, highlight, depth]);
 
-  const focusedContextCheckQuery = useQuery({
-    queryKey: focusedCommentId
-      ? queryKeys.commentContext(focusedCommentId, 5, currentUserWallet)
-      : queryKeys.commentContext("missing", 5, currentUserWallet),
-    queryFn: () =>
-      getCommentContext({
-        comment_id: focusedCommentId!,
-        address: currentUserWallet,
-        max_depth: 5,
-      }),
-    enabled: !!focusedCommentId,
-    staleTime: 1000 * 60,
-  });
+  // How many ancestors exist above the focused comment, including any the node
+  // elided. Drives the "N more replies above" affordance.
+  const focusedContextAvailableCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
+    return focusedThread.parentChain.length + focusedThread.omitted;
+  }, [focusedCommentId, focusedThread.omitted, focusedThread.parentChain]);
 
-  const loadFocusedContext = useCallback(
-    async (maxDepth = 5) => {
-      if (!focusedCommentId) return;
-      const depthToLoad = Math.min(Math.max(maxDepth, 0), 5);
-      if (depthToLoad <= 0) return;
-      setIsLoadingContext(true);
-      try {
-        const data = await queryClient.fetchQuery({
-          queryKey: queryKeys.commentContext(
-            focusedCommentId,
-            depthToLoad,
-            currentUserWallet,
-          ),
-          queryFn: () =>
-            getCommentContext({
-              comment_id: focusedCommentId,
-              address: currentUserWallet,
-              max_depth: depthToLoad,
-            }),
-          staleTime: 1000 * 60,
-        });
-        setContextComments([...data.context].reverse());
-        setHasLoadedFocusedContext(true);
-      } catch (error) {
-        Sentry.addBreadcrumb({
-          category: "comments",
-          message: "Failed to load focused comment context",
-          data: { focusedCommentId, error: String(error) },
-          level: "warning",
-        });
-      } finally {
-        setIsLoadingContext(false);
-      }
-    },
-    [focusedCommentId, currentUserWallet, queryClient],
-  );
-
-  useEffect(() => {
-    setHasLoadedFocusedContext(false);
-  }, [focusedCommentId]);
-
-  useEffect(() => {
-    if (!actualRootPostId) {
-      setActualRootPost(null);
-      return;
-    }
-
-    if (!isViewingComment && commentsData?.root?.post_id) {
-      setActualRootPost(commentsData.root);
-      return;
-    }
-
-    getComments({ post_id: actualRootPostId, address: currentUserWallet })
-      .then((data) => setActualRootPost(data.root))
-      .catch((error) => {
-        Sentry.addBreadcrumb({
-          category: "comments",
-          message: "Failed to load focused comment root post",
-          data: { actualRootPostId, error: String(error) },
-          level: "warning",
-        });
-      });
-  }, [isViewingComment, actualRootPostId, commentsData?.root, currentUserWallet]);
-
-  useEffect(() => {
-    if (!focusedCommentId || contextDepth <= 0) {
-      setContextComments([]);
-      setIsLoadingContext(false);
-      return;
-    }
-    void loadFocusedContext(contextDepth);
-  }, [focusedCommentId, contextDepth, loadFocusedContext]);
+  // The ancestor picture is settled the moment the thread response lands.
+  const isFocusedContextSettled = focusedThread.resolved;
 
   return {
     actualRootPost,
@@ -208,17 +154,16 @@ export function usePostDetailFocusedThread({
     contextDepth,
     focusedCommentData,
     focusedCommentId,
-    focusedContextCheckQuery,
+    focusedContextAvailableCount,
+    isFocusedContextSettled,
     fullThreadCommentsData,
-    hasLoadedFocusedContext,
+    hasLoadedFocusedContext: focusedThread.resolved,
     highlightCommentId,
-    isLoadingContext,
+    isLoadingContext: !!focusedCommentId && !focusedThread.resolved,
     isFocusedCommentNotFound,
     isLoadingFocusedComment,
     isLoadingFullThreadComments,
-    loadFocusedContext,
     optimisticThreadId,
-    setContextComments,
     setShowFocusedThread,
     showFocusedThread,
   };

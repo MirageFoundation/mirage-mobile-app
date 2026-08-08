@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
+import { hasHashtags, parseHashtags } from "@/src/utils/hashtag-parser";
 
 type PostCardContentProps = {
   title: string;
@@ -38,7 +39,11 @@ export const PostCardContent = memo(function PostCardContent({
         weight="bold"
         style={styles.title}
       >
-        {hasSpoilers(title) ? parseSpoilers(title) : title}
+        {hasSpoilers(title)
+          ? parseSpoilers(title)
+          : hasHashtags(title)
+          ? parseHashtags(title)
+          : title}
       </Text>
 
       {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (

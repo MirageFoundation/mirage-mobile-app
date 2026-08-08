@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { MediaPostDetailSkeleton, PostCard, type Post } from "@/src/components/molecules";
 import { Text } from "@/src/components/ui/primitives";
+import { isTopicFollowed } from "@/src/domain/topics";
 import { useFollowHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { getShareBaseUrl } from "@/src/stores";
@@ -171,7 +172,7 @@ export function PostDetailPostSection({
     if (!post?.topic) return;
     handleFollowTopicViaQueue(
       post.topic,
-      topicFollowOverride ?? followedTopics.includes(post.topic),
+      topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic),
     );
   }, [followedTopics, handleFollowTopicViaQueue, post?.topic, topicFollowOverride]);
 
@@ -190,8 +191,7 @@ export function PostDetailPostSection({
         isOwnPost={currentUserId === post.author.id}
         isVisible={isVideoVisible}
         isTopicFollowed={
-          topicFollowOverride ??
-          (post.topic ? followedTopics.includes(post.topic) : false)
+          topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic)
         }
         screenActive={screenActive}
         onAuthorPress={handleAuthorPress}
@@ -242,7 +242,8 @@ export function PostDetailPostSection({
             <View style={styles.threadReminderButtonSlot}>
               <Pressable
                 onPress={() => {
-                  void loadFocusedContext(10);
+                  // Backend caps comment context at depth 5.
+                  void loadFocusedContext(5);
                 }}
                 disabled={!contextActionAvailable}
                 style={({ pressed }) => [

@@ -3,7 +3,18 @@ import * as Sentry from "@sentry/react-native";
 
 const MIRAGE_HOSTS = ["mirage.talk", "mirage.vote"] as const;
 const MIRAGE_SCHEME_PREFIX = "mirage";
-const TAB_HOME_ROUTE = "/(tabs)";
+// Group-free canonical paths: the route tree is Slot (root) -> (app) Stack ->
+// (tabs) Tabs, and hrefs resolve without group segments, so emitted routes
+// stay stable even if groups are reorganized again.
+const TAB_HOME_ROUTE = "/";
+
+const TAB_ROUTE_PATHS = [
+  "/",
+  "/following",
+  "/inbox",
+  "/profile",
+  "/create",
+] as const;
 
 const KNOWN_APP_ROUTE_PREFIXES = [
   "/(auth)/",
@@ -120,6 +131,29 @@ export function isAppRoute(path: string): boolean {
   );
 }
 
+/** Matches the tab navigator's canonical paths (legacy group form included). */
+export function isTabRoute(route: string): boolean {
+  const { pathname } = splitPathAndSearch(route);
+  if (pathname.startsWith("/(tabs)")) return true;
+  return (TAB_ROUTE_PATHS as readonly string[]).includes(pathname);
+}
+
+/**
+ * Whether an already-resolved in-app route needs an authenticated wallet.
+ * Startup linking uses this only after wallet initialization has completed.
+ */
+export function routeRequiresAuth(route: string): boolean {
+  const { pathname } = splitPathAndSearch(route);
+  if (pathname === TAB_HOME_ROUTE) return false;
+  if (pathname.startsWith("/post/") || pathname.startsWith("/p/")) return false;
+  if (pathname.startsWith("/(auth)/")) return false;
+  return ![
+    "/login",
+    "/username",
+    "/recovery-phrase",
+  ].includes(pathname);
+}
+
 export function mapMiragePathToRoute(
   pathname: string,
   search: string = "",
@@ -144,10 +178,13 @@ export function mapMiragePathToRoute(
       const postSearch = prefix === "p"
         ? search || ""
         : withDefaultSearchParam(search, "depth", "5");
+      // Public URLs use /p/<id>, but the canonical in-app screen is
+      // /post/[id] (the /p/ route file is only a Redirect alias for raw
+      // external paths). Emit the canonical route directly.
       return {
         type: "post",
         hostname: "",
-        route: `/p/${resourceId}${postSearch}`,
+        route: `/post/${resourceId}${postSearch}`,
         requiresAuth: false,
         resourceId,
       };
@@ -187,7 +224,7 @@ export function mapMiragePathToRoute(
     return {
       type: "signup",
       hostname: "",
-      route: `/(auth)/username${suffix}`,
+      route: `/username${suffix}`,
       requiresAuth: false,
       resourceId: invite ?? ref ?? undefined,
     };
@@ -206,7 +243,7 @@ export function mapMiragePathToRoute(
     return {
       type: "following",
       hostname: "",
-      route: "/(tabs)/following",
+      route: "/following",
       requiresAuth: true,
     };
   }
@@ -215,7 +252,7 @@ export function mapMiragePathToRoute(
     return {
       type: "inbox",
       hostname: "",
-      route: "/(tabs)/inbox",
+      route: "/inbox",
       requiresAuth: true,
     };
   }
@@ -224,7 +261,7 @@ export function mapMiragePathToRoute(
     return {
       type: "profile",
       hostname: "",
-      route: `/(tabs)/profile${search || ""}`,
+      route: `/profile${search || ""}`,
       requiresAuth: true,
     };
   }
@@ -279,7 +316,7 @@ export function mapMiragePathToRoute(
     return {
       type: "create",
       hostname: "",
-      route: "/(tabs)/create",
+      route: "/create",
       requiresAuth: true,
     };
   }
@@ -315,7 +352,7 @@ export function mapMiragePathToRoute(
     return {
       type: "login",
       hostname: "",
-      route: "/(auth)/login",
+      route: "/login",
       requiresAuth: false,
     };
   }

@@ -17,8 +17,11 @@ const PERIOD_LABELS: Record<ReferralPeriod, string> = {
 interface ReferralListHeaderProps {
   inviteCodeRequired: boolean;
   effectiveEnabled: boolean;
+  /** Whether copy/share is actually usable (see referrals-screen, BUG-028). */
+  linkEnabled: boolean;
   toggleLoading: boolean;
   referralUrl: string | null;
+  hasUsername: boolean;
   linkCopied: boolean;
   totalLabel: string | null;
   referralPeriod: ReferralPeriod;
@@ -31,8 +34,10 @@ interface ReferralListHeaderProps {
 export function ReferralListHeader({
   inviteCodeRequired,
   effectiveEnabled,
+  linkEnabled,
   toggleLoading,
   referralUrl,
+  hasUsername,
   linkCopied,
   totalLabel,
   referralPeriod,
@@ -82,7 +87,7 @@ export function ReferralListHeader({
         </View>
       )}
 
-      {referralUrl && (
+      {referralUrl ? (
         <View style={[styles.shareBoxCard, { backgroundColor: theme.colors.background.default, borderColor: theme.colors.border.subtle }]}>
           <Text size="sm" mode="subtle" style={{ marginBottom: 8 }}>Your referral link</Text>
           <View style={[styles.shareUrlRow, { backgroundColor: theme.colors.background.subtle, borderWidth: 1, borderColor: linkCopied ? "#10B981" : "transparent" }]}>
@@ -90,42 +95,48 @@ export function ReferralListHeader({
               size="sm"
               weight="medium"
               numberOfLines={1}
-              style={{ flex: 1, opacity: effectiveEnabled ? 1 : 0.4 }}
+              style={{ flex: 1, opacity: linkEnabled ? 1 : 0.4 }}
             >
               {referralUrl}
             </Text>
             <Pressable
               onPress={onCopyReferralLink}
-              disabled={!effectiveEnabled}
+              disabled={!linkEnabled}
               accessibilityRole="button"
               accessibilityLabel={linkCopied ? "Referral link copied" : "Copy referral link"}
-              style={({ pressed }) => [styles.shareCopyBtn, pressed && { opacity: 0.7 }, !effectiveEnabled && { opacity: 0.3 }]}
+              style={({ pressed }) => [styles.shareCopyBtn, pressed && { opacity: 0.7 }, !linkEnabled && { opacity: 0.3 }]}
             >
               <Ionicons name={linkCopied ? "checkmark" : "copy-outline"} size={18} color={linkCopied ? "#10B981" : theme.colors.brand[500]} />
             </Pressable>
           </View>
           <Pressable
             onPress={onShareReferralLink}
-            disabled={!effectiveEnabled}
+            disabled={!linkEnabled}
             accessibilityRole="button"
             accessibilityLabel="Share referral link"
             style={({ pressed }) => [
               styles.shareNativeBtn,
               { backgroundColor: theme.colors.brand[500] },
               pressed && { opacity: 0.7 },
-              !effectiveEnabled && { opacity: 0.4 },
+              !linkEnabled && { opacity: 0.4 },
             ]}
           >
             <Feather name="share" size={16} color="#FFFFFF" />
             <Text size="sm" weight="medium" style={{ color: "#FFFFFF", marginLeft: 6 }}>Share</Text>
           </Pressable>
-          {!effectiveEnabled && (
+          {!linkEnabled && (
             <Text size="xs" mode="subtle" style={{ textAlign: "center", marginTop: 8 }}>
               Enable the toggle above to share your referral link
             </Text>
           )}
         </View>
-      )}
+      ) : !hasUsername ? (
+        <View style={[styles.shareBoxCard, { backgroundColor: theme.colors.background.default, borderColor: theme.colors.border.subtle }]}>
+          <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
+            Set a username to get your personal referral link.
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.sectionHeader}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

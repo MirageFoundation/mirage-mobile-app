@@ -45,7 +45,7 @@ export function isAllowlistedRecoveryQuery(
   const viewer = normalizeAccountIdentity(context.viewerAddress);
   const family = queryKey[2];
 
-  if (family === "posts" || family === "comments" || family === "commentContext") {
+  if (family === "posts" || family === "comments") {
     return hasCurrentViewer(queryKey, 3, viewer);
   }
 

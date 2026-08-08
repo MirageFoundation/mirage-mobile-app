@@ -9,12 +9,13 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useDraftStore } from "@/src/stores/draft-store";
+import type { MediaUploadPhase } from "@/src/api/read/endpoints/media";
 import { VIDEO_META, VIDEO_UPLOADS } from "./create-upload-state";
 import { styles } from "./create-screen-styles";
 
 type VideoUploadState = Record<
   string,
-  { progress: number; uploading: boolean; done: boolean; error: string | null }
+  { progress: number; phase: MediaUploadPhase; uploading: boolean; done: boolean; error: string | null }
 >;
 
 type VideoPreviewCarouselProps = {
@@ -61,7 +62,7 @@ export function VideoPreviewCarousel({
         initialTrimStart: (meta?.trimStart ?? 0).toString(),
         initialTrimEnd: (meta?.trimEnd ?? 0).toString(),
         replacingUri: uri,
-        returnTo: "/(tabs)/create",
+        returnTo: "/create",
       },
     });
   };
@@ -128,7 +129,7 @@ export function VideoPreviewCarousel({
                   <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
                     {!isNetworkOnline
                       ? "Low connectivity…"
-                      : upload.progress >= 98
+                      : upload.phase === "processing"
                         ? `Processing… ${Math.round(upload.progress)}%`
                         : `Uploading… ${Math.round(upload.progress)}%`}
                   </Text>

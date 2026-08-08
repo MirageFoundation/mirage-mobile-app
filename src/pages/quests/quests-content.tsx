@@ -17,6 +17,7 @@ import { useClaimReward } from "@/src/api/write/hooks";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { ClaimAllButton, EmptyState, RewardMultiplierBadge } from "./quests-claim-controls";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { ClaimSuccessModal } from "./quests-claim-success-modal";
 import { CountdownTimer } from "./quests-countdown-timer";
 import { FlashQuestCard } from "./flash-quest-card";
@@ -53,11 +54,10 @@ export function QuestsScreen() {
     onError: (error) => {
       setIsClaiming(false);
       triggerHaptic("error");
-      Alert.alert(
-        "Claim Failed",
-        error.message || "Failed to claim rewards. Please try again.",
-        [{ text: "OK" }],
-      );
+      const message = (error as { response?: unknown }).response
+        ? getApiErrorMessage(error)
+        : error.message || "Failed to claim rewards. Please try again.";
+      Alert.alert("Claim Failed", message, [{ text: "OK" }]);
     },
   });
 
@@ -105,7 +105,7 @@ export function QuestsScreen() {
     if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
     setClaimedRewardAmount(totalReward);
-    claimMutation.mutate({ questId: "all" });
+    claimMutation.mutate();
   }, [data?.pending_rewards, claimMutation, totalReward]);
 
   const handleCloseSuccessModal = useCallback(() => {

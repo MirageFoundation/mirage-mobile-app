@@ -51,7 +51,6 @@ if (exists(SRC_DIR)) {
     const rel = relative(ROOT, file);
     const text = readFileSync(file, "utf8");
     const isNavigation = rel.startsWith("src/navigation/");
-    const isCompatibilityWrapper = rel === "src/hooks/use-router.ts" || rel === "src/utils/guarded-router.ts";
 
     for (const match of text.matchAll(/import\s+\{[^}]*\brouter\b[^}]*\}\s+from\s+["']expo-router["']/g)) {
       if (!isNavigation) {
@@ -59,11 +58,11 @@ if (exists(SRC_DIR)) {
       }
     }
 
-    if (!isCompatibilityWrapper && text.includes("@/src/hooks/use-router")) {
-      failures.push(`${rel}: imports legacy use-router wrapper; use @/src/navigation/guarded-router`);
+    if (text.includes("@/src/hooks/use-router")) {
+      failures.push(`${rel}: imports removed use-router wrapper; use @/src/navigation/guarded-router`);
     }
-    if (!isCompatibilityWrapper && text.includes("@/src/utils/guarded-router")) {
-      failures.push(`${rel}: imports legacy guarded-router wrapper; use @/src/navigation/guarded-router`);
+    if (text.includes("@/src/utils/guarded-router")) {
+      failures.push(`${rel}: imports removed guarded-router wrapper; use @/src/navigation/guarded-router`);
     }
 
     for (const match of text.matchAll(/Linking\.addEventListener\s*\(\s*["']url["']/g)) {
@@ -83,7 +82,7 @@ try {
     "export function isAppRoute",
     "prefix === \"p\"",
     "prefix === \"signup\"",
-    "route: `/(auth)/username",
+    "route: `/username",
   ]) {
     if (!routeMap.includes(expected)) {
       failures.push(`src/navigation/route-map.ts missing expected route-map marker: ${expected}`);

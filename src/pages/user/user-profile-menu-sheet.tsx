@@ -24,7 +24,6 @@ type UserProfileMenuSheetProps = {
   onReport?: () => void;
   onCopyProfileLink?: () => void;
   onShare?: () => void;
-  onGiveAward?: () => void;
   onGiftMirage?: () => void;
   onGiftSubscription?: () => void;
   onDismiss?: () => void;
@@ -81,7 +80,6 @@ export const UserProfileMenuSheet = forwardRef<
       onReport,
       onCopyProfileLink,
       onShare,
-      onGiveAward,
       onGiftMirage,
       onGiftSubscription,
       onDismiss,
@@ -164,12 +162,6 @@ export const UserProfileMenuSheet = forwardRef<
       onShare?.();
     }, [dismiss, onShare]);
 
-    const handleGiveAward = useCallback(() => {
-      triggerHaptic("medium");
-      dismiss();
-      onGiveAward?.();
-    }, [dismiss, onGiveAward]);
-
     const handleGiftMirage = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -232,14 +224,6 @@ export const UserProfileMenuSheet = forwardRef<
               title={isFollowing ? "Unfollow" : "Follow"}
               onPress={handleFollow}
             />
-
-            {!isOwnProfile && onGiveAward && (
-              <MenuItem
-                iconName="gift-outline"
-                title="Give Award"
-                onPress={handleGiveAward}
-              />
-            )}
 
             {!isOwnProfile && onGiftMirage && (
               <MenuItem

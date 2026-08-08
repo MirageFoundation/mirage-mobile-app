@@ -18,6 +18,7 @@ import {
   type UploadImageResult,
   type UploadVideoResult,
   type UploadProgressCallback,
+  type MediaUploadPhase,
 } from "../endpoints/media";
 
 // ============================================
@@ -52,6 +53,7 @@ export interface UseUploadVideoOptions {
 export interface VideoUploadState {
   isUploading: boolean;
   progress: number;
+  phase: MediaUploadPhase | null;
   error: Error | null;
   result: UploadVideoResult | null;
 }
@@ -60,6 +62,7 @@ async function prepareVideoForUpload(
   uri: string,
   contentType: string,
   signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
 ): Promise<{ uri: string; contentType: string }> {
   if (signal?.aborted) {
     throw new Error("Video upload aborted");
@@ -73,6 +76,7 @@ async function prepareVideoForUpload(
       contentType,
     },
   });
+  onProgress?.(0, "processing");
 
   let totalDurationMs: number | undefined;
   let sourceWidth: number | undefined;
@@ -83,6 +87,7 @@ async function prepareVideoForUpload(
     sourceWidth = Math.round(Number(meta.width) || 0) || undefined;
     sourceHeight = Math.round(Number(meta.height) || 0) || undefined;
     totalDurationMs = durationSeconds > 0 ? durationSeconds * 1000 : undefined;
+    onProgress?.(5, "processing");
     Sentry.addBreadcrumb({
       category: "media-upload",
       message: "Video upload source metadata loaded",
@@ -94,6 +99,7 @@ async function prepareVideoForUpload(
       },
     });
   } catch {
+    onProgress?.(5, "processing");
     Sentry.addBreadcrumb({
       category: "media-upload",
       message: "Video upload source metadata unavailable before compression",
@@ -107,6 +113,10 @@ async function prepareVideoForUpload(
     totalDurationMs,
     sourceWidth,
     sourceHeight,
+    onProgress: (progress) => {
+      const processingProgress = Math.round(5 + (progress / 100) * 95);
+      onProgress?.(processingProgress, "processing");
+    },
   });
   if (signal?.aborted) {
     throw new Error("Video upload aborted");
@@ -166,6 +176,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
   const [state, setState] = useState<VideoUploadState>({
     isUploading: false,
     progress: 0,
+    phase: null,
     error: null,
     result: null,
   });
@@ -173,10 +184,17 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleProgress: UploadProgressCallback = useCallback(
-    (progress: number) => {
+    (progress: number, phase?: MediaUploadPhase) => {
       const clampedProgress = Math.min(100, Math.max(0, progress));
-      setState((prev) => ({ ...prev, progress: clampedProgress }));
-      onProgress?.(clampedProgress);
+      setState((prev) => ({
+        ...prev,
+        progress:
+          phase && phase !== prev.phase
+            ? clampedProgress
+            : Math.max(prev.progress, clampedProgress),
+        phase: phase ?? prev.phase,
+      }));
+      onProgress?.(clampedProgress, phase);
     },
     [onProgress]
   );
@@ -186,6 +204,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
       setState({
         isUploading: true,
         progress: 0,
+        phase: "processing",
         error: null,
         result: null,
       });
@@ -199,6 +218,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
           input.uri,
           contentType,
           abortControllerRef.current.signal,
+          handleProgress,
         );
 
         const result = await uploadVideoEndpoint(
@@ -212,6 +232,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
           ...prev,
           isUploading: false,
           progress: 100,
+          phase: null,
           result,
         }));
 
@@ -223,6 +244,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
         setState((prev) => ({
           ...prev,
           isUploading: false,
+          phase: null,
           error: err,
         }));
         onError?.(err);
@@ -237,6 +259,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     setState({
       isUploading: false,
       progress: 0,
+      phase: null,
       error: null,
       result: null,
     });
@@ -246,6 +269,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     setState({
       isUploading: false,
       progress: 0,
+      phase: null,
       error: null,
       result: null,
     });
@@ -255,6 +279,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     uploadVideo: uploadVideoFn,
     isUploading: state.isUploading,
     progress: state.progress,
+    phase: state.phase,
     error: state.error,
     result: state.result,
     cancelUpload,
@@ -299,11 +324,27 @@ export async function uploadVideoAndGetUrl(
   signal?: AbortSignal
 ): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const preparedVideo = await prepareVideoForUpload(uri, contentType, signal);
+  let currentPhase: MediaUploadPhase | undefined;
+  let highestProgress = 0;
+  const reportProgress: UploadProgressCallback = (progress, phase) => {
+    if (phase && phase !== currentPhase) {
+      currentPhase = phase;
+      highestProgress = progress;
+    } else {
+      highestProgress = Math.max(highestProgress, progress);
+    }
+    onProgress?.(highestProgress, phase);
+  };
+  const preparedVideo = await prepareVideoForUpload(
+    uri,
+    contentType,
+    signal,
+    reportProgress,
+  );
   const result = await uploadVideoEndpoint(
     preparedVideo.uri,
     preparedVideo.contentType,
-    onProgress,
+    reportProgress,
     signal,
   );
   return result.url;

@@ -175,6 +175,9 @@ const PostCardView = memo(function PostCardView({
   const containerRef = useRef<View>(null);
 
   const handlePress = useCallback(() => {
+    // No haptic when the card has no press action (e.g. post detail):
+    // vibrating on inert body text reads as a broken tap (BUG-034).
+    if (!onPress) return;
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
     if (containerRef.current) {

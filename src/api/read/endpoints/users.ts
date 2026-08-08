@@ -14,6 +14,8 @@ import type {
   GetInviteCodesResponse,
 } from "../../types";
 import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
+import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
+import type { MirageWallet } from "@/src/wallet";
 
 // ============================================
 // User Status & Profile
@@ -264,14 +266,18 @@ export async function getUsers(
 // Invite Code Validation
 // ============================================
 
-export interface GetInviteCodesParams {
- address: string;
-}
-
 export async function getInviteCodes(
- params: GetInviteCodesParams
+ wallet: MirageWallet,
 ): Promise<GetInviteCodesResponse> {
-  return api.get<GetInviteCodesResponse>("/get_invite_codes", params);
+  const address = wallet.address.toLowerCase();
+  const signed = buildSimpleSignedPayload(
+    wallet,
+    `get_invite_codes:${address}:{timestamp}:{nonce}`,
+  );
+  return api.get<GetInviteCodesResponse>("/get_invite_codes", {
+    address,
+    ...signed,
+  });
 }
 
 export interface ValidateInviteCodeParams {

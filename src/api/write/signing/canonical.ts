@@ -577,24 +577,6 @@ export function canonBaseReport(params: ReportParams): Uint8Array {
  );
 }
 
-// --- ClaimReward (Daily Quest Rewards) ---
-
-export interface ClaimRewardParams extends BaseParams {
-  /** Your address */
-  target: string;
-  /** Quest ID to claim */
-  questId: string;
-}
-
-export function canonBaseClaimReward(params: ClaimRewardParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgClaimReward"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.questId)
-  );
-}
-
 // --- MsgDeleteUser (Account Deletion) ---
 
 export interface DeleteUserParams extends BaseParams {
