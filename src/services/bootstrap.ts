@@ -17,8 +17,15 @@ import {
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { NodeConfigResponse, UserFollowedResponse } from "@/src/api/types";
 import { walletService } from "@/src/services/wallet-service";
+import { hydrateBootstrapViewCache } from "@/src/api/cache/bootstrap-cache";
+import {
+  getAllowedTagsFromContentTypes,
+  usePreferencesStore,
+} from "@/src/stores/preferences-store";
 
 type BootstrapSection = keyof BootstrapResponse;
+
+const STARTUP_FEED_LIMIT = 10;
 
 const USER_SECTIONS: BootstrapSection[] = [
   "user_status",
@@ -43,6 +50,25 @@ function summarizeBootstrapResponse(
       (section) => response[section] != null,
     ),
     expectedUserSections: hasAddress,
+  };
+}
+
+export function getStartupBootstrapParams(address?: string) {
+  const { selectedContentTypes, adultContentEnabled } =
+    usePreferencesStore.getState();
+  const allowedTags = getAllowedTagsFromContentTypes(
+    selectedContentTypes,
+    adultContentEnabled,
+  );
+
+  if (!address) return {};
+
+  return {
+    address,
+    view: "feed:home" as const,
+    by: "magic" as const,
+    allowed_tags: allowedTags || undefined,
+    limit: STARTUP_FEED_LIMIT,
   };
 }
 
@@ -196,7 +222,14 @@ function scheduleBootstrapFallbacks(
     addBootstrapFallbackBreadcrumb("user_followed", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.userFollowed(address),
-      queryFn: () => getUserFollowed({ address }),
+      queryFn: async () => {
+        const nodeConfig = await queryClient.ensureQueryData({
+          queryKey: queryKeys.nodeConfig(),
+          queryFn: getNodeConfig,
+          staleTime: 1000 * 60 * 60 * 24,
+        }).catch(() => null);
+        return getUserFollowed({ address }, { nodeConfig });
+      },
     });
   }
   if (!response.user_blocked) {
@@ -260,12 +293,11 @@ export async function primeBootstrap(
         });
       }
     }
-    const response = await getBootstrap(
-      address ? { address } : undefined,
-      wallet ?? undefined,
-    );
+    const params = getStartupBootstrapParams(address);
+    const response = await getBootstrap(params, wallet ?? undefined);
     if (!isCurrent()) return null;
     hydrateBootstrapCache(queryClient, response, address);
+    hydrateBootstrapViewCache(queryClient, response, params);
     scheduleBootstrapFallbacks(queryClient, response, address);
 
     const summary = summarizeBootstrapResponse(response, hasAddress);

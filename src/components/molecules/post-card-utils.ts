@@ -136,6 +136,7 @@ export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
   try {
     const parsedUrl = new URL(posterUrl);
     if (!parsedUrl.hostname.includes("redgifs.com")) return null;
+    if (getRedgifsId(posterUrl)) return null;
     if (/\.(mp4|m4v|webm)$/i.test(parsedUrl.pathname)) {
       return posterUrl;
     }
@@ -143,7 +144,7 @@ export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
       const mobile = posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
       return mobile;
     }
-    return posterUrl;
+    return null;
   } catch {
     if (!posterUrl.includes("redgifs.com")) return null;
     if (/\.(mp4|m4v|webm)/i.test(posterUrl)) {
@@ -152,7 +153,7 @@ export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
     if (/\.(jpg|jpeg|png|webp|gif)/i.test(posterUrl)) {
       return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
     }
-    return posterUrl;
+    return null;
   }
 }
 
@@ -160,6 +161,7 @@ export function resolveRedgifsPosterUrl(url: string): string | null {
   try {
     const parsedUrl = new URL(url);
     if (!parsedUrl.hostname.includes("redgifs.com")) return null;
+    if (getRedgifsId(url)) return null;
     if (/\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
       return url;
     }
@@ -174,6 +176,47 @@ export function resolveRedgifsPosterUrl(url: string): string | null {
     return url
       .replace(/-(mobile|sd|hd)\.(mp4|m4v|webm)$/i, "-poster.jpg")
       .replace(/\.(mp4|m4v|webm)$/i, "-poster.jpg");
+  }
+}
+
+export function getRedgifsId(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname.toLowerCase().endsWith("redgifs.com")) return null;
+    return parsedUrl.pathname.match(/^\/(?:watch|ifr)\/([^/]+)/i)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Giphy serves an MP4 rendition beside each GIF. Prefer it in post surfaces:
+ * native video playback is substantially lighter than decoding an animated
+ * GIF and remains reliable in recycled feed rows.
+ */
+export function resolveGiphyVideoUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname !== "giphy.com" && !hostname.endsWith(".giphy.com")) {
+      return null;
+    }
+    if (!parsedUrl.pathname.toLowerCase().endsWith(".gif")) return null;
+
+    parsedUrl.pathname = parsedUrl.pathname.replace(/\.gif$/i, ".mp4");
+    const renditionId = parsedUrl.searchParams.get("rid");
+    if (renditionId?.toLowerCase().endsWith(".gif")) {
+      parsedUrl.searchParams.set(
+        "rid",
+        renditionId.replace(/\.gif$/i, ".mp4"),
+      );
+    }
+    if (parsedUrl.searchParams.get("ct")?.toLowerCase() === "g") {
+      parsedUrl.searchParams.set("ct", "v");
+    }
+    return parsedUrl.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -280,7 +323,17 @@ export function resolvePostContent(
   const hasMultipleMedia = mediaCount > 1;
   const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
-  const resolvedMedia = bodyVideoUrl
+  const bodyRedgifsId = extractedUrl ? getRedgifsId(extractedUrl) : null;
+  const resolvedMedia = bodyRedgifsId && extractedUrl
+    ? ({
+        uri: extractedUrl,
+        type: "gif" as const,
+        width: primaryMedia?.width,
+        height: primaryMedia?.height,
+        aspectRatio: primaryMedia?.aspectRatio,
+        posterUri: primaryMedia?.posterUri,
+      })
+    : bodyVideoUrl
     ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
       ? ({
           uri: extractedUrl!,
@@ -310,13 +363,14 @@ export function resolvePostContent(
       }
     : undefined;
 
-  const redgifsVideoUrl = resolvedMedia?.type === "gif"
-    ? resolveRedgifsVideoUrl(resolvedMedia.uri)
+  const animatedVideoUrl = resolvedMedia?.type === "gif"
+    ? resolveRedgifsVideoUrl(resolvedMedia.uri) ??
+      resolveGiphyVideoUrl(resolvedMedia.uri)
     : null;
-  const finalMedia = redgifsVideoUrl && resolvedMedia
+  const finalMedia = animatedVideoUrl && resolvedMedia
     ? {
         ...resolvedMedia,
-        uri: redgifsVideoUrl,
+        uri: animatedVideoUrl,
         type: "video" as const,
         posterUri: resolvedMedia.posterUri ?? resolvedMedia.uri,
       }
@@ -334,12 +388,14 @@ export function resolvePostContent(
     bodyVideoUrl,
     resolvedMedia: finalMedia,
     resolvedMediaList: (media ?? []).map((m) => {
-      const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
+      const animatedVideo = m.type === "gif"
+        ? resolveRedgifsVideoUrl(m.uri) ?? resolveGiphyVideoUrl(m.uri)
+        : null;
       return {
         ...m,
-        uri: redgifs ?? m.uri,
-        type: redgifs ? ("video" as const) : m.type,
-        posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
+        uri: animatedVideo ?? m.uri,
+        type: animatedVideo ? ("video" as const) : m.type,
+        posterUri: animatedVideo ? (m.posterUri ?? m.uri) : m.posterUri,
       };
     }),
     hasMultipleMedia,
@@ -352,12 +408,14 @@ export function postHasPlayableVideo(post?: { media?: { type?: string; uri?: str
     (m) =>
       m.type === "video" ||
       m.type === "youtube" ||
-      (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+      (m.type === "gif" &&
+        typeof m.uri === "string" &&
+        !!(resolveRedgifsVideoUrl(m.uri) ?? resolveGiphyVideoUrl(m.uri))),
   );
   if (hasMediaVideo) return true;
   if (!post?.body) return false;
   const url = extractFirstUrl(post.body);
-  return !!url && isYouTubeUrl(url);
+  return !!url && (isYouTubeUrl(url) || !!getRedgifsId(url));
 }
 
 export function isSuccessfulOptimisticPost(

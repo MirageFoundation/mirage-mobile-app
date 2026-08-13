@@ -81,6 +81,7 @@ export const queryKeys = {
   // separate root-post-id or comment-context key families any more.
   comments: (postId: string, address?: string) =>
     serverKey("comments", ...viewerKey(address), postId),
+  redgifsMedia: (id: string) => serverKey("media", "redgifs", id.toLowerCase()),
   batchUsernamesRoot: () => serverKey("batchUsernames"),
   batchUsernames: (stableKey: string) => serverKey("batchUsernames", stableKey),
 

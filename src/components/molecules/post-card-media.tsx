@@ -1,6 +1,6 @@
 import { forwardRef, memo, useCallback, useImperativeHandle, useRef } from "react";
 import { View } from "react-native";
-import type { ResolvedMedia } from "./post-card-utils";
+import { getRedgifsId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import { MediaOfflineOverlay } from "./post-card-media-overlays";
 import { postMediaStyles as styles } from "./post-card-media-styles";
@@ -9,6 +9,7 @@ import {
   useMediaPressTransition,
 } from "./post-card-media-shared";
 import { PostCardImage } from "./post-card-image";
+import { PostCardRedgifs } from "./post-card-redgifs";
 import { PostCardVideo, type PostCardVideoRef } from "./post-card-video";
 import { PostCardYouTube, type PostCardYouTubeRef } from "./post-card-youtube";
 
@@ -121,6 +122,28 @@ export const PostCardMedia = memo(
             <View style={styles.borderOverlay} pointerEvents="none" />
           </View>
         </View>
+      );
+    }
+
+    if (media.type === "gif" && getRedgifsId(media.uri)) {
+      return (
+        <PostCardRedgifs
+          ref={videoRef}
+          media={media}
+          isVisible={isVisible}
+          isFocused={isFocused}
+          isNearVisible={isNearVisible}
+          isConnected={isConnected}
+          shouldBlurContent={shouldBlurContent}
+          allowAutoplay={allowAutoplay}
+          screenActive={screenActive}
+          disabled={disabled}
+          onRevealContent={onRevealContent}
+          onMediaPress={onMediaPress}
+          isPostDetail={isPostDetail}
+          videoSyncScope={videoSyncScope}
+          postId={postId}
+        />
       );
     }
 
