@@ -163,9 +163,9 @@ const GorhomSheetNavigator = forwardRef<
     const [isInitialOpen, setIsInitialOpen] = useState(true);
     
     const fastAnimationConfigs = useBottomSheetSpringConfigs({
-      damping: 30,
-      overshootClamping: false,
-      stiffness: 400,
+      damping: 36,
+      overshootClamping: true,
+      stiffness: 280,
       mass: 1,
     });
     

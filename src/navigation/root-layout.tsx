@@ -1,4 +1,5 @@
 import { RootProvider } from "@/src/providers/root-provider";
+import { UpdateProvider } from "@/src/providers/update-provider";
 import { Slot, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
@@ -26,6 +27,23 @@ import { resetStartupHomeReady } from "@/src/navigation/startup-navigation-readi
 
 const ANDROID_EXIT_BACK_PRESS_WINDOW_MS = 2000;
 const STARTUP_STABLE_DELAY_MS = 10_000;
+
+function RootContent() {
+  const { reason, remoteVersion, isRequired } = useForceUpdate();
+
+  return (
+    <RootProvider>
+      <Slot />
+      <ThemedStatusBar />
+      <AuthSheet />
+      <ForceUpdatePopup
+        reason={reason}
+        remoteVersion={remoteVersion}
+        isRequired={isRequired}
+      />
+    </RootProvider>
+  );
+}
 
 function AndroidShareIntentColdStartRefresh() {
   useEffect(() => {
@@ -106,7 +124,6 @@ function useAndroidDoubleBackExitGuard(ref: ReturnType<typeof useNavigationConta
  */
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
-  const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
   useAndroidDoubleBackExitGuard(ref);
 
   useEffect(() => {
@@ -129,12 +146,9 @@ export default Sentry.wrap(function RootLayout() {
   return (
     <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
     <AndroidShareIntentColdStartRefresh />
-    <RootProvider>
-      <Slot />
-      <ThemedStatusBar />
-      <AuthSheet />
-      <ForceUpdatePopup reason={forceUpdateReason} remoteVersion={remoteVersion} isRequired={isRequired} />
-    </RootProvider>
+    <UpdateProvider>
+      <RootContent />
+    </UpdateProvider>
     </ShareIntentProvider>
   );
 });

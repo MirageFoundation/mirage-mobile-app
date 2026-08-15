@@ -43,7 +43,7 @@ export const NewPostsButton = ({
   loading = false,
 }: NewPostsButtonProps) => {
   const insets = useSafeAreaInsets();
-  const translateY = useSharedValue(-60);
+  const translateY = useSharedValue(-24);
   const opacity = useSharedValue(0);
 
   const top = topOffset ?? insets.top + 44;
@@ -52,10 +52,15 @@ export const NewPostsButton = ({
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
-      opacity.value = withTiming(1, { duration: 200 });
+      translateY.value = withSpring(0, {
+        damping: 28,
+        stiffness: 240,
+        mass: 1,
+        overshootClamping: true,
+      });
+      opacity.value = withTiming(1, { duration: 180 });
     } else {
-      translateY.value = withSpring(-60, { damping: 15, stiffness: 150 });
+      translateY.value = withTiming(-24, { duration: 160 });
       opacity.value = withTiming(0, { duration: 150 });
     }
   }, [opacity, translateY, visible]);
