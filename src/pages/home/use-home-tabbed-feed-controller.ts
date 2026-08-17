@@ -1,4 +1,3 @@
-import type { FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import {
@@ -22,7 +21,6 @@ import {
   fetchAndMergeInfinitePostsRefresh,
   type InfinitePostsData,
 } from "@/src/api/cache/merge-infinite-posts-refresh";
-import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
@@ -39,6 +37,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { useFeedPostCardRuntime } from "./feed-post-card-runtime";
+import { scrollFeedListToTop, type FeedListRef } from "./feed-list-scroll";
 import {
   getHomeFeedContext,
   getLatestPostTimestamp,
@@ -114,9 +113,9 @@ export function useHomeTabbedFeedController({
   activeTabIndexRef.current = activeTabIndex;
   const previousTabIndexRef = useRef(activeTabIndex);
   const latestTabRefreshedRef = useRef(false);
-  const magicListRef = useRef<FlashListRef<Post>>(null);
-  const latestListRef = useRef<FlashListRef<Post>>(null);
-  const activeListRef = useRef<FlashListRef<Post>>(null);
+  const magicListRef = useRef<FeedListRef>(null);
+  const latestListRef = useRef<FeedListRef>(null);
+  const activeListRef = useRef<FeedListRef>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const refreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
@@ -166,7 +165,7 @@ export function useHomeTabbedFeedController({
     showBars();
     scrollOffsetY.value = 0;
     requestAnimationFrame(() => {
-      activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      void scrollFeedListToTop(activeListRef.current);
     });
     if (activeTabIndex === 1 && !latestTabRefreshedRef.current) {
       latestTabRefreshedRef.current = true;
@@ -313,40 +312,15 @@ export function useHomeTabbedFeedController({
     _tabIndex?: number,
     options?: { animated?: boolean },
   ) => {
-    try {
-      activeListRef.current?.scrollToOffset({
-        offset: 0,
-        animated: options?.animated ?? true,
-      });
-    } catch {}
-    requestAnimationFrame(() => {
-      try {
-        activeListRef.current?.scrollToOffset({ offset: 1, animated: false });
-      } catch {}
-      requestAnimationFrame(() => {
-        try {
-          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-          activeListRef.current?.recordInteraction();
-        } catch {}
-      });
+    void scrollFeedListToTop(activeListRef.current, {
+      animated: options?.animated ?? true,
     });
   }, []);
   const scrollToTopAndRefresh = useCallback(async () => {
-    try {
-      activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    } catch {}
+    await scrollFeedListToTop(activeListRef.current);
     dismissNewPostsRef.current?.();
     await refreshRef.current?.();
-    requestAnimationFrame(() => {
-      try {
-        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
-      setTimeout(() => {
-        try {
-          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-        } catch {}
-      }, 100);
-    });
+    await scrollFeedListToTop(activeListRef.current);
   }, []);
   useEffect(() => {
     return registerRefreshTarget(baseFeed, scrollToTopAndRefresh);
@@ -384,30 +358,17 @@ export function useHomeTabbedFeedController({
   const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
     const shouldScrollToTop = options?.scrollToTop !== false;
     if (shouldScrollToTop) {
-      try {
-        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
       showBars();
     }
     const prefetchedFirstPage = getPrefetchedNewPostsResponse();
-    const minDelay = !shouldScrollToTop || prefetchedFirstPage
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => setTimeout(resolve, 600));
-    await Promise.all([
-      refreshRef.current?.({
-        silent: true,
-        fetchAllNew: true,
-        prefetchedFirstPage,
-      }),
-      minDelay,
-    ]);
+    await refreshRef.current?.({
+      silent: true,
+      fetchAllNew: true,
+      prefetchedFirstPage,
+    });
     if (shouldScrollToTop) {
-      requestAnimationFrame(() => {
-        try {
-          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-        } catch {}
-        showBars();
-      });
+      await scrollFeedListToTop(activeListRef.current);
+      showBars();
     }
     resetBaseline(null);
   }, [getPrefetchedNewPostsResponse, resetBaseline, showBars]);
@@ -460,9 +421,7 @@ export function useHomeTabbedFeedController({
     if (initialLoadDone.current || query.isLoading) return;
     initialLoadDone.current = true;
     requestAnimationFrame(() => {
-      try {
-        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
+      void scrollFeedListToTop(activeListRef.current);
       showBars();
     });
   }, [activeTabIndex, query.isLoading, showBars]);
@@ -538,7 +497,7 @@ export function useHomeTabbedFeedController({
   }, [apiServer, feedContext, feedRuntime, posts]);
 
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
-  const listRef = useCallback((instance: FlashListRef<Post> | null) => {
+  const listRef = useCallback((instance: FeedListRef | null) => {
     tabListRef.current = instance;
     activeListRef.current = instance;
   }, [tabListRef]);

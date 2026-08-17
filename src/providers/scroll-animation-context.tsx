@@ -26,13 +26,13 @@ const SCROLL_THRESHOLD = 50;
 const HIDE_THRESHOLD = 10;
 const SHOW_THRESHOLD = 15;
 // Per-event diff cap: real flings rarely exceed ~150px per scroll event.
-// Larger jumps almost always come from list re-layout (FlashList recycling
-// adjusts the scroll offset when measured row heights differ from the
+// Larger jumps almost always come from list re-layout (virtualized lists
+// adjust the scroll offset when measured row heights differ from the
 // estimated item size) or tab/page switches. We ignore those for the
 // hide/show accounting so they don't toggle the bars unintentionally.
 const MAX_LEGIT_DIFF = 150;
 // Minimum time between bar visibility transitions. Stops the
-// header/tab-bar/new-posts-button from flickering when FlashList emits
+// header/tab-bar/new-posts-button from flickering when the feed list emits
 // rapid back-and-forth scroll events while a pagination footer / new
 // page is rendering.
 const TRANSITION_LOCKOUT_MS = 350;
@@ -81,7 +81,7 @@ export const ScrollAnimationProvider = ({
   const isUserScrolling = useSharedValue(false);
   // 0 = idle, 1 = dragging, 2 = momentum. A decelerating momentum fling can
   // never physically reverse direction, so any opposite-direction diff that
-  // arrives during phase 2 is a FlashList re-layout correction — reacting to
+  // arrives during phase 2 is a list re-layout correction — reacting to
   // it is what made the bottom bars jitter mid-scroll on iOS (BUG-015).
   const scrollPhase = useSharedValue(0);
   const momentumDir = useSharedValue(0);

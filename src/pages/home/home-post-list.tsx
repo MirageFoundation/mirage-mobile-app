@@ -11,18 +11,20 @@ import {
 } from "react";
 import {
   Platform,
+  Dimensions,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import Animated from "react-native-reanimated";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useFeedPostCardRuntime } from "./feed-post-card-runtime";
+import type { FeedListRef } from "./feed-list-scroll";
 import {
   getBoundedVisibleIndexRange,
+  getFeedListViewport,
   getVisibleLayoutIndices,
   mergeViewableTokens,
 } from "./home-post-list-visibility";
@@ -39,16 +41,13 @@ import {
   getWarmWindowBounds,
 } from "@/src/utils/video-warm-window";
 
-const AnimatedFlashList = Animated.createAnimatedComponent(
-  FlashList as ComponentType<any>,
-);
-
 const ESTIMATED_ITEM_SIZE_CARD = 420;
 const ESTIMATED_ITEM_SIZE_COMPACT = 132;
+const WINDOW = Dimensions.get("window");
+const ESTIMATED_LIST_SIZE = { height: WINDOW.height, width: WINDOW.width };
 const MAINTAIN_VISIBLE_CONTENT_POSITION = {
-  // FlashList enables MVCP by default. A positive threshold would auto-scroll
-  // to newly prepended items while the user is already at the top.
-  autoscrollToTopThreshold: -1,
+  data: true,
+  size: true,
 };
 const ACTIVE_ZONE_TOP_RATIO = 0.08;
 const ACTIVE_ZONE_BOTTOM_RATIO = 0.15;
@@ -85,7 +84,7 @@ const HomePostListInner = function HomePostListInner(
     feedContext,
     onItemVisible,
   }: HomePostListProps,
-  ref: Ref<FlashListRef<Post>>,
+  ref: Ref<FeedListRef>,
 ) {
   const [feedDensity] = useFeedDensity();
   const estimatedItemSize =
@@ -108,17 +107,28 @@ const HomePostListInner = function HomePostListInner(
   const feedScreenRef = useRef(feedContext);
   feedScreenRef.current = feedContext;
 
-  const listRef = useRef<FlashListRef<Post> | null>(null);
-  const setListRef = useCallback((instance: FlashListRef<Post> | null) => {
+  const listRef = useRef<FeedListRef | null>(null);
+  const setListRef = useCallback((instance: FeedListRef | null) => {
     listRef.current = instance;
     if (typeof ref === "function") {
       ref(instance);
       return;
     }
     if (ref) {
-      (ref as { current: FlashListRef<Post> | null }).current = instance;
+      (ref as { current: FeedListRef | null }).current = instance;
     }
   }, [ref]);
+
+  const maintainVisibleContentPosition = useMemo(() => ({
+    ...MAINTAIN_VISIBLE_CONTENT_POSITION,
+    shouldRestorePosition: () => {
+      try {
+        return !listRef.current?.getState().isAtStart;
+      } catch {
+        return true;
+      }
+    },
+  }), []);
 
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 20,
@@ -168,20 +178,18 @@ const HomePostListInner = function HomePostListInner(
   const computeSeenVisibility = useCallback((items: ViewToken[]): SeenPostVisibility[] => {
     const currentListRef = listRef.current;
     if (!currentListRef) return [];
+    const viewport = getFeedListViewport(currentListRef);
+    if (!viewport) return [];
 
-    const windowSize = currentListRef.getWindowSize();
-    const viewportHeight = windowSize.height;
-    if (!viewportHeight) return [];
-
+    const { viewportHeight, scrollOffset, getLayout } = viewport;
     const activeTop = viewportHeight * ACTIVE_ZONE_TOP_RATIO;
     const activeBottom = viewportHeight * (1 - ACTIVE_ZONE_BOTTOM_RATIO);
-    const scrollOffset = currentListRef.getAbsoluteLastScrollOffset();
 
     return items.flatMap((item) => {
       const id = item.item?.id;
       if (!item.isViewable || !id || item.index == null) return [];
 
-      const layout = currentListRef.getLayout(item.index);
+      const layout = getLayout(item.index);
       if (!layout || layout.height <= 0) return [];
 
       const itemTop = layout.y - scrollOffset;
@@ -358,10 +366,9 @@ const HomePostListInner = function HomePostListInner(
   const recomputeViewableFromLayout = useCallback(() => {
     const list = listRef.current;
     if (!list) return false;
-    const windowSize = list.getWindowSize();
-    const viewportHeight = windowSize.height;
-    if (!viewportHeight) return false;
-    const scrollOffset = list.getAbsoluteLastScrollOffset();
+    const viewport = getFeedListViewport(list);
+    if (!viewport) return false;
+    const { viewportHeight, scrollOffset, getLayout } = viewport;
     const currentData = dataRef.current;
     const anchorIndices = Array.from(currentViewableTokensRef.current.values())
       .flatMap((token) => token.index == null ? [] : [token.index]);
@@ -378,7 +385,7 @@ const HomePostListInner = function HomePostListInner(
       scrollOffset,
       viewportHeight,
       minimumVisibleRatio: 0.2,
-      getLayout: (index) => list.getLayout(index),
+      getLayout,
     });
     const nextTokens = new Map<string, ViewToken>();
     for (const index of visibleIndices) {
@@ -546,7 +553,7 @@ const HomePostListInner = function HomePostListInner(
   }, [cancelDeferredFlush, cancelScrollStop, flushViewability, setFeedScrolling]);
 
   return (
-    <AnimatedFlashList
+    <AnimatedLegendList
       key={feedDensity}
       ref={setListRef}
       data={data}
@@ -554,6 +561,7 @@ const HomePostListInner = function HomePostListInner(
       keyExtractor={keyExtractor}
       getItemType={getItemType}
       estimatedItemSize={estimatedItemSize}
+      estimatedListSize={ESTIMATED_LIST_SIZE}
       drawDistance={Platform.OS === "android" ? 1500 : 1200}
       onScroll={onScroll}
       scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
@@ -565,7 +573,7 @@ const HomePostListInner = function HomePostListInner(
       refreshControl={refreshControl}
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
-      maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
+      maintainVisibleContentPosition={maintainVisibleContentPosition}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}

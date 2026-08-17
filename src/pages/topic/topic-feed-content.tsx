@@ -3,7 +3,6 @@ import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
-import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,6 +40,7 @@ import {
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomePostList } from "../home/home-post-list";
+import { scrollFeedListToTop, type FeedListRef } from "../home/feed-list-scroll";
 import { FeedPostCardRuntimeProvider } from "../home/feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
@@ -67,7 +67,7 @@ export function TopicFeedScreen() {
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
-  const flatListRef = useRef<FlashListRef<Post>>(null);
+  const flatListRef = useRef<FeedListRef>(null);
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -92,7 +92,7 @@ export function TopicFeedScreen() {
     setContextScrolling(newFeedContext, false);
     setSortBy(value);
     requestAnimationFrame(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      void scrollFeedListToTop(flatListRef.current);
     });
   }, [setContextScrolling, sortBy, topicName]);
 
@@ -449,11 +449,6 @@ export function TopicFeedScreen() {
 
   const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
     const shouldScrollToTop = options?.scrollToTop !== false;
-    if (shouldScrollToTop) {
-      try {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
-    }
     await refreshTopicFeed({
       queryClient,
       topicName,
@@ -464,11 +459,7 @@ export function TopicFeedScreen() {
       firstPage: getPrefetchedNewPostsResponse(),
     });
     if (shouldScrollToTop) {
-      requestAnimationFrame(() => {
-        try {
-          flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-        } catch {}
-      });
+      await scrollFeedListToTop(flatListRef.current);
     }
     resetBaseline(null);
   }, [

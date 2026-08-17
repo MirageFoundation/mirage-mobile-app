@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   getBoundedVisibleIndexRange,
+  getFeedListViewport,
   getVisibleLayoutIndices,
   mergeViewableTokens,
 } from "../src/pages/home/home-post-list-visibility";
@@ -111,5 +112,32 @@ describe("home post list visibility", () => {
     expect(source).toMatch(/const handleScrollEndDrag[\s\S]*recomputeViewableFromLayout/);
     expect(source).toContain("onMomentumScrollEnd={handleMomentumScrollEnd}");
     expect(source).toContain("changed?: ViewToken[]");
+    expect(source).toContain("AnimatedLegendList");
+    expect(source).toContain("shouldRestorePosition");
+    expect(source).not.toContain("@shopify/flash-list");
+  });
+
+  test("reads legend list viewport metrics without throwing on a cold list", () => {
+    expect(getFeedListViewport({
+      getState: () => ({
+        scroll: 0,
+        scrollLength: 0,
+        positionAtIndex: () => 0,
+        sizeAtIndex: () => 0,
+      }),
+    })).toBeNull();
+
+    const viewport = getFeedListViewport({
+      getState: () => ({
+        scroll: 840,
+        scrollLength: 700,
+        positionAtIndex: (index) => index * 420,
+        sizeAtIndex: (index) => (index === 2 ? 0 : 420),
+      }),
+    });
+    expect(viewport?.viewportHeight).toBe(700);
+    expect(viewport?.scrollOffset).toBe(840);
+    expect(viewport?.getLayout(1)).toEqual({ y: 420, height: 420 });
+    expect(viewport?.getLayout(2)).toBeUndefined();
   });
 });
