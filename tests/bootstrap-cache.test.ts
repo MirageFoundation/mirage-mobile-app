@@ -3,7 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "../src/api/read/query-keys";
-import { hydrateBootstrapViewCache } from "../src/api/cache/bootstrap-cache";
+import {
+  consumeBootstrapFeedPreview,
+  hydrateBootstrapViewCache,
+} from "../src/api/cache/bootstrap-cache";
 
 const feed = {
   kind: "feed",
@@ -61,5 +64,39 @@ describe("bootstrap feed cache hydration", () => {
         }),
       ),
     ).toEqual({ pages: [feed], pageParams: [1] });
+  });
+
+  test("keeps an existing cached feed and stashes bootstrap for the new-posts pill", () => {
+    const queryClient = new QueryClient();
+    const params = {
+      address: "MIRAGE1ABC",
+      view: "feed:home" as const,
+      by: "magic" as const,
+      allowed_tags: "sensitive",
+      limit: 10,
+    };
+    const queryKey = queryKeys.posts({
+      address: "MIRAGE1ABC",
+      feed: "home",
+      by: "magic",
+      allowed_tags: "sensitive",
+      limit: 10,
+      page: undefined,
+    });
+    const cached = {
+      pages: [{ ...feed, posts: [{ id: "cached-1" }] }],
+      pageParams: [1],
+    };
+    queryClient.setQueryData(queryKey, cached);
+
+    hydrateBootstrapViewCache(queryClient, response, params);
+
+    expect(queryClient.getQueryData(queryKey)).toEqual(cached);
+    expect(consumeBootstrapFeedPreview({
+      feed: "home",
+      by: "magic",
+      allowed_tags: "sensitive",
+      address: "MIRAGE1ABC",
+    })).toEqual(feed);
   });
 });

@@ -72,6 +72,7 @@ describe("wallet-scoped client persistence", () => {
       "history-storage": "wallet",
       "search-storage": "wallet",
       "draft-storage": "wallet",
+      "content-moderation-storage": "wallet",
     });
   });
 

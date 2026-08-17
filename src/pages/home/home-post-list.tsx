@@ -45,6 +45,11 @@ const AnimatedFlashList = Animated.createAnimatedComponent(
 
 const ESTIMATED_ITEM_SIZE_CARD = 420;
 const ESTIMATED_ITEM_SIZE_COMPACT = 132;
+const MAINTAIN_VISIBLE_CONTENT_POSITION = {
+  // FlashList enables MVCP by default. A positive threshold would auto-scroll
+  // to newly prepended items while the user is already at the top.
+  autoscrollToTopThreshold: -1,
+};
 const ACTIVE_ZONE_TOP_RATIO = 0.08;
 const ACTIVE_ZONE_BOTTOM_RATIO = 0.15;
 const GLANCE_VISIBLE_RATIO = 0.4;
@@ -560,6 +565,7 @@ const HomePostListInner = function HomePostListInner(
       refreshControl={refreshControl}
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
+      maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}

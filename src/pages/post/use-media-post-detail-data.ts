@@ -38,10 +38,6 @@ type CurrentUser = {
   walletAddress?: string | null;
 };
 
-type ScrollableCommentsRef = {
-  scrollToEnd?: (options?: { animated?: boolean }) => void;
-};
-
 type CachedPostRecord = Post | PostWithChildren | Record<string, unknown>;
 
 function isUiPost(post: CachedPostRecord): post is Post {
@@ -64,27 +60,21 @@ function isApiPost(post: CachedPostRecord): post is PostWithChildren {
 }
 
 type UseMediaPostDetailDataOptions = {
-  commentsListRef: RefObject<ScrollableCommentsRef | null>;
   currentUser: CurrentUser | null | undefined;
   displayCommentsLengthRef: RefObject<number>;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
-  highlightedCommentId: string | null;
   id: string | undefined;
   isFocused: boolean;
-  pendingScrollToEndRef: RefObject<boolean>;
 };
 
 export function useMediaPostDetailData({
-  commentsListRef,
   currentUser,
   displayCommentsLengthRef,
   focusedCommentId,
   focusedMode,
-  highlightedCommentId,
   id,
   isFocused,
-  pendingScrollToEndRef,
 }: UseMediaPostDetailDataOptions) {
   const queryClient = useQueryClient();
   const branchExpansionReportRef = useRef<string | null>(null);
@@ -393,58 +383,6 @@ export function useMediaPostDetailData({
     hiddenCommentIds,
     blockedUserIds,
   ]);
-
-  useEffect(() => {
-    if (!pendingScrollToEndRef.current) return;
-    if (focusedCommentId && focusedMode !== "full") return;
-    if (!highlightedCommentId) return;
-    const containsHighlighted = (comment: Comment): boolean => {
-      if (comment.id === highlightedCommentId) return true;
-      return comment.replies?.some(containsHighlighted) ?? false;
-    };
-    if (!allDisplayComments.some(containsHighlighted)) {
-      // Safety net: if the highlighted comment hasn't shown up within a
-      // few seconds we'll never scroll to it. Surface that so we can
-      // diagnose missed optimistic insertions / id swaps in Sentry.
-      const missingTimer = setTimeout(() => {
-        if (!pendingScrollToEndRef.current) return;
-        Sentry.captureMessage(
-          "Pending scroll-to-comment never resolved on media post detail",
-          {
-            level: "warning",
-            tags: { feature: "media-post-detail", operation: "scroll-after-post" },
-            extra: {
-              postId: id,
-              highlightedCommentId,
-              topLevelCount: allDisplayComments.length,
-              focusedCommentId,
-              focusedMode,
-            },
-          },
-        );
-        pendingScrollToEndRef.current = false;
-      }, 4000);
-      return () => clearTimeout(missingTimer);
-    }
-    pendingScrollToEndRef.current = false;
-    Sentry.addBreadcrumb({
-      category: "media-post-detail",
-      message: "Scrolling to newly posted comment",
-      level: "info",
-      data: {
-        postId: id,
-        highlightedCommentId,
-        topLevelCount: allDisplayComments.length,
-      },
-    });
-    requestAnimationFrame(() => {
-      commentsListRef.current?.scrollToEnd?.({ animated: true });
-    });
-    const timer = setTimeout(() => {
-      commentsListRef.current?.scrollToEnd?.({ animated: true });
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [allDisplayComments, commentsListRef, focusedCommentId, focusedMode, highlightedCommentId, id, pendingScrollToEndRef]);
 
   const focusedThreadState = useMemo(() => {
     const isVisible = (comment: Comment) =>

@@ -59,16 +59,18 @@ export interface UseVoteHandlerReturn {
 interface PendingVoteInfo {
   /** Set once the action is actually enqueued; null while debouncing. */
   actionId: string | null;
+  /** Visible immediately while the vote is being debounced. */
+  preparingActionId: string;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   previousState: VoteState;
   optimisticResult: VoteResult;
 }
 
 /**
- * Rapid direction changes are coalesced: the optimistic UI updates on every
- * tap, but the PoW action is only enqueued after the user settles. This keeps
- * up->down toggles from launching (and then cancelling) native Argon2
- * computations back-to-back, which saturated the CPU on low-end devices.
+ * The first vote starts immediately. Rapid corrections while that vote is
+ * pending are coalesced before another PoW action starts. This keeps repeated
+ * up->down toggles from launching native Argon2 computations back-to-back,
+ * which saturated the CPU on low-end devices.
  */
 const VOTE_ENQUEUE_DEBOUNCE_MS = 400;
 
@@ -151,6 +153,8 @@ export function useVoteHandler(
 
   const { requireAuth } = useAuthGuard();
   const enqueue = usePowQueueStore((state) => state.enqueue);
+  const showPreparing = usePowQueueStore((state) => state.showPreparing);
+  const clearPreparing = usePowQueueStore((state) => state.clearPreparing);
   const cancelAction = usePowQueueStore((state) => state.cancelAction);
 
   const pendingVotes = useRef<Map<string, PendingVoteInfo>>(new Map());
@@ -169,7 +173,7 @@ export function useVoteHandler(
       const result = pending.optimisticResult;
       const previousState = pending.previousState;
       const actionType = getVoteActionType(result.direction);
-      const actionId = generateActionId();
+      const actionId = pending.preparingActionId;
       pending.debounceTimer = null;
       pending.actionId = actionId;
 
@@ -201,7 +205,9 @@ export function useVoteHandler(
           clearIfCurrent();
         },
         onRollback: () => {
-          clearIfCurrent();
+          const current = pendingVotes.current.get(targetId);
+          if (current?.actionId !== actionId) return;
+          pendingVotes.current.delete(targetId);
           onRollback?.(targetId, previousState);
         },
       });
@@ -210,24 +216,39 @@ export function useVoteHandler(
   );
 
   const schedulePendingVote = useCallback(
-    (targetId: string, previousState: VoteState, result: VoteResult) => {
-      // Apply the optimistic UI immediately; the queue action is debounced so
-      // rapid direction changes never launch overlapping PoW computations.
+    (
+      targetId: string,
+      previousState: VoteState,
+      result: VoteResult,
+      debounce: boolean,
+    ) => {
       onOptimisticUpdate?.(targetId, result);
 
       const info: PendingVoteInfo = {
         actionId: null,
+        preparingActionId: generateActionId(),
         debounceTimer: null,
         previousState,
         optimisticResult: result,
       };
-      info.debounceTimer = setTimeout(() => {
-        info.debounceTimer = null;
-        enqueuePendingVote(targetId);
-      }, VOTE_ENQUEUE_DEBOUNCE_MS);
+      const actionType = getVoteActionType(result.direction);
+      showPreparing({
+        id: info.preparingActionId,
+        type: actionType,
+        label: getActionLabel(actionType),
+      });
       pendingVotes.current.set(targetId, info);
+
+      if (debounce) {
+        info.debounceTimer = setTimeout(() => {
+          info.debounceTimer = null;
+          enqueuePendingVote(targetId);
+        }, VOTE_ENQUEUE_DEBOUNCE_MS);
+      } else {
+        enqueuePendingVote(targetId);
+      }
     },
-    [enqueuePendingVote, onOptimisticUpdate]
+    [enqueuePendingVote, onOptimisticUpdate, showPreparing]
   );
 
   const handleVote = useCallback(
@@ -247,6 +268,7 @@ export function useVoteHandler(
           clearTimeout(pending.debounceTimer);
           pending.debounceTimer = null;
         }
+        clearPreparing(pending.preparingActionId);
         if (pending.actionId) {
           cancelAction(pending.actionId);
         }
@@ -282,7 +304,12 @@ export function useVoteHandler(
             direction: desiredDirection as VoteDirection,
             newLikes: pending.previousState.likes + likeDelta,
           };
-          schedulePendingVote(targetId, pending.previousState, newResult);
+          schedulePendingVote(
+            targetId,
+            pending.previousState,
+            newResult,
+            true,
+          );
         });
 
         return;
@@ -302,10 +329,21 @@ export function useVoteHandler(
         };
 
         const newLikes = currentLikes + result.likeDelta;
-        schedulePendingVote(targetId, previousState, { ...result, newLikes });
+        schedulePendingVote(
+          targetId,
+          previousState,
+          { ...result, newLikes },
+          false,
+        );
       });
     },
-    [requireAuth, onRollback, cancelAction, schedulePendingVote]
+    [
+      requireAuth,
+      onRollback,
+      cancelAction,
+      clearPreparing,
+      schedulePendingVote,
+    ]
   );
 
   const handleUpvote = useCallback(

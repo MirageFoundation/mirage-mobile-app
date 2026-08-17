@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -126,22 +126,16 @@ export const MediaGallery = memo(function MediaGallery({
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  const maxHeight = useMemo(
-    () => Math.max(...media.map((_, index) => getHeightForIndex(index))),
-    [getHeightForIndex, media],
-  );
-
   const renderItem = useCallback(
     ({ item, index }: { item: ResolvedMedia; index: number }) => {
-      const itemHeight = getHeightForIndex(index);
       const isVideo = item.type === "video";
       return (
-        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: maxHeight }]}>
+        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: containerHeight }]}>
           {isVideo ? (
             <GalleryVideoItem
               item={item}
               width={GALLERY_WIDTH}
-              height={itemHeight}
+              height={containerHeight}
               isActive={index === activeIndex}
               screenActive={screenActive}
               onPress={() => onMediaPress?.(index)}
@@ -161,16 +155,17 @@ export const MediaGallery = memo(function MediaGallery({
             <GalleryImageItem
               item={item}
               width={GALLERY_WIDTH}
-              height={itemHeight}
+              height={containerHeight}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
               isPostDetail={isPostDetail}
+              isVisible={isVisible}
             />
           )}
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, activeIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
+    [onMediaPress, containerHeight, activeIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(
@@ -194,7 +189,7 @@ export const MediaGallery = memo(function MediaGallery({
         viewabilityConfig={viewabilityConfig}
         snapToInterval={GALLERY_WIDTH}
         decelerationRate="fast"
-        extraData={activeIndex}
+        extraData={`${activeIndex}:${containerHeight}`}
         initialNumToRender={2}
         maxToRenderPerBatch={2}
         windowSize={3}

@@ -6,7 +6,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useRef } from "react";
 import {
@@ -79,6 +79,10 @@ type PostActionsProps = {
   onBlockTopic?: () => void;
   topic?: string;
   onReport?: () => void;
+  /** Post id used for local-only hide */
+  postId?: string;
+  /** Extra side effects after a local hide (e.g. leave post detail) */
+  onHidePost?: () => void;
   hideCommentAction?: boolean;
 };
 
@@ -153,6 +157,8 @@ export const PostActions = memo(function PostActions({
   onBlockTopic,
   topic,
   onReport,
+  postId,
+  onHidePost,
   hideCommentAction = false,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
@@ -268,6 +274,13 @@ export const PostActions = memo(function PostActions({
   const handleReport = () => {
     triggerHaptic("warning");
     onReport?.();
+  };
+
+  const handleHidePost = () => {
+    if (!postId) return;
+    triggerHaptic("medium");
+    useContentModerationStore.getState().hidePost(postId);
+    onHidePost?.();
   };
 
   const handleAuthRequiredModeration = () => {
@@ -459,6 +472,25 @@ export const PostActions = memo(function PostActions({
               },
             }}
           >
+            {postId ? (
+              <MenuOption onSelect={handleHidePost}>
+                <View style={styles.menuOption}>
+                  <Ionicons
+                    name="eye-off-outline"
+                    size={16}
+                    color={theme.colors.text.default}
+                  />
+                  <Text
+                    size="lg"
+                    weight="medium"
+                    numberOfLines={1}
+                    style={{ color: theme.colors.text.default }}
+                  >
+                    Hide Post
+                  </Text>
+                </View>
+              </MenuOption>
+            ) : null}
             <MenuOption onSelect={handleBlockUser}>
               <View style={styles.menuOption}>
                 <Ionicons

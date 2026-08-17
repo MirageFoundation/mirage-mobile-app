@@ -16,15 +16,18 @@ type OptimisticPostCommentState = {
   pruneCommentsPresentOnServer: (postId: string, serverComments: Comment[]) => void;
 };
 
-const commentMatchesServer = (
+export function shouldPruneOptimisticComment(
   optimisticComment: Comment,
   serverComments: Comment[],
-): boolean => {
+): boolean {
   for (const serverComment of serverComments) {
+    // A confirmed stand-in already uses the server id. Keep it so the
+    // delayed refetch does not remount/reorder the row the user just posted.
+    if (serverComment.id === optimisticComment.id) return false;
+
     if (
-      serverComment.id === optimisticComment.id ||
-      (serverComment.content === optimisticComment.content &&
-        serverComment.author.id === optimisticComment.author.id)
+      serverComment.content === optimisticComment.content &&
+      serverComment.author.id === optimisticComment.author.id
     ) {
       return true;
     }
@@ -32,14 +35,14 @@ const commentMatchesServer = (
     if (
       serverComment.replies &&
       serverComment.replies.length > 0 &&
-      commentMatchesServer(optimisticComment, serverComment.replies)
+      shouldPruneOptimisticComment(optimisticComment, serverComment.replies)
     ) {
       return true;
     }
   }
 
   return false;
-};
+}
 
 export const usePostCommentOptimisticStore = create<OptimisticPostCommentState>(
   (set) => ({
@@ -134,7 +137,7 @@ export const usePostCommentOptimisticStore = create<OptimisticPostCommentState>(
     pruneCommentsPresentOnServer: (postId, serverComments) =>
       set((state) => {
         const nextTopLevelComments = (state.topLevelCommentsByPost[postId] ?? []).filter(
-          (comment) => !commentMatchesServer(comment, serverComments),
+          (comment) => !shouldPruneOptimisticComment(comment, serverComments),
         );
 
         const currentReplyComments = state.replyCommentsByPost[postId] ?? {};
@@ -143,7 +146,7 @@ export const usePostCommentOptimisticStore = create<OptimisticPostCommentState>(
             .map(([parentId, comments]) => [
               parentId,
               comments.filter(
-                (comment) => !commentMatchesServer(comment, serverComments),
+                (comment) => !shouldPruneOptimisticComment(comment, serverComments),
               ),
             ])
             .filter(([, comments]) => comments.length > 0),

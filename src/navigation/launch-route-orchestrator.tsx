@@ -45,15 +45,25 @@ export function LaunchRouteOrchestrator() {
   const pendingRoute = useDeepLinkStore((state) => state.pendingRoute);
 
   const homeAnchorEstablishedRef = useRef(false);
+  const startupHomeReadySignaledRef = useRef(false);
   const initialLaunchHandledRef = useRef(false);
   const authRequiredPresentedRef = useRef(false);
   const shareNavigationDispatchedRef = useRef(false);
   const initialShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
-    if (isInitializing || homeAnchorEstablishedRef.current || !pathname) return;
+    if (!pathname) return;
 
-    if (!isStartupHomePath(pathname)) {
+    // Record Home as soon as it mounts, even while auth is still resolving.
+    // Otherwise a quick in-app push can be mistaken for a cold-start target
+    // once initialization finishes and get replaced by Home.
+    if (!homeAnchorEstablishedRef.current && isStartupHomePath(pathname)) {
+      homeAnchorEstablishedRef.current = true;
+    }
+
+    if (isInitializing) return;
+
+    if (!homeAnchorEstablishedRef.current) {
       const notificationOwnsRoute = isInboxNotificationNavigationPending();
       const shareOwnsRoute =
         hasShareIntent || initialShareIntentRef.current || !!getPendingShareIntent();
@@ -77,7 +87,9 @@ export function LaunchRouteOrchestrator() {
       return;
     }
 
-    homeAnchorEstablishedRef.current = true;
+    if (startupHomeReadySignaledRef.current) return;
+
+    startupHomeReadySignaledRef.current = true;
     signalStartupHomeReady();
     Sentry.addBreadcrumb({
       category: "navigation",

@@ -23,7 +23,7 @@ import {
   markVideoFirstFrame,
   markVideoPrepareStart,
 } from "@/src/utils/video-ttff";
-import { getMediaImagePolicy } from "./media-image-policy";
+import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
 import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
 import {
   GALLERY_ASPECT_RATIO_CACHE,
@@ -360,6 +360,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     surface: isPostDetail ? "detail" : "feed",
     mediaType: "poster",
     displayWidth: width,
+    intrinsicWidth: item.width,
+    intrinsicHeight: item.height,
+    visible: isVisible,
   });
   const showThumbnail =
     thumbnailUri && (!shouldPrepare || !GALLERY_LOADED_CACHE.has(item.uri));
@@ -368,13 +371,14 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     <View style={[galleryStyles.itemContainer, { width, height }]}>
       {showThumbnail ? (
         <Image
-          source={{ uri: thumbnailPolicy.uri }}
+          source={getMediaImageSource(thumbnailPolicy)}
           style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 0 }]}
           contentFit={thumbnailPolicy.contentFit}
           cachePolicy={thumbnailPolicy.cachePolicy}
           recyclingKey={thumbnailPolicy.recyclingKey}
           allowDownscaling={thumbnailPolicy.allowDownscaling}
           enforceEarlyResizing={thumbnailPolicy.enforceEarlyResizing}
+          priority={thumbnailPolicy.priority}
           onLoad={({ source }) => {
             const w = source?.width;
             const h = source?.height;

@@ -176,6 +176,14 @@ export function PostDetailPostSection({
     );
   }, [followedTopics, handleFollowTopicViaQueue, post?.topic, topicFollowOverride]);
 
+  const handleHidePost = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/");
+  }, [router]);
+
   if (!post) {
     return (
       <View onLayout={onLayout}>
@@ -204,6 +212,7 @@ export function PostDetailPostSection({
         onBlockUser={() => actionSheetsRef.current?.requestBlockPostAuthor()}
         onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
         onReport={() => actionSheetsRef.current?.requestReportPost()}
+        onHidePost={handleHidePost}
         onRevealContent={handleRevealContent}
         contentRevealed={revealedContent}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${id}`}

@@ -14,6 +14,7 @@ export const PERSISTED_STORE_OWNERSHIP = {
   "history-storage": "wallet",
   "search-storage": "wallet",
   "draft-storage": "wallet",
+  "content-moderation-storage": "wallet",
 } as const satisfies Record<string, "device" | "wallet">;
 
 type WalletScopedStoreController = {

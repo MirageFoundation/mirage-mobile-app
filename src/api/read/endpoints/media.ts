@@ -299,7 +299,7 @@ export async function uploadMedia(
   const startedAt = Date.now();
   const normalizedUri = normalizeFileUri(localUri);
   const timeoutMs = mediaType === "video" ? VIDEO_UPLOAD_TIMEOUT_MS : IMAGE_UPLOAD_TIMEOUT_MS;
-  const uploadUrl = apiClient.getApiUrl("/upload_media");
+  const uploadUrl = `${apiClient.getApiUrl("/upload_media")}?kind=${encodeURIComponent(mediaType)}`;
 
   const uploadWithNativeProgress = async (): Promise<UploadMediaResponse> => {
     const reportedMilestones = new Set<number>();

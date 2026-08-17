@@ -6,6 +6,7 @@ import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -24,6 +25,7 @@ import {
   useInfinitePosts,
   useUserFollowed,
 } from "@/src/api";
+import { refreshTopicFeed } from "./topic-feed-refresh";
 import {
   NewPostsButton,
   type Post,
@@ -51,6 +53,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
+import { collectPostIdsFromPages } from "@/src/hooks/new-posts-check";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import { PostActionOverlays } from "../post/post-action-overlays";
 import { usePostActionController } from "../post/use-post-action-controller";
@@ -112,6 +115,7 @@ export function TopicFeedScreen() {
   );
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const currentUser = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
 
   const networkType = useNetworkType();
 
@@ -170,7 +174,6 @@ export function TopicFeedScreen() {
     isLoading,
     isError,
     error,
-    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -244,12 +247,24 @@ export function TopicFeedScreen() {
     return maxTs > 0 ? maxTs : null;
   }, [data?.pages]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline } = useNewPostsChecker({
+  const knownPostIds = useMemo(
+    () => collectPostIdsFromPages(data?.pages),
+    [data?.pages],
+  );
+  const {
+    hasNewPosts,
+    newPostAvatars,
+    newPostCount,
+    dismiss: dismissNewPosts,
+    resetBaseline,
+    getPrefetchedNewPostsResponse,
+  } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
     latestPostTimestamp,
+    knownPostIds,
   });
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   dismissNewPostsRef.current = dismissNewPosts;
@@ -416,7 +431,13 @@ export function TopicFeedScreen() {
     });
     setIsManualRefreshing(true);
     try {
-      await refetch();
+      await refreshTopicFeed({
+        queryClient,
+        topicName,
+        sortBy,
+        allowedTags: allowedTags || undefined,
+        address: currentUser?.walletAddress,
+      });
     } catch (error) {
       Sentry.addBreadcrumb({ category: "topic-feed", message: "Refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
@@ -424,24 +445,50 @@ export function TopicFeedScreen() {
       dismissNewPostsRef.current?.();
       useTimeTickStore.getState().bump();
     }
-  }, [refetch, topicName]);
+  }, [allowedTags, currentUser?.walletAddress, queryClient, sortBy, topicName]);
+
+  const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
+    const shouldScrollToTop = options?.scrollToTop !== false;
+    if (shouldScrollToTop) {
+      try {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+    }
+    await refreshTopicFeed({
+      queryClient,
+      topicName,
+      sortBy,
+      allowedTags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      fetchAllNew: true,
+      firstPage: getPrefetchedNewPostsResponse(),
+    });
+    if (shouldScrollToTop) {
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+      });
+    }
+    resetBaseline(null);
+  }, [
+    allowedTags,
+    currentUser?.walletAddress,
+    getPrefetchedNewPostsResponse,
+    queryClient,
+    resetBaseline,
+    sortBy,
+    topicName,
+  ]);
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);
     try {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    } catch {}
-
-    await handleRefresh();
-
-    requestAnimationFrame(() => {
-      try {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
-    });
-    resetBaseline(null);
-    setIsBannerLoading(false);
-  }, [handleRefresh, resetBaseline]);
+      await applyNewPosts({ scrollToTop: true });
+    } finally {
+      setIsBannerLoading(false);
+    }
+  }, [applyNewPosts]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;

@@ -44,7 +44,7 @@ import {
 import { usePostCardVideoPlayback } from "./use-post-card-video-playback";
 import { usePostCardVideoListeners } from "./use-post-card-video-listeners";
 import { usePostCardVideoHealth } from "./use-post-card-video-health";
-import { getMediaImagePolicy } from "./media-image-policy";
+import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
 import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
 
 export type PostCardVideoRef = {
@@ -360,6 +360,9 @@ export const PostCardVideo = memo(
       surface: isPostDetail ? "detail" : "feed",
       mediaType: "poster",
       displayWidth: containerWidth,
+      intrinsicWidth: media.width,
+      intrinsicHeight: media.height,
+      visible: isVisible,
     });
 
     const loadedCacheHit = !!(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri));
@@ -377,13 +380,14 @@ export const PostCardVideo = memo(
             {videoThumbnailUri && (!videoReadyForDisplay || !shouldMountNativeVideo) ? (
               <>
                 <Image
-                  source={{ uri: videoThumbnailPolicy.uri }}
+                  source={getMediaImageSource(videoThumbnailPolicy)}
                   style={[styles.media, { position: "absolute", zIndex: 1 }]}
                   contentFit={videoThumbnailPolicy.contentFit}
                   cachePolicy={videoThumbnailPolicy.cachePolicy}
                   recyclingKey={videoThumbnailPolicy.recyclingKey}
                   allowDownscaling={videoThumbnailPolicy.allowDownscaling}
                   enforceEarlyResizing={videoThumbnailPolicy.enforceEarlyResizing}
+                  priority={videoThumbnailPolicy.priority}
                   onLoad={({ source }) => {
                     updateMediaAspectRatioFromSize(source?.width, source?.height);
                   }}

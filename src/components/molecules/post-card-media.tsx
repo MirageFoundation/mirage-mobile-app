@@ -209,6 +209,7 @@ export const PostCardMedia = memo(
         onMediaPress={onMediaPress}
         isPostDetail={isPostDetail}
         postId={postId}
+        isVisible={isVisible}
       />
     );
   }),

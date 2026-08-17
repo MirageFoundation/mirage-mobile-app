@@ -1,6 +1,13 @@
-import type { PowAction, PowQueueState } from "./pow-queue";
+import type {
+  PowAction,
+  PowActionPreview,
+  PowQueueState,
+} from "./pow-queue";
 
-type ToastAction = Pick<PowAction, "id" | "type" | "label">;
+type ToastAction = Pick<
+  PowActionPreview,
+  "id" | "type" | "label" | "phase"
+>;
 type ToastResult = PowQueueState["lastCompletedAction"];
 
 export interface PowQueueToastPresentation {
@@ -25,10 +32,21 @@ type PowQueueToastState = Pick<
   | "successOverlay"
 >;
 
-const toVisibleAction = (action: PowAction | null): ToastAction | null =>
-  action && action.showProgress !== false
-    ? { id: action.id, type: action.type, label: action.label }
-    : null;
+const toVisibleAction = (
+  action: PowAction | PowActionPreview | null,
+): ToastAction | null => {
+  if (!action || action.showProgress === false) return null;
+
+  const visibleAction: ToastAction = {
+    id: action.id,
+    type: action.type,
+    label: action.label,
+  };
+  if ("phase" in action && action.phase) {
+    visibleAction.phase = action.phase;
+  }
+  return visibleAction;
+};
 
 const areActionsEqual = (left: ToastAction | null, right: ToastAction | null) =>
   left === right ||
@@ -36,7 +54,8 @@ const areActionsEqual = (left: ToastAction | null, right: ToastAction | null) =>
     right !== null &&
     left.id === right.id &&
     left.type === right.type &&
-    left.label === right.label);
+    left.label === right.label &&
+    left.phase === right.phase);
 
 const areResultsEqual = (left: ToastResult, right: ToastResult) =>
   left === right ||

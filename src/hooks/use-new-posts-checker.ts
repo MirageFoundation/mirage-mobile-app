@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
 import { getPosts, type PostsResponse } from "@/src/api";
+import { consumeBootstrapFeedPreview } from "@/src/api/cache/bootstrap-cache";
 import { useAuthStore } from "@/src/stores";
+import { prefetchFeedImages } from "@/src/utils/feed-image-prefetch";
 import { useAppState } from "./use-app-state";
+import { selectUnseenNewerPosts } from "./new-posts-check";
 
 export type NewPostAvatar = {
   userId: string;
@@ -17,6 +20,7 @@ type UseNewPostsCheckerOptions = {
   enabled?: boolean;
   intervalMs?: number;
   latestPostTimestamp?: number | null;
+  knownPostIds?: Iterable<string> | null;
 };
 
 export function useNewPostsChecker({
@@ -27,6 +31,7 @@ export function useNewPostsChecker({
   enabled = true,
   intervalMs = 30_000,
   latestPostTimestamp = null,
+  knownPostIds = null,
 }: UseNewPostsCheckerOptions) {
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
@@ -39,7 +44,17 @@ export function useNewPostsChecker({
   const lastCheckedAtRef = useRef(Number.NEGATIVE_INFINITY);
   const prefetchedNewPostsResponseRef = useRef<PostsResponse | null>(null);
   const isFocused = useIsFocused();
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
+  const knownPostIdsRef = useRef(knownPostIds);
+  knownPostIdsRef.current = knownPostIds;
+
+  const clearNewPosts = useCallback(() => {
+    hasNewPostsRef.current = false;
+    setHasNewPosts(false);
+    setNewPostAvatars([]);
+    setNewPostCount(0);
+    prefetchedNewPostsResponseRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!hasNewPostsRef.current && latestPostTimestamp != null) {
@@ -58,20 +73,22 @@ export function useNewPostsChecker({
 
   useEffect(() => {
     checkGenerationRef.current += 1;
-    hasNewPostsRef.current = false;
-    setHasNewPosts(false);
-    setNewPostAvatars([]);
-    setNewPostCount(0);
-    prefetchedNewPostsResponseRef.current = null;
+    clearNewPosts();
     baselineTimestampRef.current = latestPostTimestampRef.current;
-  }, [feed, by, topic]);
+  }, [by, clearNewPosts, feed, topic]);
 
   const checkForNewPosts = useCallback(async () => {
     if (baselineTimestampRef.current == null) return;
     const checkGeneration = checkGenerationRef.current;
     lastCheckedAtRef.current = Date.now();
     try {
-      const result = await getPosts({
+      const result = consumeBootstrapFeedPreview({
+        feed: topic ? undefined : feed,
+        by,
+        topic,
+        allowed_tags,
+        address: walletAddress ?? undefined,
+      }) ?? await getPosts({
         limit: 10,
         feed: topic ? undefined : feed,
         by,
@@ -85,10 +102,14 @@ export function useNewPostsChecker({
 
       const baseline = baselineTimestampRef.current;
       if (baseline == null) return;
-      const newerPosts = result.posts.filter((p) => p.timestamp > baseline);
+      const newerPosts = selectUnseenNewerPosts(result.posts, {
+        baselineTimestamp: baseline,
+        knownPostIds: knownPostIdsRef.current,
+      });
 
       if (newerPosts.length > 0) {
         prefetchedNewPostsResponseRef.current = result;
+        prefetchFeedImages(newerPosts);
         const avatars: NewPostAvatar[] = [];
         const seen = new Set<string>();
         for (const post of newerPosts) {
@@ -103,9 +124,22 @@ export function useNewPostsChecker({
           hasNewPostsRef.current = true;
           setHasNewPosts(true);
         }
+        return;
       }
+      clearNewPosts();
     } catch {}
-  }, [feed, by, topic, allowed_tags, walletAddress]);
+  }, [allowed_tags, by, clearNewPosts, feed, topic, walletAddress]);
+
+  useEffect(() => {
+    const prefetched = prefetchedNewPostsResponseRef.current;
+    const baseline = baselineTimestampRef.current;
+    if (!hasNewPostsRef.current || !prefetched || baseline == null) return;
+    const unseen = selectUnseenNewerPosts(prefetched.posts, {
+      baselineTimestamp: baseline,
+      knownPostIds,
+    });
+    if (unseen.length === 0) clearNewPosts();
+  }, [clearNewPosts, knownPostIds]);
 
   // Feed queries never refetch themselves (see infinite-posts-policy), so this
   // background poll discovers new posts without duplicating the aggregate cold-
@@ -127,11 +161,7 @@ export function useNewPostsChecker({
 
   const dismiss = useCallback(() => {
     checkGenerationRef.current += 1;
-    hasNewPostsRef.current = false;
-    setHasNewPosts(false);
-    setNewPostAvatars([]);
-    setNewPostCount(0);
-    prefetchedNewPostsResponseRef.current = null;
+    clearNewPosts();
     // Re-arm against the current top of the feed rather than parking on null.
     // A manual refresh that returns the same newest post leaves
     // `latestPostTimestamp` unchanged, so the dependency-driven effect below
@@ -139,20 +169,16 @@ export function useNewPostsChecker({
     // of the session.
     pendingBaselineRestore.current = true;
     baselineTimestampRef.current = latestPostTimestampRef.current;
-  }, []);
+  }, [clearNewPosts]);
 
   const resetBaseline = useCallback((newTimestamp: number | null) => {
     checkGenerationRef.current += 1;
-    hasNewPostsRef.current = false;
-    setHasNewPosts(false);
-    setNewPostAvatars([]);
-    setNewPostCount(0);
-    prefetchedNewPostsResponseRef.current = null;
+    clearNewPosts();
     if (newTimestamp == null) {
       pendingBaselineRestore.current = true;
     }
     baselineTimestampRef.current = newTimestamp;
-  }, []);
+  }, [clearNewPosts]);
 
   const getPrefetchedNewPostsResponse = useCallback(
     () => prefetchedNewPostsResponseRef.current,

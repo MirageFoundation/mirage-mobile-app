@@ -193,6 +193,11 @@ export const PostDetailCommentComposer = forwardRef<
               addTopLevelOptimisticComment(optimisticThreadId, optimisticComment);
               onScrollToEndAfterLayout();
             }
+            console.log("[CommentReveal] legacy optimistic comment inserted", {
+              postId: id,
+              optimisticCommentId,
+              isReply: !!replyTargetId,
+            });
             onHighlightComment(optimisticCommentId, shouldSuppressHighlightScroll);
             onCommentCountDelta(1, baseCommentCount);
             incrementCommentCount(id, rootPostCommentCount);

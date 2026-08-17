@@ -23,11 +23,11 @@ type UseMediaPostDetailPendingCommentOptions = {
   highlightTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   id: string | undefined;
   pendingReplyScrollIdRef: MutableRefObject<string | null>;
-  pendingScrollToEndRef: MutableRefObject<boolean>;
   refetchComments: () => unknown;
   setFocusedMode: (mode: FocusedMode) => void;
   setHighlightedCommentId: (commentId: string | null | ((prev: string | null) => string | null)) => void;
   suppressedHighlightScrollRef: MutableRefObject<string | null>;
+  onConfirmedCommentId?: (optimisticId: string, confirmedId: string) => void;
 };
 
 export function useMediaPostDetailPendingComment({
@@ -38,11 +38,11 @@ export function useMediaPostDetailPendingComment({
   highlightTimerRef,
   id,
   pendingReplyScrollIdRef,
-  pendingScrollToEndRef,
   refetchComments,
   setFocusedMode,
   setHighlightedCommentId,
   suppressedHighlightScrollRef,
+  onConfirmedCommentId,
 }: UseMediaPostDetailPendingCommentOptions) {
   const currentUser = useAuthStore((state) => state.user);
   const enqueue = usePowQueueStore((state) => state.enqueue);
@@ -123,22 +123,28 @@ export function useMediaPostDetailPendingComment({
         return commentMutation.mutateAsync({ parentId, content: finalContent, rootPostId: id });
       },
       onOptimisticUpdate: () => {
+        // Composer reveal owns the only scroll. Keep highlight/layout
+        // auto-scrolls suppressed so they cannot race it.
+        suppressedHighlightScrollRef.current = optimisticCommentId;
         if (captured.replyToId) {
-          suppressedHighlightScrollRef.current = null;
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
           pendingReplyScrollIdRef.current = optimisticCommentId;
         } else {
-          suppressedHighlightScrollRef.current = null;
           addTopLevelOptimisticComment(id, optimisticComment);
           if (focusedCommentId && focusedMode !== "full") {
             setFocusedMode("full");
           }
           pendingReplyScrollIdRef.current = optimisticCommentId;
-          pendingScrollToEndRef.current = true;
         }
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
+        console.log("[CommentReveal] optimistic comment inserted", {
+          postId: id,
+          optimisticCommentId,
+          isReply: !!captured.replyToId,
+          parentId,
+        });
         if (revealCommentsAfterPost) {
           revealCommentsAfterPost(optimisticCommentId, !!captured.replyToId);
         }
@@ -165,11 +171,12 @@ export function useMediaPostDetailPendingComment({
             : null;
         if (confirmedCommentId) {
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
-          suppressedHighlightScrollRef.current = null;
+          suppressedHighlightScrollRef.current = confirmedCommentId;
           pendingReplyScrollIdRef.current = confirmedCommentId;
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
           );
+          onConfirmedCommentId?.(optimisticCommentId, confirmedCommentId);
           Sentry.addBreadcrumb({
             category: "comment",
             message: "Optimistic comment confirmed",
@@ -232,8 +239,8 @@ export function useMediaPostDetailPendingComment({
     setFocusedMode,
     setHighlightedCommentId,
     suppressedHighlightScrollRef,
+    onConfirmedCommentId,
     pendingReplyScrollIdRef,
-    pendingScrollToEndRef,
     highlightTimerRef,
   ]);
 }

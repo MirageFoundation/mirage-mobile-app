@@ -53,6 +53,7 @@ export type MediaPostDetailPostActions = {
   blockPost: () => void;
   blockTopic: () => void;
   reportPost: () => void;
+  hidePost: () => void;
   expandSheet: () => void;
 };
 
@@ -66,6 +67,8 @@ type CommentVoteAction = (
 export type MediaPostDetailCommentActions = {
   scrollYChange: (y: number) => void;
   scrollToIndex: (index: number) => void;
+  contentSizeChange: (contentHeight?: number) => void;
+  sheetIndexChange: (index: number) => void;
   followAuthor: (authorId: string, isCurrentlyFollowing: boolean) => void;
   setFocusedMode: (mode: MediaPostDetailFocusedMode) => void;
   refetchFocusedContext: () => void;
@@ -180,6 +183,7 @@ export function createMediaPostDetailMeasurementFooterContract(
       blockPost: noop,
       blockTopic: noop,
       reportPost: noop,
+      hidePost: noop,
       expandSheet: noop,
     },
     videoControls: {

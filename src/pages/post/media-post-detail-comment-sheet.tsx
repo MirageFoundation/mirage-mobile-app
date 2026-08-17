@@ -165,6 +165,7 @@ export function MediaPostDetailCommentSheet({
         if (index >= 1) setIsSheetExpanded(true);
         else setIsSheetExpanded(false);
         setIsExpandingOrExpanded(index >= 1);
+        commentActions.sheetIndexChange(index);
       }}
       style={{ zIndex: 30, elevation: 30 }}
       handleComponent={renderHandle}
@@ -190,6 +191,10 @@ export function MediaPostDetailCommentSheet({
           setTimeout(() => {
             commentActions.scrollToIndex(index);
           }, 300);
+        }}
+        onContentSizeChange={(_width, height) => {
+          console.log("[CommentReveal] contentSizeChange", { height, commentCount: comments.length });
+          commentActions.contentSizeChange(height);
         }}
         contentContainerStyle={{
           paddingBottom: inputDockTotalH + 24,

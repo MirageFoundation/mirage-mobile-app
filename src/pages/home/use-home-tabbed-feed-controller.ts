@@ -18,10 +18,15 @@ import {
   queryKeys,
   type PostsResponse,
 } from "@/src/api";
+import {
+  fetchAndMergeInfinitePostsRefresh,
+  type InfinitePostsData,
+} from "@/src/api/cache/merge-infinite-posts-refresh";
 import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
+import { collectPostIdsFromPages } from "@/src/hooks/new-posts-check";
 import {
   useNewPostsChecker,
   type NewPostAvatar,
@@ -46,7 +51,6 @@ import {
 import { useHomeTabbedFeedPosts } from "./use-home-tabbed-feed-posts";
 
 const coldStartCheckedFeedKeys = new Set<string>();
-const STALE_CACHED_PAGE_GAP_SECONDS = 60 * 60 * 2;
 
 type FeedRefreshOptions = {
   fetchAllNew?: boolean;
@@ -217,68 +221,35 @@ export function useHomeTabbedFeedController({
         address: currentUser?.walletAddress,
         page,
       });
-      const newFirstPage = options?.prefetchedFirstPage ?? await fetchPage(1);
-      let refreshedPageCount = 1;
-      const existingData: any = queryClient.getQueryData(queryKey);
-
-      if (options?.fetchAllNew) {
-        const existingIds = new Set<string>();
-        for (const page of existingData?.pages ?? []) {
-          for (const post of page.posts) existingIds.add(post.post_id);
-        }
-        if (existingIds.size === 0) {
-          queryClient.setQueryData(queryKey, {
-            pages: [newFirstPage],
-            pageParams: [1],
-          });
-        } else {
-          const newPages = [newFirstPage];
-          const newPageParams = [1];
-          let hasOverlap = newFirstPage.posts.some((post) => existingIds.has(post.post_id));
-          let nextPage = 2;
-          while (!hasOverlap && newFirstPage.has_more && nextPage <= 10) {
-            const page = await fetchPage(nextPage);
-            newPages.push(page);
-            newPageParams.push(nextPage);
-            hasOverlap = page.posts.some((post) => existingIds.has(post.post_id));
-            if (!page.has_more) break;
-            nextPage += 1;
-          }
-          queryClient.setQueryData(queryKey, {
-            pages: newPages,
-            pageParams: newPageParams,
-          });
-          refreshedPageCount = newPages.length;
-        }
-      } else {
-        const firstPageOldestTimestamp = Math.min(
-          ...newFirstPage.posts.map((post) => post.timestamp),
-        );
-        const nextCachedPageNewestTimestamp = existingData?.pages?.[1]?.posts?.[0]?.timestamp;
-        const cachedPageGapSeconds = Number.isFinite(firstPageOldestTimestamp) &&
-          Number.isFinite(nextCachedPageNewestTimestamp)
-          ? firstPageOldestTimestamp - nextCachedPageNewestTimestamp
-          : 0;
-        if (
-          activeSelection.querySort === "newest" &&
-          cachedPageGapSeconds >= STALE_CACHED_PAGE_GAP_SECONDS
-        ) {
-          Sentry.captureMessage("Stale cached latest feed pages discarded", {
-            level: "warning",
-            tags: { feature: "home-feed", feed: baseFeed, sort: activeSelection.querySort },
-            extra: {
-              cachedPageGapSeconds,
-              cachedPageCount: existingData?.pages?.length ?? 0,
-              firstPagePostCount: newFirstPage.posts.length,
-              hasAddress: Boolean(currentUser?.walletAddress),
-            },
-          });
-        }
-        queryClient.setQueryData(queryKey, {
-          pages: [newFirstPage],
-          pageParams: [1],
+      const existingData = queryClient.getQueryData<InfinitePostsData>(queryKey);
+      const refreshMode = activeSelection.querySort === "newest"
+        ? "prepend"
+        : "replace-top";
+      const { data, refreshedPageCount } = await fetchAndMergeInfinitePostsRefresh({
+        existing: existingData,
+        fetchPage,
+        fetchAllNew: Boolean(options?.fetchAllNew),
+        mode: refreshMode,
+        firstPage: options?.prefetchedFirstPage,
+      });
+      if (
+        refreshMode === "prepend" &&
+        (existingData?.pages.length ?? 0) > 1 &&
+        data.pages.length < (existingData?.pages.length ?? 0)
+      ) {
+        Sentry.captureMessage("Stale cached latest feed pages discarded", {
+          level: "warning",
+          tags: { feature: "home-feed", feed: baseFeed, sort: activeSelection.querySort },
+          extra: {
+            cachedPageCount: existingData?.pages.length ?? 0,
+            refreshedPageCount,
+            firstPagePostCount: data.pages[0]?.posts.length ?? 0,
+            hasAddress: Boolean(currentUser?.walletAddress),
+          },
         });
       }
+      queryClient.setQueryData(queryKey, data);
+      const newFirstPage = data.pages[0];
       if (currentUser?.walletAddress) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
@@ -291,9 +262,9 @@ export function useHomeTabbedFeedController({
         data: {
           feed: baseFeed,
           sort: activeSelection.querySort,
-          firstPagePostCount: newFirstPage.posts.length,
+          firstPagePostCount: newFirstPage?.posts.length ?? 0,
           refreshedPageCount,
-          hasMore: newFirstPage.has_more,
+          hasMore: newFirstPage?.has_more ?? false,
         },
       });
     } catch (error) {
@@ -385,6 +356,10 @@ export function useHomeTabbedFeedController({
     () => getLatestPostTimestamp(query.data?.pages),
     [query.data?.pages],
   );
+  const knownPostIds = useMemo(
+    () => collectPostIdsFromPages(query.data?.pages),
+    [query.data?.pages],
+  );
   const {
     hasNewPosts,
     newPostAvatars,
@@ -399,19 +374,23 @@ export function useHomeTabbedFeedController({
     allowed_tags: allowedTags || undefined,
     enabled: true,
     latestPostTimestamp,
+    knownPostIds,
   });
   dismissNewPostsRef.current = dismissNewPosts;
   useEffect(() => {
     onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
   }, [hasNewPosts, newPostAvatars, newPostCount, onNewPostsChange]);
 
-  const handleNewPostsPress = useCallback(async () => {
-    try {
-      activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    } catch {}
-    showBars();
+  const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
+    const shouldScrollToTop = options?.scrollToTop !== false;
+    if (shouldScrollToTop) {
+      try {
+        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+      showBars();
+    }
     const prefetchedFirstPage = getPrefetchedNewPostsResponse();
-    const minDelay = prefetchedFirstPage
+    const minDelay = !shouldScrollToTop || prefetchedFirstPage
       ? Promise.resolve()
       : new Promise<void>((resolve) => setTimeout(resolve, 600));
     await Promise.all([
@@ -422,14 +401,20 @@ export function useHomeTabbedFeedController({
       }),
       minDelay,
     ]);
-    requestAnimationFrame(() => {
-      try {
-        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
-      showBars();
-    });
+    if (shouldScrollToTop) {
+      requestAnimationFrame(() => {
+        try {
+          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+        showBars();
+      });
+    }
     resetBaseline(null);
   }, [getPrefetchedNewPostsResponse, resetBaseline, showBars]);
+  const handleNewPostsPress = useCallback(
+    () => applyNewPosts({ scrollToTop: true }),
+    [applyNewPosts],
+  );
 
   const fetchStateRef = useRef({
     magic: { lastFetchTime: 0, fetching: false },

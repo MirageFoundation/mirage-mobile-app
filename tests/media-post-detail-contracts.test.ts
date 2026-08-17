@@ -38,6 +38,7 @@ function createPostActions(overrides = {}) {
     blockPost: noop,
     blockTopic: noop,
     reportPost: noop,
+    hidePost: noop,
     expandSheet: noop,
     ...overrides,
   };

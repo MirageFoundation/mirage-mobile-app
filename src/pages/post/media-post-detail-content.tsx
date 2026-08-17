@@ -73,6 +73,8 @@ import { useMediaPostDetailData } from "./use-media-post-detail-data";
 import { useMediaPostDetailLayout } from "./use-media-post-detail-layout";
 import { useMediaPostDetailPendingComment } from "./use-media-post-detail-pending-comment";
 import { usePostDetailPendingCommentEdit } from "./use-post-detail-pending-comment-edit";
+import { transferCommentRevealId } from "./post-detail-comment-reveal";
+import { usePostedCommentRevealScroll } from "./use-posted-comment-reveal-scroll";
 import { useMediaPostDetailVideoControls } from "./use-media-post-detail-video-controls";
 import {
   useCallback,
@@ -138,12 +140,14 @@ export default function MediaPostDetailScreen({
   const preciseScrollTargetRef = useRef<string | null>(null);
   const coarseScrollTargetRef = useRef<string | null>(null);
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
-  const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
   const pendingPostedCommentScrollRef = useRef<{
     id: string;
     createdAt: number;
   } | null>(null);
+  const composerRevealIdRef = useRef<string | null>(null);
+  const scrolledPostedCommentIdRef = useRef<string | null>(null);
+  const lastCommentsContentHeightRef = useRef(0);
   const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
@@ -151,6 +155,8 @@ export default function MediaPostDetailScreen({
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
     initialHighlightCommentId ?? null,
   );
+  const [revealEpoch, setRevealEpoch] = useState(0);
+  const [sheetRevealReady, setSheetRevealReady] = useState(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedHighlightScrollRef = useRef<string | null>(null);
   const composeNavigationLockedUntilRef = useRef(0);
@@ -187,15 +193,12 @@ export default function MediaPostDetailScreen({
     setFocusedContextDepth,
     removeCommentFromState,
   } = useMediaPostDetailData({
-    commentsListRef,
     currentUser,
     displayCommentsLengthRef,
     focusedCommentId,
     focusedMode,
-    highlightedCommentId,
     id,
     isFocused,
-    pendingScrollToEndRef,
   });
 
   const [followUserOverrides, setFollowUserOverrides] = useState<
@@ -355,30 +358,71 @@ export default function MediaPostDetailScreen({
     return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
   }, []);
 
-  useEffect(() => {
-    const pendingTarget = pendingPostedCommentScrollRef.current;
-    if (!pendingTarget || displayComments.length === 0) return;
-    const index = displayComments.findIndex((comment) =>
-      findCommentInTree(comment, pendingTarget.id),
-    );
-    if (index < 0) {
-      if (Date.now() - pendingTarget.createdAt > 4000) {
-        pendingPostedCommentScrollRef.current = null;
-      }
-      return;
+  const scrollPostedCommentIntoView = useCallback((index: number) => {
+    const commentId = scrolledPostedCommentIdRef.current;
+    if (commentId) {
+      coarseScrollTargetRef.current = `${commentId}:posted`;
     }
+    scrollCommentsToIndex(index, false);
+  }, [scrollCommentsToIndex]);
 
-    sheetRef.current?.snapToIndex?.(2);
-    coarseScrollTargetRef.current = `${pendingTarget.id}:pending`;
-    requestAnimationFrame(() => {
-      scrollCommentsToIndex(index, true);
+  const scrollPostedCommentToEnd = useCallback((contentHeight?: number) => {
+    const commentId =
+      scrolledPostedCommentIdRef.current ??
+      pendingPostedCommentScrollRef.current?.id ??
+      composerRevealIdRef.current;
+    if (commentId) {
+      coarseScrollTargetRef.current = `${commentId}:posted`;
+    }
+    if (contentHeight && contentHeight > 0) {
+      lastCommentsContentHeightRef.current = contentHeight;
+    }
+    const offset =
+      (contentHeight && contentHeight > 0
+        ? contentHeight
+        : lastCommentsContentHeightRef.current) || 100000;
+    console.log("[CommentReveal] scrollToOffset", {
+      commentId,
+      contentHeight: contentHeight ?? lastCommentsContentHeightRef.current ?? null,
+      offset,
+      hasListRef: !!commentsListRef.current,
+      hasScrollToOffset: typeof commentsListRef.current?.scrollToOffset === "function",
     });
-    const settleTimer = setTimeout(() => {
-      scrollCommentsToIndex(index, false);
-      pendingPostedCommentScrollRef.current = null;
-    }, 650);
-    return () => clearTimeout(settleTimer);
-  }, [displayComments, findCommentInTree, scrollCommentsToIndex, sheetRef]);
+    commentsListRef.current?.scrollToOffset?.({
+      offset,
+      animated: false,
+    });
+    commentsListRef.current?.scrollToEnd?.({ animated: false });
+  }, []);
+
+  const tryRevealPostedComment = usePostedCommentRevealScroll({
+    alreadyScrolledIdRef: scrolledPostedCommentIdRef,
+    comments: displayComments,
+    epoch: revealEpoch,
+    feature: "media-post-detail",
+    pendingRef: pendingPostedCommentScrollRef,
+    postId: id,
+    ready: sheetRevealReady,
+    scrollToEnd: scrollPostedCommentToEnd,
+    scrollToIndex: scrollPostedCommentIntoView,
+  });
+
+  const scrollPostedCommentAfterSheetSettled = useCallback(() => {
+    const pendingId =
+      pendingPostedCommentScrollRef.current?.id ?? composerRevealIdRef.current;
+    if (!pendingId) return;
+    console.log("[CommentReveal] sheet settled, scrolling", {
+      pendingId,
+      contentHeight: lastCommentsContentHeightRef.current,
+    });
+    scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
+    requestAnimationFrame(() => {
+      scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
+    });
+    setTimeout(() => {
+      scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
+    }, 80);
+  }, [scrollPostedCommentToEnd]);
 
   useEffect(() => {
     return () => {
@@ -423,6 +467,8 @@ export default function MediaPostDetailScreen({
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+    if (composerRevealIdRef.current === highlightedCommentId) return;
+    if (pendingPostedCommentScrollRef.current?.id === highlightedCommentId) return;
     const isPendingOptimisticReply = pendingReplyScrollIdRef.current === highlightedCommentId;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
@@ -449,6 +495,7 @@ export default function MediaPostDetailScreen({
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+      if (composerRevealIdRef.current === highlightedCommentId) return;
       const isPendingPostedComment =
         pendingPostedCommentScrollRef.current?.id === highlightedCommentId;
       if (
@@ -593,35 +640,22 @@ export default function MediaPostDetailScreen({
 
   const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
     const currentIndex = animatedIndex.value;
-    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
-    requestAnimationFrame(() => {
-      sheetRef.current?.snapToIndex?.(2, { duration: 1 });
-    });
+    composerRevealIdRef.current = commentId;
+    scrolledPostedCommentIdRef.current = null;
     pendingPostedCommentScrollRef.current = { id: commentId, createdAt: Date.now() };
-    setTimeout(() => {
-      if (pendingPostedCommentScrollRef.current?.id !== commentId) return;
-      Sentry.captureMessage(
-        "Posted media-detail comment did not trigger reveal layout",
-        {
-          level: "warning",
-          tags: {
-            feature: "media-post-detail",
-            operation: "scroll-after-comment-post",
-          },
-          extra: {
-            postId: post?.id,
-            commentId,
-            isReply,
-            sheetIndexAtReveal: currentIndex,
-            displayCommentCount: displayCommentsLengthRef.current,
-          },
-        },
-      );
-      pendingPostedCommentScrollRef.current = null;
-    }, 4000);
+    suppressedHighlightScrollRef.current = commentId;
     coarseScrollTargetRef.current = null;
     preciseScrollTargetRef.current = null;
-    suppressedHighlightScrollRef.current = null;
+    const alreadyExpanded = animatedIndex.value >= 1.9;
+    setSheetRevealReady(alreadyExpanded);
+    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+    setRevealEpoch((current) => current + 1);
+    console.log("[CommentReveal] reveal armed", {
+      commentId,
+      isReply,
+      sheetIndex: currentIndex,
+      alreadyExpanded,
+    });
     Sentry.addBreadcrumb({
       category: "media-post-detail",
       message: "Reveal comments after post submit",
@@ -629,6 +663,28 @@ export default function MediaPostDetailScreen({
       data: { postId: post?.id, sheetIndex: currentIndex, commentId, isReply },
     });
   }, [animatedIndex, post?.id, sheetRef]);
+
+  const handleConfirmedPostedCommentId = useCallback(
+    (optimisticCommentId: string, confirmedCommentId: string) => {
+      composerRevealIdRef.current = transferCommentRevealId(
+        composerRevealIdRef.current,
+        optimisticCommentId,
+        confirmedCommentId,
+      );
+      scrolledPostedCommentIdRef.current = transferCommentRevealId(
+        scrolledPostedCommentIdRef.current,
+        optimisticCommentId,
+        confirmedCommentId,
+      );
+      if (pendingPostedCommentScrollRef.current?.id === optimisticCommentId) {
+        pendingPostedCommentScrollRef.current = {
+          ...pendingPostedCommentScrollRef.current,
+          id: confirmedCommentId,
+        };
+      }
+    },
+    [],
+  );
 
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;
@@ -647,11 +703,11 @@ export default function MediaPostDetailScreen({
     highlightTimerRef,
     id,
     pendingReplyScrollIdRef,
-    pendingScrollToEndRef,
     refetchComments,
     setFocusedMode,
     setHighlightedCommentId,
     suppressedHighlightScrollRef,
+    onConfirmedCommentId: handleConfirmedPostedCommentId,
   });
 
   usePostDetailPendingCommentEdit({
@@ -768,6 +824,7 @@ export default function MediaPostDetailScreen({
                 blockPost: () => actionSheetsRef.current?.requestBlockPost(),
                 blockTopic: () => actionSheetsRef.current?.requestBlockTopic(),
                 reportPost: () => actionSheetsRef.current?.requestReportPost(),
+                hidePost: handleBack,
                 expandSheet: collapseMedia,
               },
               commentActions: {
@@ -775,6 +832,23 @@ export default function MediaPostDetailScreen({
                   commentsScrollYRef.current = y;
                 },
                 scrollToIndex: scrollCommentsToIndex,
+                contentSizeChange: (height) => {
+                  if (height && height > 0) {
+                    lastCommentsContentHeightRef.current = height;
+                  }
+                  tryRevealPostedComment(height);
+                },
+                sheetIndexChange: (index) => {
+                  console.log("[CommentReveal] sheetIndexChange", {
+                    index,
+                    pendingId: pendingPostedCommentScrollRef.current?.id ?? null,
+                    composerRevealId: composerRevealIdRef.current,
+                  });
+                  if (index >= 2) {
+                    setSheetRevealReady(true);
+                    scrollPostedCommentAfterSheetSettled();
+                  }
+                },
                 followAuthor: handleFollowCommentAuthor,
                 setFocusedMode,
                 refetchFocusedContext: () => setFocusedContextDepth(10),

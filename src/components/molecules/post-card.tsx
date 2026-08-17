@@ -70,6 +70,7 @@ type PostCardProps = {
   onBlockPost?: () => void;
   onBlockTopic?: () => void;
   onReport?: () => void;
+  onHidePost?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
   onOptimisticRetryPress?: () => void;
@@ -122,6 +123,7 @@ const PostCardView = memo(function PostCardView({
   onBlockPost,
   onBlockTopic,
   onReport,
+  onHidePost,
   onRevealContent,
   onMediaPress: onMediaPressProp,
   onOptimisticRetryPress,
@@ -506,6 +508,8 @@ const PostCardView = memo(function PostCardView({
         onBlockTopic={disablePostInteractions ? undefined : onBlockTopic}
         topic={post.topic}
         onReport={disablePostInteractions ? undefined : onReport}
+        postId={post.id}
+        onHidePost={disablePostInteractions ? undefined : onHidePost}
         hideCommentAction={hideCommentAction}
         style={styles.actions}
         disabled={disablePostInteractions}

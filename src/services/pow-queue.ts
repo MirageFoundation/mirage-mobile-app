@@ -79,11 +79,18 @@ export interface PowAction<T = unknown> {
   onRollback?: () => void;
 }
 
+export type PowActionPreview = Pick<
+  PowAction,
+  "id" | "type" | "label" | "showProgress"
+> & {
+  phase?: "preparing" | "submitting";
+};
+
 export interface PowQueueState {
   queue: PowAction[];
   queuedActionIds: QueuedActionIds;
   currentAction: PowAction | null;
-  preparingAction: PowAction | null;
+  preparingAction: PowActionPreview | null;
   isProcessing: boolean;
   completedCount: number;
   totalCount: number;
@@ -95,7 +102,7 @@ export interface PowQueueState {
 
 export interface PowQueueActions {
   enqueue: <T>(action: PowAction<T>) => void;
-  showPreparing: <T>(action: PowAction<T>) => void;
+  showPreparing: (action: PowActionPreview) => void;
   clearPreparing: (actionId?: string) => void;
   processNext: () => Promise<void>;
   updateProgress: (progress: number) => void;
@@ -540,6 +547,7 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
     }, SUCCESS_OVERLAY_DURATION_MS);
   } finally {
     immediateActions.delete(action.id);
+    usePowQueueStore.getState().clearPreparing(action.id);
   }
 };
 
@@ -561,6 +569,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     const { userLevel, user } = useAuthStore.getState();
     if (!action.forcePoW && canSkipPoWForUser(userLevel, user?.tier)) {
+      get().showPreparing({ ...action, phase: "submitting" });
       void executeImmediately(action);
       return;
     }
@@ -568,12 +577,19 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     const state = get();
     const needsKick = !isProcessingLock && !state.currentAction;
     const showProgress = action.showProgress !== false;
+    const isPromotingPreparingAction =
+      state.preparingAction?.id === action.id;
+    const shouldIncrementTotal =
+      showProgress && !isPromotingPreparingAction;
 
     const queue = [...state.queue, action as PowAction];
     set({
       queue,
       queuedActionIds: buildQueuedActionIds(queue),
-      totalCount: state.totalCount + (showProgress ? 1 : 0),
+      preparingAction: isPromotingPreparingAction
+        ? null
+        : state.preparingAction,
+      totalCount: state.totalCount + (shouldIncrementTotal ? 1 : 0),
       isProcessing: true,
     });
 
@@ -584,13 +600,28 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     }
   },
 
-  showPreparing: <T>(action: PowAction<T>) => {
+  showPreparing: (action: PowActionPreview) => {
     if (action.showProgress === false) return;
+    const state = get();
+    const hasVisibleQueue = state.queue.some(
+      (queuedAction) => queuedAction.showProgress !== false,
+    );
+    const hasVisibleCurrent =
+      state.currentAction?.showProgress !== false &&
+      state.currentAction !== null;
+    const hasOtherVisibleWork = hasVisibleCurrent || hasVisibleQueue;
+    const isReplacingPreparingAction = state.preparingAction !== null;
     set({
-      preparingAction: action as PowAction,
+      preparingAction: action,
       isProcessing: true,
-      completedCount: 0,
-      totalCount: 1,
+      completedCount:
+        hasOtherVisibleWork || isReplacingPreparingAction
+          ? state.completedCount
+          : 0,
+      totalCount:
+        hasOtherVisibleWork || isReplacingPreparingAction
+          ? state.totalCount + (isReplacingPreparingAction ? 0 : 1)
+          : 1,
       currentProgress: 0,
       lastError: null,
     });
@@ -605,7 +636,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     set({
       preparingAction: null,
       isProcessing: hasVisibleCurrent || hasVisibleQueue,
-      totalCount: hasVisibleCurrent || hasVisibleQueue ? state.totalCount : 0,
+      totalCount:
+        hasVisibleCurrent || hasVisibleQueue
+          ? Math.max(state.completedCount, state.totalCount - 1)
+          : 0,
     });
   },
 

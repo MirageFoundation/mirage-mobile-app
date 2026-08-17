@@ -12,11 +12,13 @@ export function useRewardSummary(
   params?: Omit<GetRewardSummaryParams, "address">,
   options?: { enabled?: boolean },
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  // Same persisted identity bootstrap writes into `rewardSummary`. `user`
+  // is filled later, so a user-keyed query misses the hydrated quests
+  // payload and the home card pops in after a second /rewards/summary fetch.
+  const walletAddress = useAuthStore((s) => s.walletAddress);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
   const isInitializing = useAuthStore((s) => s.isInitializing);
-  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const queryClient = useQueryClient();
 
   return useQuery({
@@ -39,7 +41,6 @@ export function useRewardSummary(
       isLoggedIn &&
       hasOnboarded &&
       !isInitializing &&
-      !isBootstrapping &&
       (options?.enabled ?? true),
     // Hydrated from `bootstrap` (`rewards_summary`) on startup; explicit
     // refetch() on the quests screen bypasses staleTime when freshness matters.
