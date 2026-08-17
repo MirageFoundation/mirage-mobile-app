@@ -4,8 +4,9 @@ import { describe, expect, test } from "bun:test";
 import {
   createMediaPostDetailFooterContract,
   createMediaPostDetailMeasurementFooterContract,
-  createMediaPostDetailSheetController,
+  createMediaPostDetailListController,
 } from "../src/pages/post/media-post-detail-contracts";
+import { getMediaPostDetailLayoutMetrics } from "../src/pages/post/media-post-detail-layout";
 
 const noop = () => {};
 
@@ -59,24 +60,24 @@ function createVideoControls(overrides = {}) {
 }
 
 describe("media post detail feature contracts", () => {
-  test("the sheet controller keeps a stable cohesive top-level shape", () => {
+  test("the list controller keeps a stable cohesive top-level shape", () => {
     const groups = {
       threadState: { comments: [] },
       postState: { post: createPost() },
       postActions: createPostActions(),
       commentActions: { upvote: noop },
       videoControls: createVideoControls(),
-      sheetLayout: { snapPoints: [100, "100%"] },
+      listLayout: { collapseDistance: 240 },
     };
 
-    const controller = createMediaPostDetailSheetController(groups);
+    const controller = createMediaPostDetailListController(groups);
 
     expect(controller).toBe(groups);
     expect(Object.keys(controller).sort()).toEqual([
       "commentActions",
+      "listLayout",
       "postActions",
       "postState",
-      "sheetLayout",
       "threadState",
       "videoControls",
     ]);
@@ -151,5 +152,24 @@ describe("media post detail feature contracts", () => {
       durationMs: 5000,
       isMuted: false,
     });
+  });
+});
+
+describe("media post detail collapsing layout", () => {
+  test("keeps a sticky collapsed media band and a scrollable collapse runway", () => {
+    const metrics = getMediaPostDetailLayoutMetrics({
+      insets: { top: 47, bottom: 34 },
+      measuredPostSummaryH: 168,
+      screenH: 852,
+    });
+
+    expect(metrics.collapsedMediaTop).toBe(47);
+    expect(metrics.collapsedMediaH).toBe(Math.round(852 * 0.3));
+    expect(metrics.listTopY).toBe(metrics.collapsedMediaTop + metrics.collapsedMediaH);
+    expect(metrics.expandedMediaTop).toBe(47 + 48);
+    expect(metrics.peekH).toBe(168);
+    expect(metrics.collapseDistance).toBeGreaterThan(100);
+    expect(metrics.listTopY + metrics.collapseDistance).toBe(852 - metrics.peekH);
+    expect(metrics.expandedMediaH).toBeGreaterThan(metrics.collapsedMediaH);
   });
 });

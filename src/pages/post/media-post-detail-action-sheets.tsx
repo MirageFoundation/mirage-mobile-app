@@ -167,7 +167,10 @@ export const MediaPostDetailActionSheets = forwardRef<
       toast.info("Comment is still syncing", "Please try deleting again in a moment.");
       return;
     }
-    deleteHandler.requestDelete(selectedComment.id, "comment", { rootPostId: post.id });
+    const commentId = selectedComment.id;
+    setTimeout(() => {
+      deleteHandler.requestDelete(commentId, "comment", { rootPostId: post.id });
+    }, 280);
   }, [selectedComment, deleteHandler, post.id, toast]);
 
   const handleConfirmDelete = useCallback(() => {

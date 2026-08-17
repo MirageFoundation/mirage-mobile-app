@@ -6,24 +6,17 @@
  *
  * Layout:
  *   - Header (absolute top, below safe-area inset): ✕ / topic / ⋯
- *   - Media (absolute, starts just below header): full screen width, height
- *     interpolates from "remaining screen" (expanded) to 30% screen height
- *     (collapsed). resizeMode "contain".
- *   - Footer (absolute bottom, expanded only): avatar+username, title,
- *     body, video controls (draggable seek + time), action row
- *     (vote / comment | block-options / share). Fades out on collapse.
- *   - Comment sheet (the scrollable list underneath): once collapsed,
- *     shows handle bar, divider, avatar+username, title, body, then
- *     "Comments (N)" header, then comments.
+ *   - Media (absolute overlay): height interpolates from the remaining
+ *     screen (expanded) to 30% screen height (collapsed) as the comments
+ *     list scrolls, Instagram-style.
+ *   - LegendList below the collapsed media: a collapse spacer, then the
+ *     post summary, then comments. Dragging the peek/summary up shrinks
+ *     the media and reveals comments.
  *   - Sticky CommentInput (absolute bottom): visible only when collapsed.
  *
  * Gesture model:
- *   - Single `scrollY` shared value drives all collapse interpolation.
- *   - The comments list's onScroll updates scrollY.
- *   - A Pan gesture on the media also updates scrollY (so dragging the
- *     media collapses/expands directly).
- *   - On release, snaps to fully expanded or fully collapsed based on
- *     position + velocity.
+ *   - LegendList `scrollOffset` shared value drives collapse interpolation.
+ *   - Swipe up on media collapses; swipe down expands or leaves.
  *   - Tapping the media when collapsed expands it back; tapping when
  *     expanded toggles video play/pause.
  */
@@ -59,9 +52,9 @@ import {
   MediaPostDetailActionSheets,
   type MediaPostDetailActionSheetsRef,
 } from "./media-post-detail-action-sheets";
-import { MediaPostDetailCommentSheet } from "./media-post-detail-comment-sheet";
+import { MediaPostDetailCommentsList } from "./media-post-detail-comments-list";
 import {
-  createMediaPostDetailSheetController,
+  createMediaPostDetailListController,
   type MediaPostDetailCommentsListRef,
 } from "./media-post-detail-contracts";
 import { MediaPostDetailGallery } from "./media-post-detail-gallery";
@@ -156,7 +149,6 @@ export default function MediaPostDetailScreen({
     initialHighlightCommentId ?? null,
   );
   const [revealEpoch, setRevealEpoch] = useState(0);
-  const [sheetRevealReady, setSheetRevealReady] = useState(false);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedHighlightScrollRef = useRef<string | null>(null);
   const composeNavigationLockedUntilRef = useRef(0);
@@ -245,11 +237,23 @@ export default function MediaPostDetailScreen({
 
   const handleRemoveComment = useCallback(
     (commentId: string) => {
+      suppressedHighlightScrollRef.current = commentId;
+      preciseScrollTargetRef.current = `${commentId}:removed`;
+      coarseScrollTargetRef.current = `${commentId}:removed`;
+      if (pendingPostedCommentScrollRef.current?.id === commentId) {
+        pendingPostedCommentScrollRef.current = null;
+      }
+      if (composerRevealIdRef.current === commentId) {
+        composerRevealIdRef.current = null;
+      }
+      if (scrolledPostedCommentIdRef.current === commentId) {
+        scrolledPostedCommentIdRef.current = null;
+      }
+      setHighlightedCommentId((current) => (current === commentId ? null : current));
       removeCommentFromState(commentId);
       if (commentId === focusedCommentId && focusedMode !== "full") {
         setFocusedCommentId(null);
         setFocusedMode("full");
-        setHighlightedCommentId(null);
       }
     },
     [focusedCommentId, focusedMode, removeCommentFromState],
@@ -300,31 +304,42 @@ export default function MediaPostDetailScreen({
   }, [post]);
 
   const {
-    animatedIndex,
-    animatedPosition,
-    collapseMedia,
+    collapseDistance,
     collapseProgress,
     compactOverlayStyle,
-    expandMedia,
     footerInteractive,
     headerH,
     headerStyle,
     inputDockStyle,
     inputDockTotalH,
+    isCollapsed,
     listTopY,
     mediaContainerStyle,
     measuredInputDockH,
     measuredPostSummaryH,
+    scrollOffset,
     setMeasuredInputDockH,
     setMeasuredPostSummaryH,
-    sheetAnimationConfigs,
-    sheetRef,
-    snapPoints,
   } = useMediaPostDetailLayout({
     insets,
+    shouldOpenInitially: shouldOpenSheetInitially,
     sourceMediaTransition:
       sourceMediaTransition?.postId === id ? sourceMediaTransition : null,
   });
+
+  const collapseMedia = useCallback(() => {
+    commentsListRef.current?.scrollToOffset({
+      offset: collapseDistance,
+      animated: true,
+    });
+  }, [collapseDistance]);
+
+  const expandMedia = useCallback(() => {
+    commentsListRef.current?.scrollToOffset({
+      offset: 0,
+      animated: true,
+    });
+  }, []);
 
   const {
     activeIndex,
@@ -388,12 +403,15 @@ export default function MediaPostDetailScreen({
       hasListRef: !!commentsListRef.current,
       hasScrollToOffset: typeof commentsListRef.current?.scrollToOffset === "function",
     });
+    commentsListRef.current?.scrollToEnd?.({
+      animated: false,
+      viewOffset: inputDockTotalH,
+    });
     commentsListRef.current?.scrollToOffset?.({
       offset,
       animated: false,
     });
-    commentsListRef.current?.scrollToEnd?.({ animated: false });
-  }, []);
+  }, [inputDockTotalH]);
 
   const tryRevealPostedComment = usePostedCommentRevealScroll({
     alreadyScrolledIdRef: scrolledPostedCommentIdRef,
@@ -402,27 +420,10 @@ export default function MediaPostDetailScreen({
     feature: "media-post-detail",
     pendingRef: pendingPostedCommentScrollRef,
     postId: id,
-    ready: sheetRevealReady,
+    ready: true,
     scrollToEnd: scrollPostedCommentToEnd,
     scrollToIndex: scrollPostedCommentIntoView,
   });
-
-  const scrollPostedCommentAfterSheetSettled = useCallback(() => {
-    const pendingId =
-      pendingPostedCommentScrollRef.current?.id ?? composerRevealIdRef.current;
-    if (!pendingId) return;
-    console.log("[CommentReveal] sheet settled, scrolling", {
-      pendingId,
-      contentHeight: lastCommentsContentHeightRef.current,
-    });
-    scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
-    requestAnimationFrame(() => {
-      scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
-    });
-    setTimeout(() => {
-      scrollPostedCommentToEnd(lastCommentsContentHeightRef.current);
-    }, 80);
-  }, [scrollPostedCommentToEnd]);
 
   useEffect(() => {
     return () => {
@@ -535,7 +536,6 @@ export default function MediaPostDetailScreen({
             return;
           }
 
-          sheetRef.current?.snapToIndex?.(2, { duration: 1 });
           const desiredY = listTopY + 96;
           const delta = y - desiredY;
           if (isPendingPostedComment) {
@@ -573,7 +573,7 @@ export default function MediaPostDetailScreen({
         });
       }, isPendingPostedComment ? 80 : 500);
     },
-    [highlightedCommentId, listTopY, post?.id, sheetRef],
+    [highlightedCommentId, listTopY, post?.id],
   );
 
   const handleAuthorPress = useCallback(() => {
@@ -639,30 +639,25 @@ export default function MediaPostDetailScreen({
   );
 
   const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
-    const currentIndex = animatedIndex.value;
     composerRevealIdRef.current = commentId;
     scrolledPostedCommentIdRef.current = null;
     pendingPostedCommentScrollRef.current = { id: commentId, createdAt: Date.now() };
     suppressedHighlightScrollRef.current = commentId;
     coarseScrollTargetRef.current = null;
     preciseScrollTargetRef.current = null;
-    const alreadyExpanded = animatedIndex.value >= 1.9;
-    setSheetRevealReady(alreadyExpanded);
-    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
     setRevealEpoch((current) => current + 1);
     console.log("[CommentReveal] reveal armed", {
       commentId,
       isReply,
-      sheetIndex: currentIndex,
-      alreadyExpanded,
+      collapseDistance,
     });
     Sentry.addBreadcrumb({
       category: "media-post-detail",
       message: "Reveal comments after post submit",
       level: "info",
-      data: { postId: post?.id, sheetIndex: currentIndex, commentId, isReply },
+      data: { postId: post?.id, commentId, isReply },
     });
-  }, [animatedIndex, post?.id, sheetRef]);
+  }, [collapseDistance, post?.id]);
 
   const handleConfirmedPostedCommentId = useCallback(
     (optimisticCommentId: string, confirmedCommentId: string) => {
@@ -776,9 +771,9 @@ export default function MediaPostDetailScreen({
             }}
           />
 
-          {/* --------------- BottomSheet for comments ------------------ */}
-          <MediaPostDetailCommentSheet
-            controller={createMediaPostDetailSheetController({
+          {/* --------------- Comments list (collapsing media header) --- */}
+          <MediaPostDetailCommentsList
+            controller={createMediaPostDetailListController({
               threadState: {
                 comments: displayComments,
                 currentUserId: currentUser?.id ?? null,
@@ -838,17 +833,6 @@ export default function MediaPostDetailScreen({
                   }
                   tryRevealPostedComment(height);
                 },
-                sheetIndexChange: (index) => {
-                  console.log("[CommentReveal] sheetIndexChange", {
-                    index,
-                    pendingId: pendingPostedCommentScrollRef.current?.id ?? null,
-                    composerRevealId: composerRevealIdRef.current,
-                  });
-                  if (index >= 2) {
-                    setSheetRevealReady(true);
-                    scrollPostedCommentAfterSheetSettled();
-                  }
-                },
                 followAuthor: handleFollowCommentAuthor,
                 setFocusedMode,
                 refetchFocusedContext: () => setFocusedContextDepth(10),
@@ -888,18 +872,16 @@ export default function MediaPostDetailScreen({
                 seek: handleSeek,
                 muteToggle: handleMuteToggle,
               },
-              sheetLayout: {
-                sheetRef,
+              listLayout: {
                 commentsListRef,
+                collapseDistance,
                 inputDockTotalH,
-                shouldOpenInitially: shouldOpenSheetInitially,
-                snapPoints,
-                animatedIndex,
-                animatedPosition,
-                animationConfigs: sheetAnimationConfigs,
+                isCollapsed,
+                listTopY,
                 measuredPostSummaryH,
                 postSummaryHeightChange: setMeasuredPostSummaryH,
-                close: handleBack,
+                scrollOffset,
+                shouldOpenInitially: shouldOpenSheetInitially,
               },
             })}
           />

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -49,6 +50,18 @@ export function ConfirmationPopup({
 }: ConfirmationPopupProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
+  const [isArmed, setIsArmed] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setIsArmed(false);
+      return;
+    }
+    // Ignore the tap that opened this modal so Delete in a sheet
+    // cannot immediately confirm.
+    const timer = setTimeout(() => setIsArmed(true), 280);
+    return () => clearTimeout(timer);
+  }, [visible]);
 
   const defaultIconColor = isDestructive
     ? theme.colors.error[500]
@@ -60,11 +73,13 @@ export function ConfirmationPopup({
     : "rgba(59, 130, 246, 0.15)";
 
   const handleConfirm = () => {
+    if (!isArmed || isLoading) return;
     triggerHaptic("medium");
     onConfirm();
   };
 
   const handleCancel = () => {
+    if (!isArmed) return;
     triggerHaptic("light");
     onCancel();
   };
@@ -133,7 +148,7 @@ export function ConfirmationPopup({
               variant="outline"
               rounded="full"
               onPress={handleCancel}
-              disabled={isLoading}
+              disabled={!isArmed || isLoading}
               style={styles.button}
             >
               <Button.Text>{cancelText}</Button.Text>
@@ -145,6 +160,7 @@ export function ConfirmationPopup({
               rounded="full"
               onPress={handleConfirm}
               loading={isLoading}
+              disabled={!isArmed}
               style={[
                 styles.button,
                 isDestructive && {

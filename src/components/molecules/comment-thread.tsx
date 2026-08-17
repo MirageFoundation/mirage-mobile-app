@@ -4,7 +4,6 @@ import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
-  LinearTransition,
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
@@ -160,10 +159,7 @@ export const CommentThread = ({
   const isHighlighted = highlightedCommentId === comment.id;
 
   return (
-    <Animated.View
-      style={styles.container}
-      layout={LinearTransition.duration(250)}
-    >
+    <View style={styles.container}>
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
@@ -278,7 +274,7 @@ export const CommentThread = ({
       )}
 
       {showDivider && depth === 0 && <View style={styles.divider} />}
-    </Animated.View>
+    </View>
   );
 };
 

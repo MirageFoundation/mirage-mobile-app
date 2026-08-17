@@ -193,6 +193,7 @@ export const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     zIndex: 1,
+    backgroundColor: theme.colors.background.default,
   },
   fixedHandleArea: {
     position: "absolute",
