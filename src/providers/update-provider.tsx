@@ -1,6 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import * as Sentry from "@sentry/react-native";
-import Constants from "expo-constants";
+import * as Application from "expo-application";
 import * as Updates from "expo-updates";
 import {
   createContext,
@@ -156,9 +156,11 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     setInstallStatus("idle");
   }, [updateKey]);
 
-  const nativeVersion = Constants.nativeAppVersion ?? "0.0.0";
+  const nativeVersion = Application.nativeApplicationVersion;
   const requiresNativeUpdate =
-    remoteConfig !== null && isVersionOutdated(nativeVersion, remoteConfig.version);
+    remoteConfig !== null &&
+    nativeVersion !== null &&
+    isVersionOutdated(nativeVersion, remoteConfig.version);
 
   const value = useMemo<UpdateContextValue>(
     () => ({

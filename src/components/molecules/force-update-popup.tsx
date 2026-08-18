@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Application from "expo-application";
 import { BlurView } from "expo-blur";
-import Constants from "expo-constants";
 import { useCallback, useState } from "react";
 import {
   Linking,
@@ -107,9 +107,11 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
             )}
           </Box>
 
-          <Text size="xs" mode="subtle" style={styles.versionText}>
-            Current version: v({Constants.nativeAppVersion ?? "0.0.0"})
-          </Text>
+          {Application.nativeApplicationVersion !== null && (
+            <Text size="xs" mode="subtle" style={styles.versionText}>
+              Current version: v({Application.nativeApplicationVersion})
+            </Text>
+          )}
         </View>
       </View>
     </Modal>
