@@ -11,6 +11,7 @@ import {
   usePreferencesStore,
 } from "@/src/stores";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -326,7 +327,10 @@ function LegacyPostDetailScreen() {
               level: "info",
               data: { postId: id, delayMs: delay },
             });
-            usePendingPostsStore.getState().removePost(id);
+            const pendingPost = usePendingPostsStore.getState().getPost(id);
+            if (!isPostVideoProcessing(pendingPost)) {
+              usePendingPostsStore.getState().removePost(id);
+            }
           }
         } catch (error) {
           Sentry.addBreadcrumb({

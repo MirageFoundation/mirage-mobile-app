@@ -12,6 +12,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { exitAuthModal } from "@/src/navigation/auth-navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -140,11 +141,7 @@ export default function LoginScreen() {
 
       triggerHaptic("success");
 
-      // Exit the auth modal decisively. `dismissAll()` only unwinds to the
-      // first screen of the *nearest* stack — the (auth) modal's own Stack —
-      // so when Login was reached from the "Hello Friend" username screen the
-      // user landed back on Registration with a live session (BUG-004).
-      router.replace("/");
+      exitAuthModal();
     } catch (error) {
       console.error("[Login] Failed to import wallet:", error);
       triggerHaptic("error");
@@ -168,7 +165,6 @@ export default function LoginScreen() {
     words,
     validatePhrase,
     importWallet,
-    router,
   ]);
 
   return (

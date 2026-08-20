@@ -4,6 +4,8 @@ import {
   getPowProgress,
 } from "react-native-argon2-turbo";
 import * as Sentry from "@sentry/react-native";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { Platform } from "react-native";
 
 import { bytesToHex } from "./crypto";
 import { difficultyFactor, checkPowTarget } from "./pow";
@@ -72,6 +74,26 @@ const POW_WATCHDOG_TIMEOUT_MESSAGE = "PoW compute watchdog timed out";
 const LOW_HASH_RATE_REPORT_COOLDOWN_MS = 10 * 60_000;
 let lastLowHashRateReportAt = 0;
 
+const POW_KEEP_AWAKE_TAG = "mirage-pow";
+
+function getPowDeviceExtras(): Record<string, string | number> {
+  const extras: Record<string, string | number> = {
+    platform: Platform.OS,
+    osVersion: String(Platform.Version),
+  };
+  if (Platform.OS === "android") {
+    const constants = Platform.constants as {
+      Brand?: string;
+      Manufacturer?: string;
+      Model?: string;
+    };
+    if (constants.Brand) extras.androidBrand = constants.Brand;
+    if (constants.Manufacturer) extras.androidManufacturer = constants.Manufacturer;
+    if (constants.Model) extras.androidModel = constants.Model;
+  }
+  return extras;
+}
+
 function reportPowTimeout(
   reason: string,
   input: PoWInput,
@@ -90,6 +112,7 @@ function reportPowTimeout(
       powDifficulty: input.powDifficulty,
       powBaseBits: input.powBaseBits,
       powFactor: input.powFactor,
+      ...getPowDeviceExtras(),
     },
   });
 }
@@ -110,6 +133,14 @@ export async function computePoW(
 
   const effectiveBits = computeEffectiveBits(powDifficulty, powBaseBits, powFactor);
   console.log(`[PoW Turbo] Starting with powDifficulty=${powDifficulty}, baseBits=${powBaseBits}, factor=${powFactor}, effectiveBits=${effectiveBits} (4 parallel workers)`);
+
+  let keepAwakeActive = false;
+  try {
+    await activateKeepAwakeAsync(POW_KEEP_AWAKE_TAG);
+    keepAwakeActive = true;
+  } catch {
+    // Best-effort: Pixel-class Android throttles CPU hard once the screen dims.
+  }
 
   let progressInterval: ReturnType<typeof setInterval> | undefined;
   if (onProgress) {
@@ -138,6 +169,7 @@ export async function computePoW(
               powDifficulty,
               powBaseBits,
               powFactor,
+              ...getPowDeviceExtras(),
             },
           });
         }
@@ -248,6 +280,13 @@ export async function computePoW(
   } finally {
     if (progressInterval) {
       clearInterval(progressInterval);
+    }
+    if (keepAwakeActive) {
+      try {
+        await deactivateKeepAwake(POW_KEEP_AWAKE_TAG);
+      } catch {
+        // ignore
+      }
     }
   }
 }

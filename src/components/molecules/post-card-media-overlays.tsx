@@ -29,17 +29,17 @@ type MediaProcessingOverlayProps = {
   isRedgifsVideo: boolean;
 };
 
-export function MediaProcessingOverlay({ visible, isRedgifsVideo }: MediaProcessingOverlayProps) {
+export function MediaProcessingOverlay({
+  visible,
+  isRedgifsVideo,
+}: MediaProcessingOverlayProps) {
   if (!visible) return null;
 
   return (
-    <View style={styles.processingOverlay}>
-      <ActivityIndicator size="large" color="#fff" />
-      <Text size="sm" weight="semibold" style={{ color: "#fff", marginTop: 8 }}>
-        {isRedgifsVideo ? "Loading video..." : "Video is still processing."}
-      </Text>
-      <Text size="xs" style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
-        {isRedgifsVideo ? "Retrying..." : "It may take a few moments."}
+    <View style={styles.processingPill} pointerEvents="none">
+      <ActivityIndicator size="small" color="rgba(255,255,255,0.9)" />
+      <Text size="xs" weight="medium" style={styles.processingPillText}>
+        {isRedgifsVideo ? "Loading" : "Processing"}
       </Text>
     </View>
   );
@@ -118,6 +118,23 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.75)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  processingPill: {
+    position: "absolute",
+    right: theme.spacing.sm,
+    bottom: theme.spacing.sm,
+    zIndex: 35,
+    elevation: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(0, 0, 0, 0.52)",
+  },
+  processingPillText: {
+    color: "rgba(255,255,255,0.9)",
   },
   blurOverlay: {
     ...StyleSheet.absoluteFillObject,

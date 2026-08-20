@@ -5,6 +5,8 @@ import type { Href } from "expo-router";
 import { AppState, Platform } from "react-native";
 import { navigateBypass, pushBypass } from "@/src/navigation/guarded-router";
 import { waitForStartupHomeReady } from "@/src/navigation/startup-navigation-readiness";
+import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
+import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -16,7 +18,7 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
 import { queryClient } from "@/src/providers/query-client";
 import { storage } from "@/src/stores/mmkv-storage";
-import { useAuthStore } from "@/src/stores/auth-store";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { isPushEnabled } from "@/src/services/push-notifications";
 import {
@@ -1525,14 +1527,24 @@ export async function initInboxNotifications(): Promise<void> {
     return;
   }
 
-  if (!useAuthStore.getState().walletAddress) {
+  const auth = useAuthStore.getState();
+  if (
+    !canRequestOsPermissions({
+      sessionStatus: selectAuthSessionStatus(auth),
+      isInitializing: auth.isInitializing,
+      isPowBusy: isPowQueueBusy(usePowQueueStore.getState()),
+    })
+  ) {
     subscribeNotificationResponses();
-    console.log("[InboxNotifications] No wallet, skipping notification init");
+    console.log("[InboxNotifications] Deferring permission request until after onboarding");
     Sentry.addBreadcrumb({
       category: "inbox-notifications",
-      message: "Subscribed notification responses before wallet hydration",
+      message: "Deferred notification permission until after onboarding",
       level: "info",
-      data: { appState: AppState.currentState },
+      data: {
+        sessionStatus: selectAuthSessionStatus(auth),
+        hasWalletAddress: !!auth.walletAddress,
+      },
     });
     return;
   }

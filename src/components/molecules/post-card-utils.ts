@@ -423,3 +423,19 @@ export function isSuccessfulOptimisticPost(
 ): boolean {
   return post.optimisticStatus === "success";
 }
+
+export function resolveOptimisticVideoPreviewMedia(
+  media: ResolvedMedia | undefined,
+  localPreviewUri: string | undefined,
+  isProcessing: boolean,
+): ResolvedMedia | undefined {
+  if (!media || !isProcessing || !localPreviewUri || localPreviewUri === media.uri) {
+    return media;
+  }
+  return {
+    ...media,
+    uri: localPreviewUri,
+    type: "video",
+    posterUri: undefined,
+  };
+}

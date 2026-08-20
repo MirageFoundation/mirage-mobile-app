@@ -44,7 +44,11 @@ import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
-import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
+import {
+  isHostedStreamVideoUrl,
+  resolveOptimisticVideoPreviewMedia,
+  resolvePostContent,
+} from "@/src/components/molecules/post-card-utils";
 import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
@@ -86,6 +90,10 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getLastPressedMediaTransition } from "@/src/utils/post-transition";
+import {
+  HLS_PROCESSING_POLL_INTERVAL_MS,
+  isHlsManifestReady,
+} from "@/src/utils/hls-manifest";
 
 // ---------------------------------------------------------------------------
 // Main screen
@@ -275,6 +283,11 @@ export default function MediaPostDetailScreen({
     },
   });
 
+  const canonicalProcessingMediaUri = useMemo(() => {
+    if (!post || !isPostVideoProcessing(post)) return undefined;
+    return resolvePostContent(post.body, post.media).resolvedMedia?.uri;
+  }, [post]);
+
   const mediaItems = useMemo<MediaItem[]>(() => {
     if (!post) return [];
     const resolved = resolvePostContent(post.body, post.media);
@@ -288,6 +301,9 @@ export default function MediaPostDetailScreen({
         : resolved.resolvedMedia
         ? [resolved.resolvedMedia]
         : [];
+    const localPreviewUri = isPostVideoProcessing(post)
+      ? post.optimisticDraft?.mediaUris?.[0]
+      : undefined;
     return list
       .filter(
         (media) =>
@@ -295,13 +311,62 @@ export default function MediaPostDetailScreen({
           media.type === "video" ||
           media.type === "gif",
       )
-      .map((media) => ({
-        uri: media.uri,
-        type: media.type as MediaItem["type"],
-        posterUri: media.posterUri,
-        aspectRatio: media.aspectRatio,
-      }));
+      .map((media, index) => {
+        const displayMedia = index === 0
+          ? resolveOptimisticVideoPreviewMedia(
+              media,
+              localPreviewUri,
+              isPostVideoProcessing(post),
+            ) ?? media
+          : media;
+        return {
+          uri: displayMedia.uri,
+          type: displayMedia.type as MediaItem["type"],
+          posterUri: displayMedia.posterUri,
+          aspectRatio: displayMedia.aspectRatio,
+        };
+      });
   }, [post]);
+
+  useEffect(() => {
+    if (
+      !post ||
+      !isFocused ||
+      !isPostVideoProcessing(post) ||
+      !canonicalProcessingMediaUri ||
+      !isHostedStreamVideoUrl(canonicalProcessingMediaUri)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      try {
+        const ready = await isHlsManifestReady(
+          canonicalProcessingMediaUri,
+          controller.signal,
+        );
+        if (cancelled) return;
+        if (ready) {
+          markOptimisticVideoProcessingComplete(queryClient, post.id);
+          return;
+        }
+      } catch {
+        if (cancelled) return;
+      }
+      timeout = setTimeout(poll, HLS_PROCESSING_POLL_INTERVAL_MS);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [canonicalProcessingMediaUri, isFocused, post, queryClient]);
 
   const {
     collapseDistance,
@@ -750,11 +815,6 @@ export default function MediaPostDetailScreen({
             mediaItems={mediaItems}
             onMuteToggle={handleMuteToggle}
             onPlayPause={handlePlayPause}
-            onVideoReady={() => {
-              if (isPostVideoProcessing(post)) {
-                markOptimisticVideoProcessingComplete(queryClient, post.id);
-              }
-            }}
             registerVideo={registerVideo}
             setActiveIndex={setActiveIndex}
             sourceMediaTransition={

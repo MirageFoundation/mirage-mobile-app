@@ -21,7 +21,6 @@ export function useInviteCodes() {
   const { getWallet } = useWallet();
   const address = useAuthStore((s) => s.user?.walletAddress);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-  const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const featureEnabled = useInviteCodesFeatureEnabled();
@@ -32,7 +31,6 @@ export function useInviteCodes() {
     enabled:
       !!address &&
       isLoggedIn &&
-      hasOnboarded &&
       !isInitializing &&
       !isBootstrapping &&
       featureEnabled,

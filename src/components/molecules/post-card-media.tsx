@@ -38,6 +38,7 @@ type PostCardMediaProps = {
   videoSyncScope?: string;
   postId?: string;
   forceVideoProcessing?: boolean;
+  processingMediaUri?: string;
   onVideoProcessingComplete?: () => void;
 };
 
@@ -71,6 +72,7 @@ export const PostCardMedia = memo(
       videoSyncScope,
       postId,
       forceVideoProcessing = false,
+      processingMediaUri,
       onVideoProcessingComplete,
     },
     ref,
@@ -192,6 +194,7 @@ export const PostCardMedia = memo(
           videoSyncScope={videoSyncScope}
           postId={postId}
           forceVideoProcessing={forceVideoProcessing}
+          processingMediaUri={processingMediaUri}
           onVideoProcessingComplete={onVideoProcessingComplete}
         />
       );

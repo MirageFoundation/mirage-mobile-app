@@ -1007,6 +1007,20 @@ export const useIsPowActionCurrent = (actionId: string | undefined): boolean =>
     (state) => !!actionId && state.currentAction?.id === actionId,
   );
 
+export function isPowQueueBusy(
+  state: Pick<
+    PowQueueState,
+    "isProcessing" | "queue" | "currentAction" | "preparingAction"
+  > = usePowQueueStore.getState(),
+): boolean {
+  return (
+    state.isProcessing ||
+    state.queue.length > 0 ||
+    !!state.currentAction ||
+    !!state.preparingAction
+  );
+}
+
 export function waitForQueueDrain(): Promise<void> {
  const state = usePowQueueStore.getState();
  if (!state.isProcessing && state.queue.length === 0 && !state.currentAction && !state.preparingAction) {

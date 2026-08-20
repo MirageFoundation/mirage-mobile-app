@@ -70,6 +70,7 @@ type PostCardVideoProps = {
   videoSyncScope?: string;
   postId?: string;
   forceVideoProcessing?: boolean;
+  processingMediaUri?: string;
   onVideoProcessingComplete?: () => void;
 };
 
@@ -99,6 +100,7 @@ export const PostCardVideo = memo(
       videoSyncScope,
       postId,
       forceVideoProcessing = false,
+      processingMediaUri,
       onVideoProcessingComplete,
     },
     ref,
@@ -174,6 +176,7 @@ export const PostCardVideo = memo(
       feedTappedToPlay,
       mediaWasCached,
       forceVideoProcessing,
+      processingMediaUri,
       onVideoProcessingComplete,
       postId,
       videoPlayer,
@@ -190,7 +193,6 @@ export const PostCardVideo = memo(
       isRedgifsVideo,
       showVideoProcessing,
       shouldHideOnError,
-      reportVideoProcessingComplete,
       handleFirstFrameHealth,
     } = health;
 
@@ -424,9 +426,6 @@ export const PostCardVideo = memo(
                     userInitiatedPlayRef.current = false;
                   }
                   handleFirstFrameHealth();
-                  if (forceVideoProcessing) {
-                    reportVideoProcessingComplete();
-                  }
                 }}
               />
             ) : null}

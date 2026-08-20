@@ -28,6 +28,11 @@ import {
 } from "@/src/services/analytics";
 import { getTierName } from "@/src/utils/tiers";
 import {
+  resolveAuthSessionStatus,
+  resolvePendingWalletStartup,
+  type AuthSessionStatus,
+} from "@/src/domain/auth/session";
+import {
   addAuthBootstrapBreadcrumb,
   bootstrapAnonymousAfterLogout,
   bootstrapAnonymousStartup,
@@ -113,9 +118,9 @@ type AuthState = {
   userLevel: number; // 0 = free, 1 = subscriber, 10 = agent
   hasUsername: boolean;
 
-  // Onboarding state
+  // Kept in lockstep with isLoggedIn for older persisted clients.
   hasOnboarded: boolean;
-  recoveryPhrase: string | null; // Temporarily stored during onboarding flow
+  recoveryPhrase: string | null; // Live only during pending signup
 
   // Loading state
   isInitializing: boolean;
@@ -178,12 +183,43 @@ export const useAuthStore = create<AuthState>()(
           await walletService.migrateKeychainAccessibility();
           if (!authSessionCoordinator.isCurrent(session)) return;
 
-          const cleanedUp = await walletService.cleanupPendingWallet();
-          if (!authSessionCoordinator.isCurrent(session)) return;
-          if (cleanedUp) {
-            console.log(
-              "[AuthStore] Cleaned up pending wallet from incomplete signup",
-            );
+          const pendingMetadata = walletService.getWalletMetadata();
+          const pendingStartup = resolvePendingWalletStartup(pendingMetadata);
+          if (pendingStartup === "resume" && pendingMetadata) {
+            const mnemonic = await walletService.exportMnemonic();
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            if (!mnemonic) {
+              Sentry.captureMessage("Pending signup wallet is missing its mnemonic", {
+                level: "error",
+                tags: { feature: "auth", operation: "resume-pending-signup" },
+              });
+            }
+            set({
+              isLoggedIn: false,
+              hasOnboarded: false,
+              isBootstrapping: false,
+              walletAddress: pendingMetadata.address,
+              publicKeyBase64: pendingMetadata.publicKeyBase64,
+              hasUsername: true,
+              recoveryPhrase: mnemonic,
+              user: {
+                id: pendingMetadata.address,
+                username: null,
+                walletAddress: pendingMetadata.address,
+                tier: "Free",
+              },
+              isInitializing: false,
+            });
+            return;
+          }
+          if (pendingStartup === "wipe") {
+            const cleanedUp = await walletService.cleanupPendingWallet();
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            if (cleanedUp) {
+              console.log(
+                "[AuthStore] Cleaned up pending wallet from incomplete signup",
+              );
+            }
           }
 
           let hasWalletResult = await walletService.hasWallet();
@@ -639,6 +675,20 @@ export const useAuthStore = create<AuthState>()(
 // Selectors (for performance optimization)
 // ============================================
 
+export function selectAuthSessionStatus(state: {
+  isLoggedIn: boolean;
+  walletAddress: string | null;
+  recoveryPhrase: string | null;
+}): AuthSessionStatus {
+  return resolveAuthSessionStatus({
+    hasConfirmedSession: state.isLoggedIn,
+    hasPendingWallet:
+      !state.isLoggedIn && !!state.walletAddress && !!state.recoveryPhrase,
+    walletAddress: state.walletAddress,
+  });
+}
+
+export const useAuthSessionStatus = () => useAuthStore(selectAuthSessionStatus);
 export const useIsLoggedIn = () => useAuthStore((s) => s.isLoggedIn);
 export const useWalletAddress = () => useAuthStore((s) => s.walletAddress);
 export const useUserLevel = () => useAuthStore((s) => s.userLevel);

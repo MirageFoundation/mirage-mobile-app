@@ -1,47 +1,59 @@
-import {
-  RecoveryPhraseGrid,
-} from "@/src/components/molecules";
+import { RecoveryPhraseGrid } from "@/src/components/molecules";
 import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, usePreferencesStore, getApiBaseUrl } from "@/src/stores";
+import {
+  AUTH_EXIT_ROUTE,
+  AUTH_USERNAME_ROUTE,
+  resolveAuthSignupScreenAccess,
+} from "@/src/navigation/auth-flow-policy";
+import { exitAuthModal } from "@/src/navigation/auth-navigation";
 import { trackEvent } from "@/src/services/analytics";
 import { apiClient } from "@/src/api/client";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { usePreferencesStore, getApiBaseUrl } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { BackHandler, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function RecoveryPhraseScreen() {
- const router = useRouter();
- const params = useLocalSearchParams<{ username?: string }>();
+  const params = useLocalSearchParams<{ username?: string }>();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
 
- const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
- const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
+  const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
+  const sessionStatus = useAuthStore(selectAuthSessionStatus);
+  const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
 
- const [hasSaved, setHasSaved] = useState(false);
+  const [hasSaved, setHasSaved] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [words] = useState(() =>
+    recoveryPhrase ? recoveryPhrase.split(" ") : [],
+  );
 
-  const words = useMemo(() => {
-    if (!recoveryPhrase) return [];
-    return recoveryPhrase.split(" ");
-  }, [recoveryPhrase]);
-
-useEffect(() => {
-    if (!recoveryPhrase && !isConfirming) {
-      router.dismissTo("/username");
-    }
- }, [recoveryPhrase, isConfirming, router]);
+  const access = resolveAuthSignupScreenAccess({
+    screen: "recovery-phrase",
+    sessionStatus,
+    hasRecoveryPhrase: words.length > 0,
+    isCompletingSignup: isConfirming,
+  });
 
   useEffect(() => {
-    if (!recoveryPhrase) return;
+    if (access !== "show") return;
     trackEvent("recovery_phrase_viewed");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (access !== "show") return;
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => true,
+    );
+    return () => subscription.remove();
+  }, [access]);
 
   const handleCheckboxChange = useCallback(() => {
     triggerHaptic("selection");
@@ -49,25 +61,31 @@ useEffect(() => {
   }, []);
 
   const handleContinue = useCallback(async () => {
-    if (!hasSaved) return;
+    if (!hasSaved || isConfirming) return;
 
     setIsConfirming(true);
     triggerHaptic("selection");
 
-   try {
-     // await confirmWalletCreation();
+    try {
       await confirmWalletCreation();
       triggerHaptic("success");
-     const currentServer = usePreferencesStore.getState().apiServer;
-     apiClient.setBaseUrl(getApiBaseUrl(currentServer));
-      router.dismissTo("/");
+      const currentServer = usePreferencesStore.getState().apiServer;
+      apiClient.setBaseUrl(getApiBaseUrl(currentServer));
+      exitAuthModal();
     } catch (error) {
       console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
       triggerHaptic("error");
-    } finally {
       setIsConfirming(false);
     }
-  }, [hasSaved, confirmWalletCreation, router]);
+  }, [hasSaved, isConfirming, confirmWalletCreation]);
+
+  if (access === "redirect_home") {
+    return <Redirect href={AUTH_EXIT_ROUTE} />;
+  }
+
+  if (access === "redirect_username") {
+    return <Redirect href={AUTH_USERNAME_ROUTE} />;
+  }
 
   if (words.length === 0) {
     return null;
@@ -75,7 +93,12 @@ useEffect(() => {
 
   return (
     <Box flex background="base">
-      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Platform.OS === "ios" ? 20 : insets.top },
+        ]}
+      >
         <View style={styles.headerLeft} />
         <View style={styles.headerCenter} />
         <View style={styles.headerRight} />
@@ -176,10 +199,6 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-  appIcon: {
-    width: 28,
-    height: 28,
   },
   headerRight: {
     width: 44,

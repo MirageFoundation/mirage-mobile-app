@@ -35,6 +35,7 @@ import type { Post } from "./post-card-types";
 import {
   isSuccessfulOptimisticPost,
   resolvePostContent,
+  resolveOptimisticVideoPreviewMedia,
   shouldBlurMatureMedia,
 } from "./post-card-utils";
 import { Ionicons } from "@expo/vector-icons";
@@ -236,10 +237,20 @@ const PostCardView = memo(function PostCardView({
     isOptimisticVideoProcessing;
   const showOptimisticVideoProcessing =
     isOptimisticVideoProcessing && !allowOptimisticMediaPreview;
-  const optimisticResolvedMedia =
+  const localOptimisticVideoPreviewUri = isOptimisticVideoProcessing
+    ? pendingPost?.optimistic_draft?.mediaUris?.[0] ??
+      post.optimisticDraft?.mediaUris?.[0]
+    : undefined;
+  const canonicalProcessingMediaUri = isOptimisticVideoProcessing
+    ? resolvedContent.resolvedMedia?.uri
+    : undefined;
+  const optimisticResolvedMedia = resolveOptimisticVideoPreviewMedia(
     isOptimisticVideoPost && resolvedContent.resolvedMedia
       ? { ...resolvedContent.resolvedMedia, type: "video" as const }
-      : resolvedContent.resolvedMedia;
+      : resolvedContent.resolvedMedia,
+    localOptimisticVideoPreviewUri,
+    isOptimisticVideoProcessing,
+  );
   const optimisticResolvedMediaList =
     isOptimisticVideoPost && resolvedContent.resolvedMediaList
       ? resolvedContent.resolvedMediaList.map((item) => ({ ...item, type: "video" as const }))
@@ -449,15 +460,20 @@ const PostCardView = memo(function PostCardView({
           hasMultipleMedia={resolvedContent.hasMultipleMedia}
           extraMediaCount={resolvedContent.extraMediaCount}
           allowAutoplay={allowAutoplay}
-          screenActive={screenActive && !showMediaPreview && !showOptimisticVideoProcessing}
+          screenActive={screenActive && !showMediaPreview}
           disabled={disableMediaInteractions}
           onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
           onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
           isPostDetail={isPostDetail}
           videoSyncScope={videoSyncScope}
           postId={post.id}
-          forceVideoProcessing={showOptimisticVideoProcessing}
-          onVideoProcessingComplete={handleVideoProcessingComplete}
+          forceVideoProcessing={isOptimisticVideoProcessing}
+          processingMediaUri={canonicalProcessingMediaUri}
+          onVideoProcessingComplete={
+            isOptimisticVideoProcessing
+              ? handleVideoProcessingComplete
+              : undefined
+          }
           onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
         />
       )}

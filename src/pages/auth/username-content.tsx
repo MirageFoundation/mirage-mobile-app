@@ -315,6 +315,16 @@ export default function UsernameScreen() {
 
       setIsSettingUp(true);
 
+      const existingMetadata = walletService.getWalletMetadata();
+      if (existingMetadata?.pending && existingMetadata.hasUsername) {
+        setIsSettingUp(false);
+        router.push({
+          pathname: "/recovery-phrase",
+          params: { username: `anon-${username}` },
+        });
+        return;
+      }
+
       if (await walletService.hasWallet()) {
         await walletService.clearWallet();
       }
@@ -407,6 +417,7 @@ export default function UsernameScreen() {
     createNewWallet,
     setHasUsername,
     txProgress,
+    router,
   ]);
 
   const handleRecoveryPhraseNavigation = useCallback(() => {

@@ -18,8 +18,11 @@ import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/sr
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { identifyUser, isAnalyticsActive, setAnalyticsTrackingEnabled, trackEvent } from "@/src/services/analytics";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
-import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
+import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
+import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
 import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { Alert, AppState } from "react-native";
@@ -46,6 +49,14 @@ export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
     const walletAddress = useAuthStore((s) => s.walletAddress);
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+    const isInitializing = useAuthStore((s) => s.isInitializing);
+    const sessionStatus = useAuthStore(selectAuthSessionStatus);
+    const isPowBusy = usePowQueueStore(isPowQueueBusy);
+    const canPromptAfterHome = canRequestOsPermissions({
+      sessionStatus,
+      isInitializing,
+      isPowBusy,
+    });
     const hadLoggedInSessionRef = useRef(isLoggedIn);
     const appStateRef = useRef(AppState.currentState);
 
@@ -90,7 +101,7 @@ export const RootProvider = memo(
     }, [analyticsConsent]);
 
     useEffect(() => {
-      if (analyticsConsentAsked) return;
+      if (analyticsConsentAsked || !canPromptAfterHome) return;
       const timer = setTimeout(() => {
         const { setAnalyticsConsent } = usePreferencesStore.getState();
         Alert.alert(
@@ -110,7 +121,7 @@ export const RootProvider = memo(
         );
       }, 3000);
       return () => clearTimeout(timer);
-    }, [analyticsConsentAsked]);
+    }, [analyticsConsentAsked, canPromptAfterHome]);
 
     useEffect(() => {
       const sub = AppState.addEventListener("change", (nextState) => {
@@ -151,7 +162,7 @@ export const RootProvider = memo(
     }, [isLoggedIn]);
 
     useEffect(() => {
-      if (!walletAddress) return;
+      if (!walletAddress || !canPromptAfterHome) return;
 
       if (AppState.currentState !== "active") {
         return;
@@ -176,7 +187,7 @@ export const RootProvider = memo(
       }, 2_000);
 
       return () => clearTimeout(timer);
-    }, [walletAddress]);
+    }, [walletAddress, canPromptAfterHome]);
 
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>

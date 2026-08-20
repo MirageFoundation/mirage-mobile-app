@@ -17,7 +17,6 @@ export function useRewardSummary(
   // payload and the home card pops in after a second /rewards/summary fetch.
   const walletAddress = useAuthStore((s) => s.walletAddress);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-  const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const queryClient = useQueryClient();
 
@@ -39,7 +38,6 @@ export function useRewardSummary(
     enabled:
       !!walletAddress &&
       isLoggedIn &&
-      hasOnboarded &&
       !isInitializing &&
       (options?.enabled ?? true),
     // Hydrated from `bootstrap` (`rewards_summary`) on startup; explicit

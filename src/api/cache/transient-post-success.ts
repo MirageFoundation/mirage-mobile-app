@@ -72,11 +72,23 @@ export function mergePendingPostWithCachedPost(
   pendingPost: ApiPost,
   cachedPost: ApiPost | undefined,
 ): ApiPost {
-  if (cachedPost?.optimistic_status !== "success") return pendingPost;
+  if (!cachedPost) return pendingPost;
+  const isPendingVideoProcessing =
+    pendingPost.optimistic_video_preview_until !== undefined;
+  if (!isPendingVideoProcessing && cachedPost.optimistic_status !== "success") {
+    return pendingPost;
+  }
+
   return {
-    ...pendingPost,
-    optimistic_status: "success",
-    optimistic_error: undefined,
+    ...(isPendingVideoProcessing ? cachedPost : pendingPost),
+    optimistic_status: cachedPost.optimistic_status === "success"
+      ? "success"
+      : pendingPost.optimistic_status,
+    optimistic_error: pendingPost.optimistic_error,
+    optimistic_action_id: pendingPost.optimistic_action_id,
+    optimistic_draft: pendingPost.optimistic_draft,
+    optimistic_video_preview_until: pendingPost.optimistic_video_preview_until,
+    optimistic_cached_until: pendingPost.optimistic_cached_until,
   };
 }
 
@@ -100,11 +112,23 @@ export function mergeRefreshedPostPreservingOrder(
   }
   if (!transientSuccessActive && !preserveFallbackPost) return response;
   const posts = [...response.posts];
-  posts[matchIndex] = {
-    ...posts[matchIndex],
-    ...(preserveFallbackPost ? fallbackPost : undefined),
-    optimistic_status: transientSuccessActive ? "success" : fallbackPost.optimistic_status,
-    optimistic_error: undefined,
-  };
+  const refreshedPost = posts[matchIndex];
+  posts[matchIndex] = preserveFallbackPost
+    ? {
+        ...refreshedPost,
+        optimistic_status: transientSuccessActive
+          ? "success"
+          : fallbackPost.optimistic_status,
+        optimistic_error: fallbackPost.optimistic_error,
+        optimistic_action_id: fallbackPost.optimistic_action_id,
+        optimistic_draft: fallbackPost.optimistic_draft,
+        optimistic_video_preview_until: fallbackPost.optimistic_video_preview_until,
+        optimistic_cached_until: fallbackPost.optimistic_cached_until,
+      }
+    : {
+        ...refreshedPost,
+        optimistic_status: "success",
+        optimistic_error: undefined,
+      };
   return { ...response, posts };
 }

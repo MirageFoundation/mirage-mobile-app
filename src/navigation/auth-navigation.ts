@@ -1,7 +1,8 @@
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
-import { router } from "@/src/navigation/guarded-router";
+import { replaceBypass, router } from "@/src/navigation/guarded-router";
 import { isTabRoute } from "@/src/navigation/route-map";
+import { AUTH_EXIT_ROUTE } from "@/src/navigation/auth-flow-policy";
 
 // Legacy group-qualified form, kept for compatibility with any stored routes.
 const AUTH_ROUTE_PREFIX = "/(auth)/";
@@ -12,6 +13,17 @@ export function isAuthRoute(route: string): boolean {
   if (route.startsWith(AUTH_ROUTE_PREFIX)) return true;
   const pathname = route.split("?", 1)[0] ?? route;
   return (AUTH_ROUTE_PATHS as readonly string[]).includes(pathname);
+}
+
+/**
+ * Leave the (auth) modal after login or signup.
+ *
+ * `dismissAll()` / `dismissTo()` only unwind the nearest Stack — the (auth)
+ * group's own stack, whose initial route is username. That dumps a finished
+ * session back onto registration (BUG-004). `replace("/")` exits the modal.
+ */
+export function exitAuthModal(): void {
+  replaceBypass(AUTH_EXIT_ROUTE as any);
 }
 
 export function resolveAuthNavigationTarget(route: string): string {

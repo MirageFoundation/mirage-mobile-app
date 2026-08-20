@@ -3,7 +3,8 @@ import { usePathname } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import * as Sentry from "@sentry/react-native";
 
-import { useAuthStore } from "@/src/stores/auth-store";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { AUTH_RECOVERY_ROUTE } from "@/src/navigation/auth-flow-policy";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { usePreferencesStore } from "@/src/stores/preferences-store";
 import {
@@ -39,6 +40,7 @@ export function LaunchRouteOrchestrator() {
   const { hasShareIntent } = useShareIntentContext();
   const isInitializing = useAuthStore((state) => state.isInitializing);
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const sessionStatus = useAuthStore(selectAuthSessionStatus);
   const hasSeenAdultPrompt = usePreferencesStore(
     (state) => state.hasSeenAdultPrompt,
   );
@@ -108,6 +110,17 @@ export function LaunchRouteOrchestrator() {
       return;
     }
 
+    if (sessionStatus === "pending_signup") {
+      initialLaunchHandledRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Resuming pending signup on recovery phrase",
+        level: "info",
+      });
+      navigateBypass(AUTH_RECOVERY_ROUTE);
+      return;
+    }
+
     if (isInboxNotificationNavigationPending()) {
       initialLaunchHandledRef.current = true;
       Sentry.addBreadcrumb({
@@ -147,6 +160,7 @@ export function LaunchRouteOrchestrator() {
     isInitializing,
     isLoggedIn,
     pendingRoute,
+    sessionStatus,
   ]);
 
   // A protected cold-start route remains pending while logged out. Dispatch it

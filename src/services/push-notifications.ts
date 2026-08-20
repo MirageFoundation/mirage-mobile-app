@@ -19,7 +19,9 @@ import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { apiClient } from "@/src/api/client";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
-import { useAuthStore } from "@/src/stores/auth-store";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
+import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
 import { isRetryable } from "@/src/utils/error-messages";
 import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 
@@ -295,6 +297,23 @@ async function getExpoPushToken(): Promise<string | null> {
     Sentry.addBreadcrumb({
       category: "push-notifications",
       message: "Skipped token fetch: app not in foreground",
+      level: "info",
+    });
+    return null;
+  }
+
+  const auth = useAuthStore.getState();
+  if (
+    !canRequestOsPermissions({
+      sessionStatus: selectAuthSessionStatus(auth),
+      isInitializing: auth.isInitializing,
+      isPowBusy: isPowQueueBusy(usePowQueueStore.getState()),
+    })
+  ) {
+    console.log("[PushNotifications] Skipping permission request until after onboarding");
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Skipped permission request until after onboarding",
       level: "info",
     });
     return null;
