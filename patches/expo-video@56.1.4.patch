@@ -1,0 +1,45 @@
+diff --git a/ios/VideoPlayer.swift b/ios/VideoPlayer.swift
+index 3d69e5a93f8f844c57f48c812ed66e4f3f048e6e..a6a264b34e8b95916a77775ec62b25f597bb4972 100644
+--- a/ios/VideoPlayer.swift
++++ b/ios/VideoPlayer.swift
+@@ -453,9 +453,15 @@ internal final class VideoPlayer: SharedRef<AVPlayer>, Hashable, VideoPlayerObse
+   }
+ 
+   func safeEmit(event: String, payload: Record? = nil) {
+-    if self.appContext != nil {
+-      self.emit(event: event, payload: payload?.toDictionary(appContext: appContext))
++    // Some AVPlayer callbacks arrive on background Swift executors. Serializing
++    // Expo record payloads there can race with player teardown and crash fieldsOf.
++    let emitOnMain = { [weak self] in
++      guard let self, self.appContext != nil else {
++        return
++      }
++      self.emit(event: event, payload: payload?.toDictionary(appContext: self.appContext))
+     }
++    Thread.isMainThread ? emitOnMain() : DispatchQueue.main.async(execute: emitOnMain)
+   }
+ 
+   // MARK: - Hashable
+diff --git a/ios/VideoPlayerObserver.swift b/ios/VideoPlayerObserver.swift
+index 7ec316db033839b9b6b888fab4362d72ffcb479d..0f8a29bd0ed0c96cadc2d49cf9f2b4976e75c702 100644
+--- a/ios/VideoPlayerObserver.swift
++++ b/ios/VideoPlayerObserver.swift
+@@ -115,15 +115,9 @@ class VideoPlayerObserver: VideoSourceLoaderListener {
+   private var isLoadingAsynchronously = false
+   private var loadedCurrentItem = false
+   private var periodicTimeObserver: Any?
+-  private var currentVideoTrack: VideoTrack? {
+-    didSet {
+-      if let player, oldValue != currentVideoTrack {
+-        delegates.forEach { delegate in
+-          delegate.value?.onVideoTrackChanged(player: player, oldVideoTrack: oldValue, newVideoTrack: currentVideoTrack)
+-        }
+-      }
+-    }
+-  }
++  // expo-video can crash while serializing videoTrackChange events under
++  // rapid HLS track changes. Mirage does not consume this event.
++  private var currentVideoTrack: VideoTrack?
+ 
+   private var isPlaying: Bool = false {
+     didSet {

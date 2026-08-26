@@ -24,6 +24,8 @@ export interface SignedEnvelope {
   pow_difficulty: number;
   /** PoW nonce (0 for paid tier) */
   pow: number;
+  /** Replay-protection nonce as a decimal string */
+  envelope_nonce: string;
 }
 
 /**
@@ -43,6 +45,8 @@ export type SignedPayload<T extends Record<string, unknown> = Record<string, unk
 export interface WriteResponse {
   /** 64 hex character transaction hash */
   tx_hash: string;
+  /** Some v1.29 write responses also expose the root post id */
+  post_id?: string;
   /** 0 = success */
   code: number;
   /** Block height (often 0 initially for async broadcast) */
@@ -71,6 +75,7 @@ export interface EnvelopeParams {
   lastBlockHashBytes: Uint8Array;
   difficulty: number;
   timestampMs: number;
+  envelopeNonce: bigint;
 }
 
 /**
@@ -98,6 +103,8 @@ export interface PoWProgress {
   elapsedMs: number;
   /** Estimated total time in milliseconds */
   estimatedTotalMs: number;
+  /** Expected attempts for this target (PoW completion is probabilistic) */
+  expectedAttempts?: number;
 }
 
 export type PoWProgressCallback = (progress: PoWProgress) => void;

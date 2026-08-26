@@ -1,12 +1,18 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import * as Sentry from "@sentry/react-native";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
+import { resetServerScopedCache } from "@/src/api/cache/server-cache";
+import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
+import { serverQueryRoot } from "@/src/api/server-runtime";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
-import { useAuthStore } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { Text } from "@/src/components/ui/primitives";
-import { queryKeys } from "@/src/api/read/query-keys";
+import { unregisterPush, registerPush } from "@/src/services/push-notifications";
+import { walletService } from "@/src/services/wallet-service";
+import { primeBootstrap } from "@/src/services/bootstrap";
 
 type ApiServerContextType = {
   isRefreshing: boolean;
@@ -30,63 +36,115 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const initializedRef = useRef(false);
   const previousServerRef = useRef<ApiServer>(apiServer);
+  const refreshingCountRef = useRef(0);
 
   useEffect(() => {
+    const baseUrl = getApiBaseUrl(apiServer);
+
     if (!initializedRef.current) {
-      const baseUrl = getApiBaseUrl(apiServer);
       apiClient.setBaseUrl(baseUrl);
       initializedRef.current = true;
       previousServerRef.current = apiServer;
-
-      const isLoggedIn = useAuthStore.getState().isLoggedIn;
-      if (isLoggedIn) {
-        queryClient.prefetchQuery({
-          queryKey: queryKeys.nodeConfig(),
-          queryFn: async () => {
-            const { getNodeConfig } = await import("@/src/api/read/endpoints/parameters");
-            return getNodeConfig();
-          },
-        });
-      }
       return;
     }
 
     if (previousServerRef.current !== apiServer) {
+      apiClient.setBaseUrl(baseUrl);
       previousServerRef.current = apiServer;
     }
-  }, [apiServer]);
+  }, [apiServer, queryClient]);
 
   const switchServer = useCallback(async (server: ApiServer) => {
     if (server === previousServerRef.current) {
       return;
     }
 
+    refreshingCountRef.current += 1;
     setIsRefreshing(true);
+    let previousServer = previousServerRef.current;
+    let wallet = null as Awaited<ReturnType<typeof walletService.getWallet>>;
+
+    Sentry.addBreadcrumb({
+      category: "api-server",
+      message: "Switching API server",
+      level: "info",
+      data: {
+        from: previousServer,
+        to: server,
+      },
+    });
 
     try {
       const baseUrl = getApiBaseUrl(server);
-      apiClient.setBaseUrl(baseUrl);
+      await apiClient.switchBaseUrl(baseUrl, {
+        beforeCommit: async (previousContext) => {
+          previousServer = previousServerRef.current;
+          await queryClient.cancelQueries({
+            queryKey: serverQueryRoot(previousContext.identity),
+          });
+          wallet = await walletService.getWallet();
+          await unregisterPush(wallet);
+          removePersistedQueryCache(previousContext.identity, wallet?.address);
+        },
+        afterCommit: async (previousContext) => {
+          resetServerScopedCache(queryClient, previousContext.identity);
 
-      queryClient.clear();
-      await queryClient.invalidateQueries();
-      queryClient.removeQueries();
+          // Clear any video viewability/active state from the previous server
+          // and suppress playback until the caller navigates back home.
+          useHomePostCardStore.setState({
+            sideMenuOpen: true,
+          });
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message: "Suppressed feed playback during API server switch",
+            level: "info",
+            data: { from: previousServer, to: server },
+          });
 
-      setApiServer(server);
-      previousServerRef.current = server;
-
-      await queryClient.fetchQuery({
-        queryKey: queryKeys.nodeConfig(),
-        queryFn: async () => {
-          const { getNodeConfig } = await import("@/src/api/read/endpoints/parameters");
-          return getNodeConfig();
+          previousServerRef.current = server;
+          setApiServer(server);
+          await primeBootstrap(queryClient, wallet?.address);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        },
+        rollback: (_previousContext, failedContext) => {
+          if (failedContext) {
+            resetServerScopedCache(queryClient, failedContext.identity);
+          }
+          previousServerRef.current = previousServer;
+          setApiServer(previousServer);
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      const walletAfterSwitch = await walletService.getWallet();
+      if (walletAfterSwitch) {
+        await registerPush(walletAfterSwitch);
+      }
     } catch (error) {
+      if (wallet && previousServerRef.current === previousServer) {
+        try {
+          await registerPush(wallet);
+        } catch (rollbackError) {
+          Sentry.captureException(rollbackError, {
+            tags: { feature: "api-server", action: "rollback-push" },
+          });
+        }
+      }
+      Sentry.captureException(error, {
+        tags: {
+          feature: "api-server",
+          action: "switch",
+        },
+        extra: {
+          from: previousServer,
+          to: server,
+        },
+      });
       throw error;
     } finally {
-      setIsRefreshing(false);
+      refreshingCountRef.current -= 1;
+      if (refreshingCountRef.current === 0) {
+        setIsRefreshing(false);
+      }
     }
   }, [queryClient, setApiServer]);
 
@@ -107,7 +165,11 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "center",
     alignItems: "center",

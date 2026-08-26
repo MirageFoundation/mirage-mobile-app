@@ -2,17 +2,19 @@
  * Token & Subscription Write Endpoints
  *
  * POST /core/send_tokens
- * POST /core/upgrade_level
+ * POST /core/subscribe
  * POST /core/set_auto_renewal
  */
 
 import { api } from "@/src/api/client";
+import * as Sentry from "@sentry/react-native";
 import type { MirageWallet } from "@/src/wallet";
 import {
   buildSignedEnvelope,
   canonBaseSendTokens,
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
+  canonBaseGiftSubscription,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
@@ -28,7 +30,19 @@ export interface SendTokensInput {
   amount: number;
 }
 
-export type SubscriptionLevel = 1 | 2 | 3;
+export type SubscriptionLevel = 1 | 10;
+
+function addSubscriptionBreadcrumb(
+  message: string,
+  data: Record<string, unknown>
+): void {
+  Sentry.addBreadcrumb({
+    category: "subscription",
+    message,
+    level: "info",
+    data,
+  });
+}
 
 // ============================================
 // Send Tokens
@@ -65,7 +79,7 @@ export async function sendTokens(
 // ============================================
 
 /**
- * Upgrade to a paid subscription tier
+ * Subscribe to a paid tier.
  *
  * NOTE: This operation does NOT require PoW
  */
@@ -73,6 +87,13 @@ export async function upgradeLevel(
   wallet: MirageWallet,
   level: SubscriptionLevel
 ): Promise<WriteResponse> {
+  addSubscriptionBreadcrumb("Subscription request started", {
+    action: "subscribe",
+    endpoint: "/core/subscribe",
+    messageType: "MsgSubscribe",
+    level,
+  });
+
   const payload = await buildSignedEnvelope({
     wallet,
     baseBuilder: canonBaseUpgradeLevel,
@@ -82,7 +103,14 @@ export async function upgradeLevel(
     skipPoW: true, // Paid operations don't need PoW
   });
 
-  return api.post<WriteResponse>("/core/upgrade_level", payload);
+  const response = await api.post<WriteResponse>("/core/subscribe", payload);
+  addSubscriptionBreadcrumb("Subscription request submitted", {
+    action: "subscribe",
+    endpoint: "/core/subscribe",
+    level,
+    txHash: response.tx_hash,
+  });
+  return response;
 }
 
 /**
@@ -94,6 +122,13 @@ export async function setAutoRenewal(
   wallet: MirageWallet,
   autoRenew: boolean
 ): Promise<WriteResponse> {
+  addSubscriptionBreadcrumb("Auto-renewal request started", {
+    action: "set_auto_renewal",
+    endpoint: "/core/set_auto_renewal",
+    messageType: "MsgSetAutoRenewal",
+    autoRenew,
+  });
+
   const payload = await buildSignedEnvelope({
     wallet,
     baseBuilder: canonBaseSetAutoRenewal,
@@ -104,5 +139,56 @@ export async function setAutoRenewal(
   });
 
   const { autoRenew: _, ...rest } = payload;
-  return api.post<WriteResponse>("/core/set_auto_renewal", { ...rest, auto_renew: autoRenew });
+  const response = await api.post<WriteResponse>("/core/set_auto_renewal", { ...rest, auto_renew: autoRenew });
+  addSubscriptionBreadcrumb("Auto-renewal request submitted", {
+    action: "set_auto_renewal",
+    endpoint: "/core/set_auto_renewal",
+    autoRenew,
+    txHash: response.tx_hash,
+  });
+  return response;
+}
+
+// ============================================
+// Gift Subscription
+// ============================================
+
+export interface GiftSubscriptionInput {
+  recipient: string;
+  level: SubscriptionLevel;
+}
+
+export async function giftSubscription(
+  wallet: MirageWallet,
+  input: GiftSubscriptionInput
+): Promise<WriteResponse> {
+  const { recipient, level } = input;
+
+  addSubscriptionBreadcrumb("Gift subscription request started", {
+    action: "gift_subscription",
+    endpoint: "/core/subscribe",
+    messageType: "MsgSubscribe",
+    level,
+    hasRecipient: Boolean(recipient),
+  });
+
+  const payload = await buildSignedEnvelope({
+    wallet,
+    baseBuilder: canonBaseGiftSubscription,
+    payloadFields: {
+      level,
+      target: recipient,
+    },
+    skipPoW: true,
+  });
+
+  const response = await api.post<WriteResponse>("/core/subscribe", payload);
+  addSubscriptionBreadcrumb("Gift subscription request submitted", {
+    action: "gift_subscription",
+    endpoint: "/core/subscribe",
+    level,
+    hasRecipient: Boolean(recipient),
+    txHash: response.tx_hash,
+  });
+  return response;
 }

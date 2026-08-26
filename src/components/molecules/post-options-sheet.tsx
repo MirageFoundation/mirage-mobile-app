@@ -50,10 +50,18 @@ type PostOptionsSheetProps = {
   onHidePost?: () => void;
   /** Callback when delete is pressed */
   onDelete?: () => void;
+  /** Callback when edit is pressed */
+  onEdit?: () => void;
   /** Callback when report is pressed */
   onReport?: () => void;
   /** Callback when give award is pressed */
   onGiveAward?: () => void;
+  /** Callback when gift mirage is pressed */
+  onGiftMirage?: () => void;
+  /** Callback when gift subscription is pressed */
+  onGiftSubscription?: () => void;
+  /** Callback when annotate is pressed (agent only) */
+  onAnnotate?: () => void;
   /** Callback when sheet is dismissed */
   onDismiss?: () => void;
 };
@@ -168,7 +176,7 @@ const MenuItem = ({
 }) => {
   const { theme } = useUnistyles();
   const color = disabled
-    ? theme.colors.text.muted
+    ? theme.colors.text.subtle
     : isDestructive
       ? theme.colors.error[500]
       : theme.colors.text.subtle;
@@ -214,8 +222,12 @@ export const PostOptionsSheet = forwardRef<
       onBlockUser,
       onHidePost,
       onDelete,
+      onEdit,
       onReport,
       onGiveAward,
+      onGiftMirage,
+      onGiftSubscription,
+      onAnnotate,
       onDismiss,
     },
     ref,
@@ -223,10 +235,10 @@ export const PostOptionsSheet = forwardRef<
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
-    const shareServer = usePreferencesStore((s) => s.shareServer);
+    const shareServer = usePreferencesStore((s) => s.apiServer);
 
     const present = useCallback(() => {
-      bottomSheetRef.current?.present(0);
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {
@@ -340,9 +352,12 @@ export const PostOptionsSheet = forwardRef<
           }
           case "more": {
             try {
+              const url = getShareUrl();
+              const shareMessage = post?.title
+                ? `${post.title}\n\n${url}`
+                : url;
               await Share.share({
-                message: getShareMessage(),
-                url: getShareUrl(),
+                message: shareMessage,
                 title: post?.title,
               });
             } catch {
@@ -357,23 +372,6 @@ export const PostOptionsSheet = forwardRef<
     );
 
     // Menu handlers
-    const handleShowFewer = useCallback(() => {
-      triggerHaptic("light");
-      dismiss();
-      onShowFewer?.();
-    }, [dismiss, onShowFewer]);
-
-    const handleFollowUser = useCallback(() => {
-      triggerHaptic("medium");
-      dismiss();
-      onFollowUser?.();
-    }, [dismiss, onFollowUser]);
-
-    const handleFollowTopic = useCallback(() => {
-      dismiss();
-      onFollowTopic?.();
-    }, [dismiss, onFollowTopic]);
-
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -382,24 +380,18 @@ export const PostOptionsSheet = forwardRef<
 
     const handleCopyText = useCallback(async () => {
       triggerHaptic("medium");
-      if (post?.content) {
-        await Clipboard.setStringAsync(post.content);
+      if (post?.body) {
+        await Clipboard.setStringAsync(post.body);
       }
       dismiss();
       onCopyText?.();
-    }, [dismiss, post?.content, onCopyText]);
+    }, [dismiss, post?.body, onCopyText]);
 
-    const handleHidePost = useCallback(() => {
-      triggerHaptic("warning");
+    const handleEdit = useCallback(() => {
+      triggerHaptic("selection");
       dismiss();
-      onHidePost?.();
-    }, [dismiss, onHidePost]);
-
-    const handleBlockUser = useCallback(() => {
-      triggerHaptic("warning");
-      dismiss();
-      onBlockUser?.();
-    }, [dismiss, onBlockUser]);
+      onEdit?.();
+    }, [dismiss, onEdit]);
 
     const handleDelete = useCallback(() => {
       triggerHaptic("warning");
@@ -407,27 +399,31 @@ export const PostOptionsSheet = forwardRef<
       onDelete?.();
     }, [dismiss, onDelete]);
 
-    const handleReport = useCallback(() => {
-      triggerHaptic("warning");
-      dismiss();
-      onReport?.();
-    }, [dismiss, onReport]);
-
     const handleGiveAward = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
       onGiveAward?.();
     }, [dismiss, onGiveAward]);
 
+    const handleGiftMirage = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftMirage?.();
+    }, [dismiss, onGiftMirage]);
+
+    const handleGiftSubscription = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftSubscription?.();
+    }, [dismiss, onGiftSubscription]);
+
     const handleShare = useCallback(async () => {
       triggerHaptic("light");
       dismiss();
       try {
-        await Share.share(
-          Platform.OS === "ios"
-            ? { url: getShareUrl(), title: post?.title }
-            : { message: getShareUrl(), title: post?.title },
-        );
+        const url = getShareUrl();
+        const shareMessage = post?.title ? `${post.title}\n\n${url}` : url;
+        await Share.share({ message: shareMessage, title: post?.title });
       } catch {
       }
     }, [dismiss, getShareUrl, post?.title]);
@@ -456,7 +452,13 @@ export const PostOptionsSheet = forwardRef<
             <Text size="lg" weight="bold">
               Options
             </Text>
-            <Pressable onPress={dismiss} style={[styles.closeButton]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close post options"
+              onPress={dismiss}
+              style={[styles.closeButton]}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}
@@ -514,6 +516,31 @@ export const PostOptionsSheet = forwardRef<
                 iconName="gift-outline"
                 title="Give Award"
                 onPress={handleGiveAward}
+              />
+            )}
+
+            {!isOwnPost && onGiftMirage && (
+              <MenuItem
+                iconName="cash-outline"
+                title="Gift Mirage"
+                onPress={handleGiftMirage}
+              />
+            )}
+
+            {!isOwnPost && onGiftSubscription && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Gift Subscription"
+                onPress={handleGiftSubscription}
+              />
+            )}
+
+            {isOwnPost && (
+              <MenuItem
+                iconComponent={Feather}
+                iconName="edit-2"
+                title="Edit Post"
+                onPress={handleEdit}
               />
             )}
 

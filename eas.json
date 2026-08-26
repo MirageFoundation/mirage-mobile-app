@@ -9,37 +9,53 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "image": "macos-sonoma-14.6-xcode-16.1"
+        "image": "sdk-56"
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "dev"
+        "EXPO_PUBLIC_ENV": "dev",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
       },
-      "channel": "sim"
+      "channel": "sim",
+      "android": {
+        "resourceClass": "large"
+      }
     },
     "dev": {
       "developmentClient": true,
       "channel": "dev",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_ENV": "dev"
+        "EXPO_PUBLIC_ENV": "dev",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
+      },
+      "android": {
+        "resourceClass": "large"
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_ENV": "preview"
+        "EXPO_PUBLIC_ENV": "preview",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
+      },
+      "android": {
+        "resourceClass": "large"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
+      },
       "ios": {
-        "image": "macos-sonoma-14.6-xcode-16.1",
+        "image": "sdk-56",
         "node": "24.4.0"
       },
       "android": {
-        "node": "24.4.0"
+        "node": "24.4.0",
+        "resourceClass": "large"
       }
     }
   },

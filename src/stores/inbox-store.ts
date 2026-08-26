@@ -1,20 +1,39 @@
+import type { InboxReply } from "@/src/api/types";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
+
+interface InboxNotificationTarget {
+  notificationId: string;
+  replyId: string | null;
+  rootPostId: string | null;
+  previewReply: InboxReply | null;
+  receivedAt: number;
+}
 
 interface InboxState {
   unreadCount: number;
   hasUnread: boolean;
+  isInboxActive: boolean;
   lastViewedAt: number;
   highlightBaselineAt: number;
   latestInboxTimestamp: number;
   _suppressUntil: number;
   readReplyIds: string[];
+  notificationTarget: InboxNotificationTarget | null;
+  notificationNavigationStartedAt: number;
   setUnreadCount: (count: number) => void;
   setLatestInboxTimestamp: (timestamp: number) => void;
   markAsViewed: (serverTimestamp?: number) => void;
   markReplyAsRead: (replyId: string) => void;
   advanceHighlightBaseline: () => void;
+  setInboxActive: (active: boolean) => void;
+  setNotificationTarget: (target: Omit<InboxNotificationTarget, "receivedAt">) => void;
+  clearNotificationTarget: (notificationId?: string) => void;
+  markNotificationNavigationActive: () => void;
   resetForLogout: () => void;
 }
 
@@ -23,11 +42,14 @@ export const useInboxStore = create<InboxState>()(
     (set, get) => ({
       unreadCount: 0,
       hasUnread: false,
+      isInboxActive: false,
       lastViewedAt: 0,
       highlightBaselineAt: 0,
       latestInboxTimestamp: 0,
       _suppressUntil: 0,
       readReplyIds: [],
+      notificationTarget: null,
+      notificationNavigationStartedAt: 0,
 
       setUnreadCount: (count: number) => {
         if (Date.now() < get()._suppressUntil) return;
@@ -65,20 +87,49 @@ export const useInboxStore = create<InboxState>()(
           readReplyIds: [],
         }),
 
+      setInboxActive: (active: boolean) => set({ isInboxActive: active }),
+
+      setNotificationTarget: (target) =>
+        set({
+          notificationTarget: {
+            ...target,
+            receivedAt: Date.now(),
+          },
+        }),
+
+      clearNotificationTarget: (notificationId) =>
+        set((state) => {
+          if (
+            notificationId &&
+            state.notificationTarget?.notificationId !== notificationId
+          ) {
+            return state;
+          }
+          return { notificationTarget: null };
+        }),
+
+      markNotificationNavigationActive: () =>
+        set({ notificationNavigationStartedAt: Date.now() }),
+
       resetForLogout: () =>
         set({
           unreadCount: 0,
           hasUnread: false,
+          isInboxActive: false,
+          lastViewedAt: 0,
           latestInboxTimestamp: 0,
           highlightBaselineAt: 0,
           _suppressUntil: 0,
           readReplyIds: [],
+          notificationTarget: null,
+          notificationNavigationStartedAt: 0,
         }),
     }),
     {
       name: "inbox-store",
       version: 6,
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
       partialize: (state) => ({
         lastViewedAt: state.lastViewedAt,
         highlightBaselineAt: state.highlightBaselineAt,
@@ -92,7 +143,15 @@ export const useInboxStore = create<InboxState>()(
         latestInboxTimestamp: 0,
         _suppressUntil: 0,
         readReplyIds: persisted?.readReplyIds ?? [],
+        notificationTarget: null,
+        notificationNavigationStartedAt: 0,
       }),
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "inbox-store",
+  reset: () => useInboxStore.getState().resetForLogout(),
+  rehydrate: () => useInboxStore.persist.rehydrate(),
+});

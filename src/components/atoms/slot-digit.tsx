@@ -36,7 +36,7 @@ export const SlotDigit = React.memo(({ digit, color }: SlotDigitProps) => {
       });
       prevDigit.current = digit;
     }
-  }, [digit]);
+  }, [digit, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],

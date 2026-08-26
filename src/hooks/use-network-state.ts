@@ -1,71 +1,43 @@
-import * as Network from "expo-network";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import {
+  selectIsConnected,
+  selectNetworkType,
+  type NetworkState,
+  type NetworkType,
+} from "@/src/stores/network-state-model";
+import {
+  ensureNetworkMonitorStarted,
+  useNetworkStateStore,
+} from "@/src/stores/network-state-store";
 
-export type NetworkType = "wifi" | "cellular" | "unknown" | "none";
-
-type NetworkState = {
-  isConnected: boolean;
-  networkType: NetworkType;
-  isWifi: boolean;
-  isCellular: boolean;
-};
+export type { NetworkState, NetworkType };
 
 /**
  * Hook to monitor network connectivity state
  * Returns information about connection status and type (WiFi vs Cellular)
  */
 export function useNetworkState(): NetworkState {
-  const [state, setState] = useState<NetworkState>({
-    isConnected: true,
-    networkType: "unknown",
-    isWifi: false,
-    isCellular: false,
-  });
-
   useEffect(() => {
-    let mounted = true;
-
-    const checkNetwork = async () => {
-      try {
-        const networkState = await Network.getNetworkStateAsync();
-
-        if (!mounted) return;
-
-        const isConnected = networkState.isConnected ?? false;
-        let networkType: NetworkType = "unknown";
-
-        if (!isConnected) {
-          networkType = "none";
-        } else if (networkState.type === Network.NetworkStateType.WIFI) {
-          networkType = "wifi";
-        } else if (networkState.type === Network.NetworkStateType.CELLULAR) {
-          networkType = "cellular";
-        }
-
-        setState({
-          isConnected,
-          networkType,
-          isWifi: networkType === "wifi",
-          isCellular: networkType === "cellular",
-        });
-      } catch (error) {
-        console.warn("[useNetworkState] Failed to get network state:", error);
-      }
-    };
-
-    // Initial check
-    checkNetwork();
-
-    // Poll network state periodically (every 10 seconds)
-    const interval = setInterval(checkNetwork, 10000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+    ensureNetworkMonitorStarted();
   }, []);
 
-  return state;
+  return useNetworkStateStore();
+}
+
+export function useIsConnected(): boolean {
+  useEffect(() => {
+    ensureNetworkMonitorStarted();
+  }, []);
+
+  return useNetworkStateStore(selectIsConnected);
+}
+
+export function useNetworkType(): NetworkType {
+  useEffect(() => {
+    ensureNetworkMonitorStarted();
+  }, []);
+
+  return useNetworkStateStore(selectNetworkType);
 }
 
 /**

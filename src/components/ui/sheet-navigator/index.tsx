@@ -130,7 +130,7 @@ const SheetNavigator: React.FC<SheetNavigatorProps> = ({
       // Update previous step index
       prevStepIndex.value = currentIndex;
     }
-  }, [navigation.currentStepIndex]);
+  }, [contentTranslateX, navigation.currentStepIndex, prevStepIndex]);
 
   // Reset navigation when modal closes
   useEffect(() => {
@@ -140,21 +140,23 @@ const SheetNavigator: React.FC<SheetNavigatorProps> = ({
       contentOpacity.value = 1;
       prevStepIndex.value = 0;
     }
-  }, [visible]);
+  }, [contentOpacity, contentTranslateX, prevStepIndex, visible]);
 
   useEffect(() => {
     if (visible) {
       // Entrance animation - exactly like PopupSheet
       backdropOpacity.value = withTiming(1, { duration: 200 });
       translateY.value = withSpring(0, {
-        damping: 30,
-        stiffness: 400,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
       scale.value = withSpring(1, {
-        damping: 35,
-        stiffness: 500,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
     }
   }, [visible, backdropOpacity, translateY, scale]);

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { search, type SearchParams } from "../endpoints/search";
+import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
+import { useAuthStore } from "@/src/stores";
 
 /**
  * Debounced search hook for search-as-you-type functionality
@@ -16,6 +18,10 @@ export function useDebouncedSearch(
   params?: Omit<SearchParams, "q" | "address">
 ) {
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   // Debounce the query
   useEffect(() => {
@@ -37,10 +43,12 @@ export function useDebouncedSearch(
 
   // Perform the search with debounced query
   const searchQuery = useQuery({
-    queryKey: queryKeys.search(debouncedQuery!, params?.type, params?.limit),
+    queryKey: queryKeys.search(debouncedQuery!, params?.type, params?.limit, allowedTags, walletAddress),
     queryFn: () =>
       search({
         q: debouncedQuery!,
+        address: walletAddress ?? undefined,
+        allowed_tags: allowedTags || undefined,
         ...params,
       }),
     enabled: !!debouncedQuery && debouncedQuery.length >= 1,
@@ -83,4 +91,3 @@ export function useDebouncedSearchPosts(
 ) {
   return useDebouncedSearch(query, delay, { type: "posts", limit });
 }
-

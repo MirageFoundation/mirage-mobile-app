@@ -29,6 +29,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 
 export type TransactionPhase =
   | "idle"
+  | "waiting"
   | "preparing"
   | "computing"
   | "signing"
@@ -45,6 +46,7 @@ export interface TransactionProgress {
     attempts: number;
     elapsedMs: number;
     estimatedTotalMs: number;
+    expectedAttempts?: number;
   };
   /** Error message if phase is error */
   error?: string;
@@ -67,6 +69,10 @@ export interface TransactionProgressModalProps {
   onRetry?: () => void;
   /** Whether the modal can be dismissed (only in success/error states) */
   dismissible?: boolean;
+  /** Hide transaction hash on success (default: false) */
+  showTxHash?: boolean;
+  /** Auto-dismiss modal after success (ms delay, 0 to disable) */
+  autoDismissDelay?: number;
 }
 
 // ============================================
@@ -78,10 +84,11 @@ const PHASE_CONFIG: Record<
   {
     label: string;
     icon: keyof typeof Ionicons.glyphMap;
-    color: "brand" | "success" | "error";
+    color: "brand" | "success" | "error" | "warning";
   }
 > = {
   idle: { label: "Ready", icon: "ellipse-outline", color: "brand" },
+  waiting: { label: "Finishing up other actions first...", icon: "time-outline", color: "warning" },
   preparing: { label: "Preparing request...", icon: "sync", color: "brand" },
   computing: {
     label: "Securing your request...",
@@ -119,6 +126,8 @@ export function TransactionProgressModal({
   onDismiss,
   onRetry,
   dismissible = true,
+  showTxHash = true,
+  autoDismissDelay = 500,
 }: TransactionProgressModalProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
@@ -131,6 +140,7 @@ export function TransactionProgressModal({
   // Spin animation for loading states
   useEffect(() => {
     const isLoading = [
+      "waiting",
       "preparing",
       "computing",
       "signing",
@@ -197,6 +207,16 @@ export function TransactionProgressModal({
     }
   }, [progress.phase]);
 
+  // Auto-dismiss on success
+  useEffect(() => {
+    if (progress.phase === "success" && autoDismissDelay > 0 && onDismiss) {
+      const timer = setTimeout(() => {
+        onDismiss();
+      }, autoDismissDelay);
+      return () => clearTimeout(timer);
+    }
+  }, [progress.phase, autoDismissDelay, onDismiss]);
+
   const spinRotation = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
@@ -209,11 +229,31 @@ export function TransactionProgressModal({
 
   const config = PHASE_CONFIG[progress.phase];
 
-  // Calculate PoW progress percentage
+  // PoW has no deterministic completion percentage. When available, show the
+  // probability that a valid nonce would have been found by this many tries.
+  // This stays meaningful on devices that run far below the initial estimate.
   const powProgressPercent = useMemo(() => {
-    if (!progress.powProgress || progress.powProgress.estimatedTotalMs === 0) {
+    if (!progress.powProgress) {
       return 0;
     }
+
+    if (
+      progress.powProgress.expectedAttempts &&
+      progress.powProgress.expectedAttempts > 0
+    ) {
+      const probability =
+        1 -
+        Math.exp(
+          -progress.powProgress.attempts /
+            progress.powProgress.expectedAttempts,
+        );
+      return Math.round(Math.min(probability * 100, 95));
+    }
+
+    if (progress.powProgress.estimatedTotalMs === 0) {
+      return 0;
+    }
+
     const percent = Math.min(
       (progress.powProgress.elapsedMs / progress.powProgress.estimatedTotalMs) *
         100,
@@ -256,6 +296,8 @@ export function TransactionProgressModal({
       ? theme.colors.success[500]
       : config.color === "error"
       ? theme.colors.error[500]
+      : config.color === "warning"
+      ? theme.colors.warning[500]
       : theme.colors.brand[500];
 
   const iconBgColor =
@@ -263,6 +305,8 @@ export function TransactionProgressModal({
       ? `${theme.colors.success[500]}20`
       : config.color === "error"
       ? `${theme.colors.error[500]}20`
+      : config.color === "warning"
+      ? `${theme.colors.warning[500]}20`
       : `${theme.colors.brand[500]}20`;
 
   return (
@@ -296,10 +340,10 @@ export function TransactionProgressModal({
           >
             {progress.phase === "success" || progress.phase === "error" ? (
               <Ionicons name={config.icon} size={40} color={iconColor} />
-            ) : progress.phase === "computing" ? (
+            ) : progress.phase === "computing" || progress.phase === "waiting" ? (
               <Animated.View style={{ opacity: pulseOpacity }}>
                 <MaterialCommunityIcons
-                  name="shield-lock"
+                  name={progress.phase === "waiting" ? "timer-sand" : "shield-lock"}
                   size={40}
                   color={iconColor}
                 />
@@ -317,6 +361,8 @@ export function TransactionProgressModal({
               ? "Success!"
               : progress.phase === "error"
               ? "Error"
+              : progress.phase === "waiting"
+              ? "Almost there"
               : title}
           </Text>
 
@@ -362,13 +408,18 @@ export function TransactionProgressModal({
               )}
 
               <Text size="xs" mode="subtle" style={styles.powHint}>
-                This may take 1-5 minutes on mobile devices
+                Speed varies by device. Keep the app open while this finishes.
               </Text>
             </View>
           )}
 
           {/* Description or Error */}
-          {progress.phase === "error" && progress.error ? (
+          {progress.phase === "waiting" ? (
+            <Text size="sm" mode="subtle" style={styles.description}>
+              A vote or other action is still processing.{" "}
+              {title} will begin as soon as it finishes.
+            </Text>
+          ) : progress.phase === "error" && progress.error ? (
             <Text size="sm" mode="subtle" style={styles.errorText}>
               {progress.error}
             </Text>
@@ -385,22 +436,10 @@ export function TransactionProgressModal({
             </Text>
           )}
 
-          {/* TX Hash (for success) */}
-          {progress.phase === "success" && progress.txHash && (
-            <View style={styles.txHashContainer}>
-              <Text size="xs" mode="subtle">
-                Transaction:{" "}
-                <Text size="xs" weight="medium">
-                  {progress.txHash.slice(0, 8)}...{progress.txHash.slice(-8)}
-                </Text>
-              </Text>
-            </View>
-          )}
-
           {/* Buttons */}
-          {canDismiss && (
+          {canDismiss && progress.phase === "error" && (
             <Box gap="sm" style={styles.buttons}>
-              {progress.phase === "error" && onRetry && (
+              {onRetry && (
                 <Button
                   size="lg"
                   variant="outline"
@@ -412,26 +451,18 @@ export function TransactionProgressModal({
                 </Button>
               )}
 
-             <Button
-               size="lg"
-                mode={progress.phase === "success" ? "brand" : "brand"}
-               rounded="full"
-               onPress={handleDismiss}
+              <Button
+                size="lg"
+                mode="brand"
+                rounded="full"
+                onPress={handleDismiss}
                 style={[
                   styles.button,
-                  progress.phase === "error" && {
-                    backgroundColor: "rgba(239, 68, 68, 0.9)",
-                  },
+                  { backgroundColor: "rgba(239, 68, 68, 0.9)" },
                 ]}
-             >
-               <Button.Text
-                 style={
-                    progress.phase === "success" || progress.phase === "error"
-                      ? { color: "#fff" }
-                      : undefined
-                 }
-               >
-                  {progress.phase === "success" ? "Continue" : "Close"}
+              >
+                <Button.Text style={{ color: "#fff" }}>
+                  Close
                 </Button.Text>
               </Button>
             </Box>
@@ -440,7 +471,7 @@ export function TransactionProgressModal({
           {/* Non-dismissible hint */}
           {!canDismiss && (
             <Text size="xs" mode="subtle" style={styles.hint}>
-              Please wait, don't close the app...
+              Please wait, don&apos;t close the app...
             </Text>
           )}
         </Animated.View>

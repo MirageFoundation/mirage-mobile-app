@@ -6,6 +6,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist-test/
 web-build/
 expo-env.d.ts
 
@@ -41,11 +42,22 @@ app-example
 # generated native folders
 /ios
 /android
+
+# keep F-Droid/Fastlane Android metadata tracked
+!fastlane/
+!fastlane/metadata/
+!fastlane/metadata/android/
+!fastlane/metadata/android/**
 .agi
 external
 reference
-build-*
-.otto
+/build-*
 .env
 
 .env.local
+mirage-talk-*.json
+google-services.json
+
+# Mirage MCP local secrets
+/tools/mcp/.env*
+!/tools/mcp/.env.example

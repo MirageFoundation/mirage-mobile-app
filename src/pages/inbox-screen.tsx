@@ -1,241 +1,120 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Platform,
+  Pressable,
+  RefreshControl,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 
-import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
 import type { InboxReply } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAuthStore } from "@/src/stores";
-import { useInboxStore } from "@/src/stores/inbox-store";
-import { useShallow } from "zustand/react/shallow";
-import { markRepliesAsNotified } from "@/src/services/inbox-notifications";
-import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
-
-const emptyInfoImage = require("@/assets/images/empty-info.png");
-
-const MemoizedInboxItem = memo(InboxItem);
+import { InboxEmptyState } from "@/src/pages/inbox/inbox-empty-state";
+import { isInboxReplyUnread } from "@/src/pages/inbox/inbox-state";
+import { useInboxController } from "@/src/pages/inbox/use-inbox-controller";
 
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
-  const router = useRouter();
-  const { fromNotification } = useLocalSearchParams<{
-    fromNotification?: string;
-  }>();
-  const isLoggedIn = !!useAuthStore((s) => s.user);
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead } =
-    useInboxStore(
-      useShallow((s) => ({
-        markAsViewed: s.markAsViewed,
-        highlightBaselineAt: s.highlightBaselineAt,
-        readReplyIds: s.readReplyIds,
-        markReplyAsRead: s.markReplyAsRead,
-      })),
-    );
-  const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
-  const listRef = useRef<FlatList<InboxReply>>(null);
-  const applyViewedTimestamp = useCallback(
-    (timestamp?: number) => {
-      const resolved =
-        typeof timestamp === "number" && timestamp > 0
-          ? timestamp
-          : Math.floor(Date.now() / 1000);
-      markAsViewed(resolved);
-    },
-    [markAsViewed],
-  );
-
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isRefetching,
-    refetch,
-  } = useInfiniteInbox({ limit: 25 });
-
-  const replies = useMemo(() => {
-    const items: InboxReply[] = [];
-    const seen = new Set<string>();
-    for (const page of data?.pages ?? []) {
-      for (const reply of page?.replies ?? []) {
-        if (!reply?.reply_id || seen.has(reply.reply_id)) continue;
-        seen.add(reply.reply_id);
-        items.push(reply);
-      }
-    }
-    return items;
-  }, [data]);
-
-  useFocusEffect(
-    useCallback(() => {
-      markAsViewed();
-      refetch();
-      if (walletAddress) {
-        markInboxViewed(walletAddress)
-          .then((res) => {
-            applyViewedTimestamp(res.inbox_last_viewed_at);
-          })
-          .catch(() => {
-            applyViewedTimestamp();
-          });
-      }
-      return () => {};
-    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed]),
-  );
-
-  useEffect(() => {
-    if (replies.length > 0) {
-      markRepliesAsNotified(replies.map((r) => r.reply_id));
-    }
-  }, [replies]);
-
-  useEffect(() => {
-    if (!fromNotification) return;
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
-    });
-    refetch();
-  }, [fromNotification, refetch]);
-
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [refetch]);
-
-  const handleItemPress = useCallback(
-    (rootPostId: string, replyId: string) => {
-      markReplyAsRead(replyId);
-      router.push(`/post/${rootPostId}?highlight=${replyId}`);
-    },
-    [router, markReplyAsRead],
-  );
-
-  const lastFetchTime = useRef(0);
-  const isFetchingRef = useRef(false);
-
-  const handleEndReached = useCallback(() => {
-    const now = Date.now();
-    if (
-      hasNextPage &&
-      !isFetchingNextPage &&
-      !isFetchingRef.current &&
-      now - lastFetchTime.current > 1000
-    ) {
-      lastFetchTime.current = now;
-      isFetchingRef.current = true;
-      fetchNextPage().finally(() => {
-        isFetchingRef.current = false;
-      });
-    }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const keyExtractor = useCallback((item: InboxReply) => item.reply_id, []);
+  const controller = useInboxController();
 
   const renderItem = useCallback(
-    ({ item }: { item: InboxReply }) => {
-      const isUnread =
-        item.reply_timestamp > highlightBaselineAt &&
-        !readReplyIdsSet.has(item.reply_id);
-      return (
-        <MemoizedInboxItem
-          reply={item}
-          onPress={handleItemPress}
-          isUnread={isUnread}
-        />
-      );
-    },
-    [handleItemPress, readReplyIdsSet, highlightBaselineAt],
+    ({ item }: { item: InboxReply }) => (
+      <InboxItem
+        reply={item}
+        onPress={controller.handleItemPress}
+        isUnread={isInboxReplyUnread(
+          item,
+          controller.highlightBaselineAt,
+          controller.readReplyIdsSet,
+        )}
+      />
+    ),
+    [
+      controller.handleItemPress,
+      controller.highlightBaselineAt,
+      controller.readReplyIdsSet,
+    ],
   );
 
-  const ListEmptyComponent = useCallback(() => {
-    if (isLoading) {
-      return <ProfilePostsSkeleton count={6} type="comments" />;
-    }
+  const renderEmptyState = useCallback(
+    () => (
+      <InboxEmptyState
+        isLoading={controller.isLoading}
+        isError={controller.isError}
+        hasInitialLoadTimedOut={controller.hasInitialLoadTimedOut}
+        isLoggedIn={controller.isLoggedIn}
+        onRetry={controller.handleRetry}
+      />
+    ),
+    [
+      controller.handleRetry,
+      controller.hasInitialLoadTimedOut,
+      controller.isError,
+      controller.isLoading,
+      controller.isLoggedIn,
+    ],
+  );
 
-    if (!isLoggedIn) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="log-in-outline"
-            size={48}
-            color={theme.colors.text.subtle}
-          />
-          <Text
-            size="md"
-            weight="medium"
-            mode="subtle"
-            style={styles.emptyTitle}
-          >
-            Sign in to see your inbox
-          </Text>
-          <Text size="sm" mode="subtle" style={styles.emptySubtitle}>
-            Replies to your posts and comments will appear here
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.emptyContainer}>
-        <Image
-          source={emptyInfoImage}
-          style={styles.emptyImage}
-          contentFit="contain"
-        />
-        <Text size="xxl" weight="bold" style={styles.emptyTitle}>
-          No replies yet
-        </Text>
-        <Text size="lg" mode="subtle" style={styles.emptySubtitle}>
-          When someone replies to your posts or comments, it will show up here
-        </Text>
-      </View>
-    );
-  }, [isLoading, isLoggedIn, theme.colors.text.subtle]);
-
-  const ListFooterComponent = useCallback(() => {
-    if (isFetchingNextPage) {
-      return <ProfilePostsSkeleton count={2} type="comments" />;
-    }
-    return <View style={{ height: 80 }} />;
-  }, [isFetchingNextPage]);
+  const renderFooter = useCallback(
+    () =>
+      controller.isFetchingNextPage ? (
+        <ProfilePostsSkeleton count={2} type="comments" />
+      ) : (
+        <View style={styles.footerSpace} />
+      ),
+    [controller.isFetchingNextPage],
+  );
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
       <View style={styles.header}>
-        <Ionicons
-          name="mail-outline"
-          size={22}
-          color={theme.colors.text.default}
-        />
-        <Text size="xl" weight="bold">
-          Inbox
-        </Text>
+        <View style={styles.headerLeft}>
+          <Ionicons name="mail-outline" size={22} color={theme.colors.text.default} />
+          <Text size="xl" weight="bold">
+            Inbox
+          </Text>
+        </View>
+        <Pressable
+          onPress={controller.handleMarkAllAsSeen}
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+        >
+          <View style={styles.markSeenButton}>
+            <Ionicons
+              name="checkmark-done-outline"
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+            <Text size="md" weight="semibold" mode="subtle">
+              Mark as seen
+            </Text>
+          </View>
+        </Pressable>
       </View>
 
       <FlatList
-        ref={listRef}
-        data={replies}
+        ref={controller.listRef}
+        data={controller.visibleReplies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        onEndReached={handleEndReached}
+        ListHeaderComponent={
+          controller.isNotificationLoading ? (
+            <ActivityIndicator
+              style={styles.notificationLoader}
+              color={theme.colors.primary[500]}
+            />
+          ) : null
+        }
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderFooter}
+        onEndReached={controller.handleEndReached}
         onEndReachedThreshold={0.5}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
@@ -244,47 +123,48 @@ export function InboxScreen() {
         }}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
+            refreshing={controller.isRefreshing}
+            onRefresh={controller.handleRefresh}
             tintColor={theme.colors.primary[500]}
           />
         }
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={10}
+        removeClippedSubviews={Platform.OS === "android"}
+        maxToRenderPerBatch={Platform.OS === "android" ? 6 : 8}
+        windowSize={Platform.OS === "android" ? 7 : 9}
+        initialNumToRender={Platform.OS === "android" ? 6 : 8}
       />
     </Box>
   );
+}
+
+function keyExtractor(item: InboxReply) {
+  return item.reply_id;
 }
 
 const styles = StyleSheet.create((theme) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
   },
-  emptyContainer: {
-    flex: 1,
+  headerLeft: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.xl,
+    gap: 8,
   },
-  emptyImage: {
-    width: 180,
-    height: 180,
+  markSeenButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  emptyTitle: {
-    marginTop: theme.spacing.sm,
-    textAlign: "center",
+  notificationLoader: {
+    paddingVertical: 12,
   },
-  emptySubtitle: {
-    marginTop: theme.spacing.xs,
-    textAlign: "center",
-    lineHeight: 20,
+  footerSpace: {
+    height: 80,
   },
 }));

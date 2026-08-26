@@ -4,11 +4,10 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
-  SCREEN_WIDTH,
 } from "@gorhom/bottom-sheet";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
-import { Platform, Pressable, Share, View } from "react-native";
+import { Dimensions, Platform, Pressable, Share, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -32,6 +31,8 @@ type CommentOptionsSheetProps = {
   onReport?: () => void;
   onToggleFollowAuthor?: () => void;
   onGiveAward?: () => void;
+  onGiftMirage?: () => void;
+  onGiftSubscription?: () => void;
   onDismiss?: () => void;
 };
 
@@ -99,6 +100,8 @@ export const CommentOptionsSheet = forwardRef<
       onReport,
       onToggleFollowAuthor,
       onGiveAward,
+      onGiftMirage,
+      onGiftSubscription,
       onDismiss,
     },
     ref,
@@ -106,7 +109,7 @@ export const CommentOptionsSheet = forwardRef<
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
-    const shareServer = usePreferencesStore((s) => s.shareServer);
+    const shareServer = usePreferencesStore((s) => s.apiServer);
 
     const present = useCallback(() => {
       bottomSheetRef.current?.present();
@@ -146,17 +149,19 @@ export const CommentOptionsSheet = forwardRef<
       triggerHaptic("light");
       try {
         const commentId = comment?.id || "";
-        const root = rootPostId || "";
         const url = `${getShareBaseUrl(shareServer)}/p/${commentId}`;
-        await Share.share({
-          message: url,
-        });
+        await Share.share({ message: url });
       } catch {
         // User cancelled
       }
       dismiss();
       onShare?.();
-    }, [comment?.id, rootPostId, shareServer, dismiss, onShare]);
+    }, [
+      comment?.id,
+      shareServer,
+      dismiss,
+      onShare,
+    ]);
 
     const handleCopyText = useCallback(async () => {
       triggerHaptic("medium");
@@ -209,6 +214,18 @@ export const CommentOptionsSheet = forwardRef<
       onGiveAward?.();
     }, [dismiss, onGiveAward]);
 
+    const handleGiftMirage = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftMirage?.();
+    }, [dismiss, onGiftMirage]);
+
+    const handleGiftSubscription = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftSubscription?.();
+    }, [dismiss, onGiftSubscription]);
+
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -234,7 +251,13 @@ export const CommentOptionsSheet = forwardRef<
             <Text size="lg" weight="bold">
               Options
             </Text>
-            <Pressable onPress={dismiss} style={[styles.closeButton]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close comment options"
+              onPress={dismiss}
+              style={[styles.closeButton]}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}
@@ -246,7 +269,7 @@ export const CommentOptionsSheet = forwardRef<
 
           {/* Menu Items */}
           <View style={styles.menuList}>
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName={
                   isFollowingAuthor
@@ -283,7 +306,7 @@ export const CommentOptionsSheet = forwardRef<
               onPress={handleCopyText}
             />
 
-            {!isOwnComment && onGiveAward && (
+            {comment && !isOwnComment && onGiveAward && (
               <MenuItem
                 iconName="gift-outline"
                 title="Give Award"
@@ -291,7 +314,23 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && onGiftMirage && (
+              <MenuItem
+                iconName="cash-outline"
+                title="Gift Mirage"
+                onPress={handleGiftMirage}
+              />
+            )}
+
+            {comment && !isOwnComment && onGiftSubscription && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Gift Subscription"
+                onPress={handleGiftSubscription}
+              />
+            )}
+
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="ban-outline"
                 title="Block comment"
@@ -300,7 +339,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="ban-outline"
                 title={`Block @${comment?.author.username}`}
@@ -309,7 +348,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="flag-outline"
                 title="Report"
@@ -318,7 +357,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {isOwnComment && (
+            {comment && isOwnComment && (
               <MenuItem
                 iconComponent={Feather}
                 iconName="edit-2"
@@ -327,7 +366,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {isOwnComment && (
+            {comment && isOwnComment && (
               <MenuItem
                 iconComponent={Feather}
                 iconName="trash-2"
@@ -366,7 +405,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   divider: {
-    width: SCREEN_WIDTH,
+    width: Dimensions.get("window").width,
     alignSelf: "center",
     marginBottom: theme.sizing.md,
   },

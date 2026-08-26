@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
@@ -18,10 +18,9 @@ import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import type { FlashQuest } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { usePreferencesStore } from "@/src/stores";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -71,8 +70,7 @@ function SkeletonBox({
 }
 
 function QuestsSummarySkeleton() {
-  const { theme, rt } = useUnistyles();
-  const isLightTheme = rt.themeName !== "dark";
+  const { theme } = useUnistyles();
 
   return (
     <>
@@ -209,7 +207,7 @@ function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
 }
 
 export function QuestsSummaryCard() {
-  const { theme, rt } = useUnistyles();
+  const { theme } = useUnistyles();
   const router = useRouter();
   const { showBars } = useScrollAnimationContext();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -221,8 +219,6 @@ export function QuestsSummaryCard() {
   const setQuestsCardExpanded = usePreferencesStore(
     (s) => s.setQuestsCardExpanded,
   );
-
-  const isLightTheme = rt.themeName !== "dark";
 
   const rotation = useDerivedValue(() => {
     return withTiming(questsCardExpanded ? 0 : 180, { duration: 200 });
@@ -244,6 +240,7 @@ export function QuestsSummaryCard() {
 
   const hasClaimed = useMemo(() => {
     if (!data) return false;
+    if (data.flash_quest && !data.flash_quest.completed) return false;
     return allComplete && data.pending_rewards.length === 0;
   }, [allComplete, data]);
 
@@ -252,7 +249,12 @@ export function QuestsSummaryCard() {
   const totalReward = useMemo(() => {
     const multiplier = data?.reward_multiplier ?? 1;
     return completedQuests.reduce((sum, quest) => {
-      return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
+      const reward = quest.rewards[0];
+      if (!reward || reward.type !== "mirage") return sum;
+      const amount = reward.apply_multiplier !== false
+        ? reward.amount * multiplier
+        : reward.amount;
+      return Math.floor(sum + amount);
     }, 0);
   }, [completedQuests, data?.reward_multiplier]);
 
@@ -264,17 +266,17 @@ export function QuestsSummaryCard() {
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   useEffect(() => {
-    if (questsCardExpanded) {
-      setTimeout(() => triggerScrollToTop(), 100);
-    }
-  }, []);
+    if (!questsCardExpanded) return;
+
+    const timeout = setTimeout(() => triggerScrollToTop(), 100);
+    return () => clearTimeout(timeout);
+  }, [questsCardExpanded, triggerScrollToTop]);
 
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");
     showBars();
     setQuestsCardExpanded(!questsCardExpanded);
-    setTimeout(() => triggerScrollToTop(), 50);
-  }, [questsCardExpanded, setQuestsCardExpanded, showBars, triggerScrollToTop]);
+  }, [questsCardExpanded, setQuestsCardExpanded, showBars]);
 
   if (!isLoggedIn) return null;
   if (!questsEnabled) return null;

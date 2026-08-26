@@ -1,6 +1,6 @@
 import { Text } from "@/src/components/ui/primitives";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ type CommentInputProps = {
   onAddGif?: (url: string) => void;
   isLoggedIn?: boolean;
   onAuthRequired?: () => void;
+  onBeforeOpen?: () => boolean | void;
   disabled?: boolean;
   loading?: boolean;
   replyingTo?: string | null;
@@ -40,6 +41,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
     {
       isLoggedIn = false,
       onAuthRequired,
+      onBeforeOpen,
       disabled = false,
       replyingTo,
      replyingToId,
@@ -60,6 +62,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
 
    const openComposeScreen = useCallback(
       (replyToUsername?: string | null, replyToId?: string | null, replyToContent?: string | null) => {
+       if (onBeforeOpen?.() === false) return;
        if (!isLoggedIn) {
          onAuthRequired?.();
          return;
@@ -77,6 +80,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       [
         isLoggedIn,
         onAuthRequired,
+        onBeforeOpen,
         postId,
         postTitle,
         postAuthorUsername,

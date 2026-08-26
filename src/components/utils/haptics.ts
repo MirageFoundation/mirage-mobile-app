@@ -20,14 +20,59 @@ export interface HapticConfig {
   out?: HapticFeedbackType;
 }
 
+let didWarnUnsupportedHaptics = false;
+
+function isUnsupportedHapticsError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("performhapticsasync") ||
+    message.includes("a haptics engine is not available on this device") ||
+    message.includes("haptics engine is not available")
+  );
+}
+
+function safelyTriggerHaptic(run: () => Promise<void>): void {
+  void run().catch((error) => {
+    if (isUnsupportedHapticsError(error)) {
+      if (!didWarnUnsupportedHaptics) {
+        didWarnUnsupportedHaptics = true;
+        console.warn("[Haptics] Haptics engine unavailable on this device, skipping feedback");
+      }
+      return;
+    }
+
+    console.warn("[Haptics] Failed to trigger feedback:", error);
+  });
+}
+
+function runAndroidHaptic(style: Haptics.AndroidHaptics): void {
+  if (Platform.OS !== "android") {
+    return;
+  }
+
+  safelyTriggerHaptic(() => Haptics.performAndroidHapticsAsync(style));
+}
+
+function runImpact(style: Haptics.ImpactFeedbackStyle): void {
+  safelyTriggerHaptic(() => Haptics.impactAsync(style));
+}
+
+function runNotification(type: Haptics.NotificationFeedbackType): void {
+  safelyTriggerHaptic(() => Haptics.notificationAsync(type));
+}
+
 /**
  * Triggers a light impact haptic feedback
  */
 export const lightImpact = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Tap);
+    runAndroidHaptic(Haptics.AndroidHaptics.Keyboard_Tap);
   } else {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    runImpact(Haptics.ImpactFeedbackStyle.Light);
   }
 };
 
@@ -36,9 +81,9 @@ export const lightImpact = () => {
  */
 export const mediumImpact = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Context_Click);
+    runAndroidHaptic(Haptics.AndroidHaptics.Context_Click);
   } else {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    runImpact(Haptics.ImpactFeedbackStyle.Medium);
   }
 };
 
@@ -47,9 +92,9 @@ export const mediumImpact = () => {
  */
 export const heavyImpact = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Long_Press);
+    runAndroidHaptic(Haptics.AndroidHaptics.Long_Press);
   } else {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    runImpact(Haptics.ImpactFeedbackStyle.Heavy);
   }
 };
 
@@ -58,9 +103,9 @@ export const heavyImpact = () => {
  */
 export const successNotification = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Confirm);
+    runAndroidHaptic(Haptics.AndroidHaptics.Confirm);
   } else {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    runNotification(Haptics.NotificationFeedbackType.Success);
   }
 };
 
@@ -69,9 +114,9 @@ export const successNotification = () => {
  */
 export const warningNotification = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Reject);
+    runAndroidHaptic(Haptics.AndroidHaptics.Reject);
   } else {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    runNotification(Haptics.NotificationFeedbackType.Warning);
   }
 };
 
@@ -80,9 +125,9 @@ export const warningNotification = () => {
  */
 export const errorNotification = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Reject);
+    runAndroidHaptic(Haptics.AndroidHaptics.Reject);
   } else {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    runNotification(Haptics.NotificationFeedbackType.Error);
   }
 };
 
@@ -91,9 +136,9 @@ export const errorNotification = () => {
  */
 export const selection = () => {
   if (Platform.OS === "android") {
-    Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Clock_Tick);
+    runAndroidHaptic(Haptics.AndroidHaptics.Clock_Tick);
   } else {
-    Haptics.selectionAsync();
+    safelyTriggerHaptic(() => Haptics.selectionAsync());
   }
 };
 
@@ -135,24 +180,24 @@ export const triggerHaptic = (type: HapticFeedbackType, disabled?: boolean) => {
  * Android-specific haptic effects for more precise control
  */
 export const androidHaptics = {
-  clockTick: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Clock_Tick),
-  confirm: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Confirm),
-  contextClick: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Context_Click),
-  dragStart: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Drag_Start),
-  gestureEnd: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Gesture_End),
-  gestureStart: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Gesture_Start),
-  keyboardPress: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Press),
-  keyboardRelease: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Release),
-  keyboardTap: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Keyboard_Tap),
-  longPress: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Long_Press),
-  reject: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Reject),
-  segmentFrequentTick: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Segment_Frequent_Tick),
-  segmentTick: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Segment_Tick),
-  textHandleMove: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Text_Handle_Move),
-  toggleOff: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Toggle_Off),
-  toggleOn: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Toggle_On),
-  virtualKey: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Virtual_Key),
-  virtualKeyRelease: () => Platform.OS === "android" && Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Virtual_Key_Release),
+  clockTick: () => runAndroidHaptic(Haptics.AndroidHaptics.Clock_Tick),
+  confirm: () => runAndroidHaptic(Haptics.AndroidHaptics.Confirm),
+  contextClick: () => runAndroidHaptic(Haptics.AndroidHaptics.Context_Click),
+  dragStart: () => runAndroidHaptic(Haptics.AndroidHaptics.Drag_Start),
+  gestureEnd: () => runAndroidHaptic(Haptics.AndroidHaptics.Gesture_End),
+  gestureStart: () => runAndroidHaptic(Haptics.AndroidHaptics.Gesture_Start),
+  keyboardPress: () => runAndroidHaptic(Haptics.AndroidHaptics.Keyboard_Press),
+  keyboardRelease: () => runAndroidHaptic(Haptics.AndroidHaptics.Keyboard_Release),
+  keyboardTap: () => runAndroidHaptic(Haptics.AndroidHaptics.Keyboard_Tap),
+  longPress: () => runAndroidHaptic(Haptics.AndroidHaptics.Long_Press),
+  reject: () => runAndroidHaptic(Haptics.AndroidHaptics.Reject),
+  segmentFrequentTick: () => runAndroidHaptic(Haptics.AndroidHaptics.Segment_Frequent_Tick),
+  segmentTick: () => runAndroidHaptic(Haptics.AndroidHaptics.Segment_Tick),
+  textHandleMove: () => runAndroidHaptic(Haptics.AndroidHaptics.Text_Handle_Move),
+  toggleOff: () => runAndroidHaptic(Haptics.AndroidHaptics.Toggle_Off),
+  toggleOn: () => runAndroidHaptic(Haptics.AndroidHaptics.Toggle_On),
+  virtualKey: () => runAndroidHaptic(Haptics.AndroidHaptics.Virtual_Key),
+  virtualKeyRelease: () => runAndroidHaptic(Haptics.AndroidHaptics.Virtual_Key_Release),
 };
 
 /**

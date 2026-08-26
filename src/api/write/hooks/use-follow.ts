@@ -3,17 +3,76 @@
  */
 
 import { queryKeys } from "@/src/api/read/query-keys";
+import { toggleFollowedTopics } from "@/src/domain/topics";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  followModerator,
   followTopic,
   followUser,
-  unfollowModerator,
   unfollowTopic,
   unfollowUser,
+  enableAgent,
+  disableAgent,
 } from "../endpoints/social";
 import type { PoWProgress, WriteResponse } from "../signing";
+import * as Sentry from "@sentry/react-native";
+import { parseApiError } from "@/src/utils/parse-api-error";
+import { trackEvent } from "@/src/services/analytics";
+import { mutationKeys } from "../mutation-keys";
+
+const addFollowBreadcrumb = (
+  operation: string,
+  data?: Record<string, unknown>,
+) => {
+  Sentry.addBreadcrumb({
+    category: "follow",
+    message: operation,
+    level: "info",
+    data,
+  });
+};
+
+/**
+ * A duplicate follow means the user's intent is already satisfied — keep the
+ * optimistic state instead of rolling back and reporting an error.
+ *
+ * The node's duplicate-follow guard predates its error_code registry and still
+ * responds `{"error": "topic is already followed"}` with no `error_code`
+ * (`routes/core.py` follow_user/follow_topic), so `parseApiError` yields
+ * `errorCode: null` and a code-only check never matches. Match the message text
+ * too, the same way the web client does.
+ */
+function isAlreadyFollowedError(error: unknown, isCurrentlyFollowing: boolean) {
+  if (isCurrentlyFollowing) return false;
+
+  const parsed = parseApiError(error);
+  if (
+    parsed.errorCode === "user_already_followed" ||
+    parsed.errorCode === "topic_already_followed"
+  ) return true;
+
+  return parsed.message.toLowerCase().includes("already follow");
+}
+
+const markPostsStaleAfterFollow = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({
+    queryKey: queryKeys.postsRoot(),
+    refetchType: "none",
+  });
+  queryClient.invalidateQueries({
+    queryKey: queryKeys.postsRoot(),
+    refetchType: "active",
+    predicate: (query) => {
+      // Posts keys are ["server", <url>, "posts", "viewer", <addr>, filters]:
+      // the filters object is the LAST element, not queryKey[1].
+      const filters = query.queryKey.at(-1);
+      return !!filters
+        && typeof filters === "object"
+        && (filters as { feed?: unknown }).feed === "following";
+    },
+  });
+  addFollowBreadcrumb("Posts marked stale; active following feeds refetched");
+};
 
 // ============================================
 // Types
@@ -37,11 +96,13 @@ export function useFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.user(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return followUser(wallet, userAddress, options.onPoWProgress);
     },
     onSuccess: () => {
+      trackEvent("user_followed");
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userFollowed(address),
@@ -50,8 +111,8 @@ export function useFollowUser(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Following affects the feed
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      // Following changes feed composition; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -61,6 +122,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.unfollowUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return unfollowUser(wallet, userAddress, options.onPoWProgress);
@@ -74,7 +136,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -88,11 +150,13 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.topic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return followTopic(wallet, topic, options.onPoWProgress);
     },
     onSuccess: () => {
+      trackEvent("topic_followed");
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userFollowed(address),
@@ -101,8 +165,8 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Topic following affects the feed
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      // Topic follows change feed composition; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -112,6 +176,7 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.unfollowTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return unfollowTopic(wallet, topic, options.onPoWProgress);
@@ -125,23 +190,24 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
 
 // ============================================
-// Moderator Follow Hooks
+// Agent Enable/Disable Hooks
 // ============================================
 
-export function useFollowModerator(options: UseFollowOptions = {}) {
+export function useEnableAgent(options: UseFollowOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
 
   return useMutation({
-    mutationFn: async (moderatorAddress: string) => {
+    mutationKey: mutationKeys.follow.enableAgent(),
+    mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
-      return followModerator(wallet, moderatorAddress, options.onPoWProgress);
+      return enableAgent(wallet, agentAddress, options.onPoWProgress);
     },
     onSuccess: () => {
       if (address) {
@@ -152,20 +218,21 @@ export function useFollowModerator(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Following moderators affects content filtering
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      // Agent changes affect filtering; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
 
-export function useUnfollowModerator(options: UseFollowOptions = {}) {
+export function useDisableAgent(options: UseFollowOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
 
   return useMutation({
-    mutationFn: async (moderatorAddress: string) => {
+    mutationKey: mutationKeys.follow.disableAgent(),
+    mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
-      return unfollowModerator(wallet, moderatorAddress, options.onPoWProgress);
+      return disableAgent(wallet, agentAddress, options.onPoWProgress);
     },
     onSuccess: () => {
       if (address) {
@@ -176,7 +243,7 @@ export function useUnfollowModerator(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -199,6 +266,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.toggleTopic(),
     mutationFn: async ({
       topic,
       isCurrentlyFollowing,
@@ -234,27 +302,32 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         ? queryClient.getQueryData<{
             followed_users: string[];
             followed_topics: string[];
-            followed_moderators: string[];
+            enabled_agents: string[];
           }>(queryKeys.userFollowed(address))
         : undefined;
 
-      // Optimistically update the followed list
+      // Optimistically update the followed list. The entry MUST be normalized:
+      // the server only ever stores lowercase topics, so an entry keyed by the
+      // display casing silently disappears on the next refetch and the button
+      // snaps back to "Follow" (then a retry fails with "already followed").
       if (address) {
         queryClient.setQueryData<{
           followed_users: string[];
           followed_topics: string[];
-          followed_moderators: string[];
+          enabled_agents: string[];
         }>(queryKeys.userFollowed(address), (old) => {
           if (!old) {
             return {
               followed_users: [],
-              followed_topics: isCurrentlyFollowing ? [] : [topic],
-              followed_moderators: [],
+              followed_topics: toggleFollowedTopics([], topic, !isCurrentlyFollowing),
+              enabled_agents: [],
             };
           }
-          const newFollowedTopics = isCurrentlyFollowing
-            ? old.followed_topics.filter((t) => t !== topic)
-            : [...old.followed_topics, topic];
+          const newFollowedTopics = toggleFollowedTopics(
+            old.followed_topics,
+            topic,
+            !isCurrentlyFollowing,
+          );
 
           console.log(
             `[FollowTopic] Optimistic update: ${old.followed_topics.length} -> ${newFollowedTopics.length} topics`
@@ -276,6 +349,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         } ${topic}`
       );
 
+      if (!isCurrentlyFollowing) {
+        trackEvent("topic_followed", { topic });
+      }
+
       // Delay the query invalidation to give the indexer time to process
       setTimeout(() => {
         console.log(`[FollowTopic] Delayed refetch after successful follow`);
@@ -285,38 +362,27 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
             refetchType: "active",
           });
         }
-        queryClient.invalidateQueries({
-          queryKey: ["posts"],
-          refetchType: "active",
-        });
+        markPostsStaleAfterFollow(queryClient);
       }, 5000);
     },
     onError: (err, { topic, isCurrentlyFollowing }, context) => {
-      let errorMessage = String(err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const axiosError = err as any;
-      if (axiosError?.response?.data?.error) {
-        errorMessage = axiosError.response.data.error;
-      }
+      const parsed = parseApiError(err);
+      const errorCode = parsed.errorCode;
 
-      console.log(`[FollowTopic] Error received: ${errorMessage}`);
+      console.log(`[FollowTopic] Error received: ${errorCode ?? parsed.message}`);
 
-      const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorMessage.includes("already followed");
-      const isNotFollowingError =
-        isCurrentlyFollowing &&
-        (errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed"));
-
-      if (isAlreadyFollowedError || isNotFollowingError) {
-        console.log(
-          `[FollowTopic] State already matches desired state, no rollback needed`
-        );
+      if (isAlreadyFollowedError(err, isCurrentlyFollowing)) {
+        addFollowBreadcrumb("Topic already followed; optimistic state kept", {
+          topic,
+        });
         return;
       }
 
-      // Actual error - rollback the optimistic update
-      console.log(`[FollowTopic] Error, rolling back: ${errorMessage}`);
+      Sentry.captureException(err, {
+        tags: { feature: "follow", operation: "follow-topic" },
+        extra: { topic, isCurrentlyFollowing, errorCode, errorMessage: parsed.message },
+      });
+      console.log(`[FollowTopic] Error, rolling back: ${parsed.message}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(
           queryKeys.userFollowed(address),
@@ -324,27 +390,14 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         );
       }
     },
-    onSettled: (_data, error) => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
-        refetchType: "active",
-      });
+    onSettled: (_data, error, { isCurrentlyFollowing }) => {
+      markPostsStaleAfterFollow(queryClient);
 
-      if (error) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const axiosError = error as any;
-        const errorMessage = axiosError?.response?.data?.error || String(error);
-        const isStateMismatch =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed");
-
-        if (!isStateMismatch && address) {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userFollowed(address),
-            refetchType: "none",
-          });
-        }
+      if (error && !isAlreadyFollowedError(error, isCurrentlyFollowing) && address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userFollowed(address),
+          refetchType: "none",
+        });
       }
     },
   });
@@ -363,6 +416,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.toggleUser(),
     mutationFn: async ({
       userAddress,
       isCurrentlyFollowing,
@@ -398,7 +452,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         ? queryClient.getQueryData<{
             followed_users: string[];
             followed_topics: string[];
-            followed_moderators: string[];
+            enabled_agents: string[];
           }>(queryKeys.userFollowed(address))
         : undefined;
 
@@ -407,14 +461,14 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         queryClient.setQueryData<{
           followed_users: string[];
           followed_topics: string[];
-          followed_moderators: string[];
+          enabled_agents: string[];
         }>(queryKeys.userFollowed(address), (old) => {
           if (!old) {
             // If no cache exists, create a new one with just this user
             return {
               followed_users: isCurrentlyFollowing ? [] : [userAddress],
               followed_topics: [],
-              followed_moderators: [],
+              enabled_agents: [],
             };
           }
           const newFollowedUsers = isCurrentlyFollowing
@@ -441,6 +495,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         } ${userAddress}`
       );
 
+      if (!isCurrentlyFollowing) {
+        trackEvent("user_followed");
+      }
+
       // Delay the query invalidation to give the indexer time to process
       // The optimistic update will show the correct state immediately
       // After 5 seconds, we silently refetch to ensure consistency
@@ -456,44 +514,27 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
             refetchType: "none",
           });
         }
-        queryClient.invalidateQueries({
-          queryKey: ["posts"],
-          refetchType: "active",
-        });
+        markPostsStaleAfterFollow(queryClient);
       }, 5000);
     },
     onError: (err, { userAddress, isCurrentlyFollowing }, context) => {
-      // Try to get the actual error message from the API response
-      let errorMessage = String(err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const axiosError = err as any;
-      if (axiosError?.response?.data?.error) {
-        errorMessage = axiosError.response.data.error;
-      }
+      const parsed = parseApiError(err);
+      const errorCode = parsed.errorCode;
 
-      console.log(`[Follow] Error received: ${errorMessage}`);
+      console.log(`[Follow] Error received: ${errorCode ?? parsed.message}`);
 
-      // Check if error is because user is already in the desired state
-      // These aren't real errors - just state mismatches we can handle gracefully
-      const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorMessage.includes("already followed");
-      const isNotFollowingError =
-        isCurrentlyFollowing &&
-        (errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed") ||
-          errorMessage.includes("user not followed"));
-
-      if (isAlreadyFollowedError || isNotFollowingError) {
-        // Not a real error - user is already in the desired state
-        // Don't rollback the optimistic update
-        console.log(
-          `[Follow] State already matches desired state, no rollback needed`
-        );
+      if (isAlreadyFollowedError(err, isCurrentlyFollowing)) {
+        addFollowBreadcrumb("User already followed; optimistic state kept", {
+          userAddress,
+        });
         return;
       }
 
-      // Actual error - rollback the optimistic update
-      console.log(`[Follow] Error, rolling back: ${errorMessage}`);
+      Sentry.captureException(err, {
+        tags: { feature: "follow", operation: "follow-user" },
+        extra: { userAddress, isCurrentlyFollowing, errorCode, errorMessage: parsed.message },
+      });
+      console.log(`[Follow] Error, rolling back: ${parsed.message}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(
           queryKeys.userFollowed(address),
@@ -501,29 +542,14 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         );
       }
     },
-    onSettled: (_data, error) => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
-        refetchType: "active",
-      });
+    onSettled: (_data, error, { isCurrentlyFollowing }) => {
+      markPostsStaleAfterFollow(queryClient);
 
-      if (error) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const axiosError = error as any;
-        const errorMessage = axiosError?.response?.data?.error || String(error);
-        const isStateMismatch =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed") ||
-          errorMessage.includes("user not followed");
-
-        if (!isStateMismatch && address) {
-          // Real error - refetch to get correct state (silent, no indicator)
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userFollowed(address),
-            refetchType: "none",
-          });
-        }
+      if (error && !isAlreadyFollowedError(error, isCurrentlyFollowing) && address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userFollowed(address),
+          refetchType: "none",
+        });
       }
     },
   });

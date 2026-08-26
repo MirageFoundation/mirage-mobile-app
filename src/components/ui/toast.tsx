@@ -7,7 +7,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -18,7 +18,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { Text } from "./primitives";
+
+const TOAST_STACK_ID = "app-toast";
 
 /**
  * Format elapsed time in a compact way
@@ -50,6 +53,8 @@ interface ToastProps {
   currentIndex: number;
   totalCount: number;
   onNext?: () => void;
+  offset: number;
+  onLayout: (event: any) => void;
 }
 
 const ICON_MAP: Record<ToastType, keyof typeof Ionicons.glyphMap> = {
@@ -65,6 +70,8 @@ export const Toast = ({
   currentIndex,
   totalCount,
   onNext,
+  offset,
+  onLayout,
 }: ToastProps) => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -72,6 +79,28 @@ export const Toast = ({
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
   const [elapsedMs, setElapsedMs] = useState(0);
+
+  const handleDismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -50,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 0.95,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onDismiss(toast.id);
+    });
+  }, [onDismiss, opacity, scale, toast.id, translateY]);
 
   // Entrance animation
   useEffect(() => {
@@ -94,7 +123,7 @@ export const Toast = ({
         friction: 12,
       }),
     ]).start();
-  }, []);
+  }, [opacity, scale, translateY]);
 
   // Elapsed time counter for loading toasts
   useEffect(() => {
@@ -115,29 +144,7 @@ export const Toast = ({
       }, toast.duration);
       return () => clearTimeout(timer);
     }
-  }, [toast.duration, toast.id]);
-
-  const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -50,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 0.95,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss(toast.id);
-    });
-  };
+  }, [handleDismiss, toast.duration, toast.id]);
 
   const getIconColor = () => {
     switch (toast.type) {
@@ -149,7 +156,7 @@ export const Toast = ({
         return theme.colors.primary[500];
       case "info":
       default:
-        return theme.colors.text.default;
+        return theme.colors.primary[500];
     }
   };
 
@@ -163,7 +170,7 @@ export const Toast = ({
         return theme.colors.primary[500] + "40";
       case "info":
       default:
-        return theme.colors.border.default;
+        return theme.colors.primary[500] + "40";
     }
   };
 
@@ -176,7 +183,7 @@ export const Toast = ({
       ? {
           intensity: 80,
           tint: isDark ? ("dark" as const) : ("light" as const),
-          style: [styles.blurContainer, { borderColor: getBorderColor() }],
+          style: [styles.blurInner],
         }
       : {
           style: [
@@ -211,19 +218,64 @@ export const Toast = ({
       style={[
         styles.container,
         {
-          top: insets.top + 4,
+          top: insets.top + 4 + offset,
           transform: [{ translateY }, { scale }],
           opacity,
         },
       ]}
     >
       <Pressable
+        onLayout={onLayout}
         onPress={toast.action ? toast.action : toast.type !== "loading" ? handleDismiss : undefined}
         onLongPress={hasMultiple ? onNext : undefined}
       >
+        {Platform.OS === "ios" ? (
+          <View style={[styles.borderWrap, { borderColor: getBorderColor() }]}>
+            <ToastWrapper {...wrapperProps}>
+              <View style={styles.content}>
+                <View style={styles.iconContainer}>
+                  {toast.type === "loading" ? (
+                    <ActivityIndicator size="small" color={getIconColor()} />
+                  ) : (
+                    <Ionicons
+                      name={ICON_MAP[toast.type]}
+                      size={16}
+                      color={getIconColor()}
+                    />
+                  )}
+                </View>
+                <View style={styles.textContainer}>
+                  <Text
+                    size="xs"
+                    weight="semibold"
+                    numberOfLines={2}
+                    style={styles.labelText}
+                  >
+                    {toast.title}
+                  </Text>
+                </View>
+                <View style={styles.rightSection}>
+                  {hasMultiple && (
+                    <Pressable onPress={onNext} style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
+                      <Text size="xs" weight="bold" style={styles.counterText}>
+                        {currentIndex + 1}/{totalCount}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {toast.type === "loading" && (
+                    <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
+                      <Text size="xs" weight="medium" style={styles.timerText}>
+                        {formatElapsedTime(elapsedMs)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </ToastWrapper>
+          </View>
+        ) : (
         <ToastWrapper {...wrapperProps}>
           <View style={styles.content}>
-            {/* Icon */}
             <View style={styles.iconContainer}>
               {toast.type === "loading" ? (
                 <ActivityIndicator size="small" color={getIconColor()} />
@@ -235,17 +287,17 @@ export const Toast = ({
                 />
               )}
             </View>
-
-            {/* Text */}
             <View style={styles.textContainer}>
-              <Text size="xs" weight="semibold" numberOfLines={1}>
+              <Text
+                size="xs"
+                weight="semibold"
+                numberOfLines={2}
+                style={styles.labelText}
+              >
                 {toast.title}
               </Text>
             </View>
-
-            {/* Right side content */}
             <View style={styles.rightSection}>
-              {/* Counter badge for multiple toasts */}
               {hasMultiple && (
                 <Pressable onPress={onNext} style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
                   <Text size="xs" weight="bold" style={styles.counterText}>
@@ -253,8 +305,6 @@ export const Toast = ({
                   </Text>
                 </Pressable>
               )}
-
-              {/* Timer for loading */}
               {toast.type === "loading" && (
                 <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
                   <Text size="xs" weight="medium" style={styles.timerText}>
@@ -262,10 +312,10 @@ export const Toast = ({
                   </Text>
                 </View>
               )}
-
             </View>
           </View>
         </ToastWrapper>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -280,6 +330,8 @@ interface ToastContainerProps {
 }
 
 export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, toasts.length > 0);
+
   if (toasts.length === 0) return null;
 
   // Show oldest toast first (first in array), newest are queued
@@ -300,6 +352,8 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
       currentIndex={0}
       totalCount={toasts.length}
       onNext={handleNext}
+      offset={offset}
+      onLayout={onLayout}
     />
   );
 };
@@ -314,8 +368,17 @@ const styles = StyleSheet.create((theme) => ({
   },
   blurContainer: {
     overflow: "hidden",
-    borderRadius: 9999,
+    borderRadius: 12,
     borderWidth: 1,
+  },
+  blurInner: {
+    overflow: "hidden",
+    borderRadius: 11,
+  },
+  borderWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   content: {
     flexDirection: "row",
@@ -332,6 +395,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   textContainer: {
     flexShrink: 1,
+  },
+  labelText: {
+    flexShrink: 1,
+    flexGrow: 0,
+    fontSize: 12,
   },
   rightSection: {
     flexDirection: "row",

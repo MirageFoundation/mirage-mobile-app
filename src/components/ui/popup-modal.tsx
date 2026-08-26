@@ -88,17 +88,19 @@ const PopupModal = ({
     });
 
     translateY.value = withSpring(0, {
-      damping: 30,
-      stiffness: 400,
+      damping: 36,
+      stiffness: 280,
       mass: 1,
+      overshootClamping: true,
     });
 
     scale.value = withSpring(1, {
-      damping: 35,
-      stiffness: 500,
+      damping: 36,
+      stiffness: 280,
       mass: 1,
+      overshootClamping: true,
     });
-  }, []);
+  }, [backdropOpacity, scale, translateY]);
   const handleClose = () => {
     // Perfectly synchronized exit animation - same duration for both
     const exitDuration = 300;

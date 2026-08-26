@@ -1,11 +1,11 @@
 import { StyleSheet } from "react-native-unistyles";
 import { Box, Text } from "@/primitives";
-import { useUser } from "@/src/services/api";
+import { useAuthStore } from "@/src/stores";
 import BlurView from "../primitives/blur-view";
 import DicebearAvatar from "../dicebear-avatar";
 
 export const HomeHeader = () => {
-  const { data: user } = useUser();
+  const user = useAuthStore((state) => state.user);
 
   return (
     <>

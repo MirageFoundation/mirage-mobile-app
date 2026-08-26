@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Animated as RNAnimated, View } from "react-native";
@@ -110,7 +111,7 @@ export const UserProfileContent = ({
       setCopied(true);
       triggerHaptic("success");
     } catch (error) {
-      console.error("Failed to copy address:", error);
+      Sentry.addBreadcrumb({ category: "user-profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
     }
   }, [walletAddress]);
 
@@ -158,8 +159,8 @@ export const UserProfileContent = ({
             size={80}
             seed={avatarSeed || username}
             source={avatarUrl ? { uri: avatarUrl } : undefined}
-            rounded="full"
-            bordered
+            rounded="sm"
+            paddingRatio={0}
           />
 
           <Box mt="sm">
@@ -307,12 +308,18 @@ export const UserProfileContent = ({
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   gradientContent: {
     width: "100%",
     paddingBottom: theme.spacing.lg,
   },
   profileContentInner: {},
+  profileAvatar: {
+    backgroundColor:
+      rt.themeName === "light" ? "#FFFFFF" : theme.colors.background.subtle,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
+  },
  whiteText: {
    color: "#FFFFFF",
  },

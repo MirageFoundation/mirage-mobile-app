@@ -2,6 +2,10 @@
 export { getParameters, getConfig, getChainConfig, getNodeConfig } from "./parameters";
 export type { GetParametersParams } from "./parameters";
 
+// Bootstrap
+export { getBootstrap } from "./bootstrap";
+export type { BootstrapParams, BootstrapResponse } from "./bootstrap";
+
 // Users
 export {
   getUserStatus,
@@ -29,7 +33,6 @@ export type {
   GetUsernameFromAddressParams,
   GetUsersParams,
   ValidateInviteCodeParams,
-  GetInviteCodesParams,
 } from "./users";
 
 // Posts
@@ -37,16 +40,12 @@ export {
   getPosts,
   getUserPosts,
   getComments,
-  getRootPostId,
-  getCommentContext,
   calculateDisplayPoints,
 } from "./posts";
 export type {
   GetPostsParams,
   GetUserPostsParams,
   GetCommentsParams,
-  GetRootPostIdParams,
-  GetCommentContextParams,
 } from "./posts";
 
 // Inbox
@@ -81,17 +80,11 @@ export type {
 
 // Media Upload
 export {
- getUploadUrl,
- getImageUploadUrl,
- getVideoUploadUrl,
- uploadToSignedUrl,
  uploadImage,
- getImageUrl,
  getContentTypeFromUri,
 } from "./media";
 export type {
  MediaType,
- GetUploadUrlParams,
  UploadImageResult,
 } from "./media";
 
@@ -107,3 +100,14 @@ export type {
   AchievementsResponse,
   GetRewardSummaryParams,
 } from "./rewards";
+
+// Agents
+export { getAgents } from "./agents";
+export type { AgentInfo, AgentsResponse } from "./agents";
+
+// Referrals
+export { getReferralPrecheck, getReferralSummary } from "./referrals";
+export type {
+  GetReferralPrecheckParams,
+  GetReferralSummaryParams,
+} from "./referrals";

@@ -8,7 +8,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useAuthStore } from "@/src/stores";
+import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import { setUsername, type SetUsernameInput } from "../endpoints/username";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 
 // ============================================
@@ -42,13 +44,15 @@ export function useSetUsername(options: UseSetUsernameOptions = {}) {
   const setHasUsername = useAuthStore((s) => s.setHasUsername);
 
   return useMutation({
+    mutationKey: mutationKeys.username.set(),
     mutationFn: async (input: SetUsernameInput) => {
       const wallet = await getWallet();
       return setUsername(wallet, input, options.onPoWProgress);
     },
     onSuccess: (data) => {
+      if (!address || !isCurrentAuthWallet(address)) return;
       // Update local state
-      setHasUsername(true);
+      setHasUsername(true, undefined, address);
 
       // Invalidate related queries
       if (address) {

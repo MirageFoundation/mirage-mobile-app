@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
@@ -10,27 +11,15 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { CONTENT_WARNING_IDS, CONTENT_WARNING_OPTIONS } from "@/src/domain/content";
 import {
   ContentType,
-  isAdultContentEnabled,
+  usePreferencesStore,
 } from "@/src/stores/preferences-store";
-
-type ContentTypeOption = {
-  value: ContentType;
-  label: string;
-  icon: string;
-};
-
-const individualOptions: ContentTypeOption[] = [
-  { value: "sensitive", label: "Sensitive", icon: "warning-outline" },
-  { value: "porn", label: "Porn", icon: "eye-off-outline" },
-  { value: "violence", label: "Violence", icon: "flash-outline" },
-  { value: "gore", label: "Gore", icon: "skull-outline" },
-  { value: "death", label: "Death", icon: "alert-circle-outline" },
-];
 
 type ContentTypeSheetProps = {
   selectedTypes: ContentType[];
+  matureToggleEnabled: boolean;
   onToggle: (type: ContentType) => void;
   onDismiss?: () => void;
 };
@@ -43,17 +32,18 @@ export type ContentTypeSheetRef = {
 export const ContentTypeSheet = forwardRef<
   ContentTypeSheetRef,
   ContentTypeSheetProps
->(({ selectedTypes, onToggle, onDismiss }, ref) => {
-  const bottomSheetRef = useRef<BottomSheet>(null);
+>(({ selectedTypes, matureToggleEnabled, onToggle, onDismiss }, ref) => {
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const setBlurSensitiveMedia = usePreferencesStore((s) => s.setBlurSensitiveMedia);
 
   const present = useCallback(() => {
-    bottomSheetRef.current?.expand();
+    bottomSheetRef.current?.present();
   }, []);
 
   const dismiss = useCallback(() => {
-    bottomSheetRef.current?.close();
+    bottomSheetRef.current?.dismiss();
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -85,165 +75,185 @@ export const ContentTypeSheet = forwardRef<
   const handleSelect = useCallback(
     (type: ContentType) => {
       triggerHaptic("light");
+      if (selectedTypes.length === 0 && type !== "none") {
+        setBlurSensitiveMedia(true);
+      }
       onToggle(type);
     },
-    [onToggle],
+    [onToggle, selectedTypes, setBlurSensitiveMedia],
   );
 
-  const isAllSelected = selectedTypes.includes("all");
+  const isAllSelected = CONTENT_WARNING_IDS.every((type) => selectedTypes.includes(type));
   const isNoneSelected = selectedTypes.length === 0;
 
   const isIndividualSelected = (type: ContentType) => {
-    if (isAllSelected) return true;
     return selectedTypes.includes(type);
   };
 
   return (
-    <BottomSheet
-      ref={bottomSheetRef}
-      index={-1}
-      enableDynamicSizing
-      enablePanDownToClose
-      onChange={handleSheetChanges}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={{ backgroundColor: theme.colors.background.default }}
-      handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
-    >
-      <BottomSheetView
-        style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+    <>
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onChange={handleSheetChanges}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: theme.colors.background.default }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
       >
-        <View style={styles.header}>
-          <Box flex>
-            <Text size="lg" weight="bold">
-              Content Type
-            </Text>
-            <Text size="sm" mode="subtle">
-              Select which content you want to see
-            </Text>
-          </Box>
-          <Pressable
-            onPress={dismiss}
-            style={[
-              styles.closeButton,
-              { backgroundColor: theme.colors.background.subtle },
-            ]}
-          >
-            <Ionicons
-              name="close"
-              size={20}
-              color={theme.colors.text.default}
-            />
-          </Pressable>
-        </View>
-
-        <View style={styles.quickRow}>
-          <Pressable
-            onPress={() => handleSelect("all")}
-            style={[
-              styles.quickButton,
-              {
-                backgroundColor: isAllSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.background.subtle,
-                borderColor: isAllSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.border.default,
-              },
-            ]}
-          >
-            <Ionicons
-              name="globe-outline"
-              size={16}
-              color={isAllSelected ? "#FFFFFF" : theme.colors.text.default}
-            />
-            <Text
-              size="sm"
-              weight="medium"
-              style={{
-                color: isAllSelected ? "#FFFFFF" : theme.colors.text.default,
-              }}
+        <BottomSheetView
+          style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+        >
+          <View style={styles.header}>
+            <Box flex>
+              <Text size="lg" weight="bold">
+                Content Filter
+              </Text>
+              <Text size="sm" mode="subtle">
+                Adult content is hidden by default. You must explicitly enable
+                each category below.
+              </Text>
+            </Box>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close content filter"
+              onPress={dismiss}
+              style={[
+                styles.closeButton,
+                { backgroundColor: theme.colors.background.subtle },
+              ]}
+              hitSlop={6}
             >
-              All
-            </Text>
-          </Pressable>
+              <Ionicons
+                name="close"
+                size={20}
+                color={theme.colors.text.default}
+              />
+            </Pressable>
+          </View>
 
-          <Pressable
-            onPress={() => handleSelect("none")}
-            style={[
-              styles.quickButton,
-              {
-                backgroundColor: isNoneSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.background.subtle,
-                borderColor: isNoneSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.border.default,
-              },
-            ]}
-          >
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={16}
-              color={isNoneSelected ? "#FFFFFF" : theme.colors.text.default}
-            />
-            <Text
-              size="sm"
-              weight="medium"
-              style={{
-                color: isNoneSelected ? "#FFFFFF" : theme.colors.text.default,
-              }}
+          <View style={styles.quickRow}>
+            <Pressable
+              onPress={() => handleSelect("all")}
+              style={[
+                styles.quickButton,
+                {
+                  backgroundColor: isAllSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.background.subtle,
+                  borderColor: isAllSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.border.default,
+                },
+              ]}
             >
-              None
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.optionsList}>
-          {individualOptions.map((option) => {
-            const selected = isIndividualSelected(option.value);
-
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => handleSelect(option.value)}
-                style={({ pressed }) => [
-                  styles.optionItem,
-                  pressed && { opacity: 0.7 },
-                ]}
+              <Ionicons
+                name="globe-outline"
+                size={16}
+                color={isAllSelected ? "#FFFFFF" : theme.colors.text.default}
+              />
+              <Text
+                size="sm"
+                weight="medium"
+                style={{
+                  color: isAllSelected ? "#FFFFFF" : theme.colors.text.default,
+                }}
               >
-                <Box direction="row" alignItems="center" gap="md" flex>
-                  <Ionicons
-                    name={option.icon as any}
-                    size={20}
-                    color={theme.colors.text.default}
-                  />
-                  <Text size="md" weight="regular">
-                    {option.label}
-                  </Text>
-                </Box>
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      backgroundColor: selected
-                        ? "rgb(30,67,150)"
-                        : "transparent",
-                      borderColor: selected
-                        ? "rgb(30,67,150)"
-                        : theme.colors.border.default,
-                    },
-                  ]}
-                >
-                  {selected && (
-                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                All
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleSelect("none")}
+              style={[
+                styles.quickButton,
+                {
+                  backgroundColor: isNoneSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.background.subtle,
+                  borderColor: isNoneSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.border.default,
+                },
+              ]}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={16}
+                color={isNoneSelected ? "#FFFFFF" : theme.colors.text.default}
+              />
+              <Text
+                size="sm"
+                weight="medium"
+                style={{
+                  color: isNoneSelected ? "#FFFFFF" : theme.colors.text.default,
+                }}
+              >
+                None
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.optionsList}>
+            {CONTENT_WARNING_OPTIONS.map((option) => {
+              const selected = isIndividualSelected(option.id);
+              const showNote = option.id === "adult" && selected && !matureToggleEnabled;
+
+              return (
+                <View key={option.id}>
+                  <Pressable
+                    onPress={() => handleSelect(option.id)}
+                    style={({ pressed }) => [
+                      styles.optionItem,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Box direction="row" alignItems="center" gap="md" flex>
+                      <Ionicons
+                        name={option.filterIcon as any}
+                        size={20}
+                        color={theme.colors.text.default}
+                      />
+                      <Text size="md" weight="regular">
+                        {option.label}
+                      </Text>
+                    </Box>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          backgroundColor: selected
+                            ? "rgb(30,67,150)"
+                            : "transparent",
+                          borderColor: selected
+                            ? "rgb(30,67,150)"
+                            : theme.colors.border.default,
+                        },
+                      ]}
+                    >
+                      {selected && (
+                        <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                      )}
+                    </View>
+                  </Pressable>
+                  {showNote && (
+                    <View style={[styles.noteContainer, { backgroundColor: `${theme.colors.warning[500]}15`, borderColor: `${theme.colors.warning[500]}30` }]}>
+                      <Ionicons name="information-circle-outline" size={14} color={theme.colors.warning[500]} />
+                      <Text
+                        size="xs"
+                        style={{ color: theme.colors.warning[500], flex: 1 }}
+                      >
+                        Enable &quot;Show Mature Content&quot; toggle to see adult content
+                      </Text>
+                    </View>
                   )}
                 </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+              );
+            })}
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
+    </>
   );
 });
 
@@ -283,7 +293,6 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
   },
   optionsList: {
-    // paddingTop: theme.spacing.xs,
   },
   optionItem: {
     flexDirection: "row",
@@ -298,5 +307,16 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  noteContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    marginLeft: 0,
+    marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
   },
 }));

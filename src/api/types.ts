@@ -45,21 +45,18 @@ export interface TierInfo {
   period_fee: string;
   vote_weight: number;
   max_content_length: string;
-  max_title_length: string;
   max_followed_users: string;
   max_followed_topics: string;
-  max_followed_mods: string;
   max_blocked_users: string;
   max_blocked_posts: string;
-  max_quality_posts: string;
-  editing_time_mins: string;
-  archive_duration_days: string;
-  award_permissions: number;
-  eligible_for_mod: boolean;
-  can_change_name: boolean;
+  max_blocked_topics: string;
+  max_enabled_agents: string;
+  can_be_agent: boolean;
+  can_remove_anon: boolean;
   can_have_biography: boolean;
   can_have_avatar: boolean;
   can_have_banner: boolean;
+  can_have_flair: boolean;
 }
 
 export interface AwardConfig {
@@ -107,14 +104,21 @@ export type ChainConfigResponse = ConfigResponse;
 
 export interface NodeConfigResponse {
   giphy_api_key: string;
+  auto_enabled_agents?: string[];
+  open_browsing_enabled?: boolean;
   quest_payouts_enabled: boolean;
   quests_enabled: boolean;
   registration_enabled: boolean;
   registration_invite_code_required: boolean;
+  uploads_disabled?: boolean;
+  max_video_bytes?: number;
+  max_video_size_mb?: number;
+  max_video_duration_seconds?: number;
   validator_account_address: string;
   validator_consensus_address: string;
   validator_moniker: string;
   validator_operator_address: string;
+  push_notifications_enabled?: boolean;
 }
 
 // ============================================
@@ -130,12 +134,13 @@ export interface RecentVote {
 export interface UserStatusResponse {
   username: string | null;
   balance: number; // umirage
-  user_level: number; // 0 = free, 1-3 = paid
+  user_level: number; // 0 = free, 1 = subscriber, 10 = agent
   subscription_expiry: number; // unix seconds or 0
   auto_renew: boolean;
   reserve_funds: number; // umirage
   profile_registered_at: number | null; // unix seconds
   recent_votes: RecentVote[];
+  referral_precheck_enabled: boolean;
 }
 
 export interface ProfileResponse {
@@ -146,22 +151,24 @@ export interface ProfileResponse {
   subscription_expiry: number;
   auto_renew: boolean;
   reserve_funds: number;
-  is_moderator: boolean;
   biography: string;
   avatar: string;
   banner: string;
+  flair: string;
 
   // Lists
+  enabled_agents: string[];
   followed_users: string[];
   followed_topics: string[];
-  followed_moderators: string[];
   blocked_users: string[];
   blocked_posts: string[];
-  quality_posts: string[];
+  blocked_topics: string[];
+  balance: number;
 }
 
 export interface UserFollowedResponse {
-  followed_moderators: string[];
+  enabled_agents: string[];
+  auto_enabled_agents?: string[];
   followed_topics: string[];
   followed_users: string[];
 }
@@ -191,6 +198,8 @@ export interface SimilarUsersResponse {
 export interface UserInfo {
   address: string;
   username: string;
+  level?: number;
+  user_is_new?: boolean;
 }
 
 export interface UsersResponse {
@@ -209,6 +218,11 @@ export interface Post {
   post_id: string; // txhash lowercase
   user_id: string; // owner address
   username: string;
+  user_level?: number;
+  level?: number;
+  author_level?: number;
+  new_user?: boolean;
+  author_is_new?: boolean;
   timestamp: number;
   topic: string;
   root_topic: string;
@@ -219,11 +233,28 @@ export interface Post {
   edited_at: number; // 0 if never edited
   thumbnail: string;
   media?: string[];
+  media_meta?: {
+    w?: number;
+    h?: number;
+    poster_url?: string;
+    posterUrl?: string;
+    download_url?: string;
+    downloadUrl?: string;
+  }[];
   points: number;
   comments: number;
   user_vote: number; // -1, 0, 1
   user_weight: number; // viewer's weighted contribution
   awards?: AwardBadge[];
+  agent_edited?: boolean;
+  agent_edits_meta?: Record<string, string>;
+  optimistic_status?: "pending" | "success" | "error";
+  optimistic_error?: string;
+  optimistic_action_id?: string;
+  optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
+  optimistic_video_preview_until?: number;
+  optimistic_cached_until?: number;
+  appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 
 export interface PostsResponse {
@@ -241,16 +272,17 @@ export interface PostWithChildren extends Post {
 export interface CommentsResponse {
   root: PostWithChildren;
   children: PostWithChildren[];
-}
-
-export interface RootPostIdResponse {
-  root_post_id: string;
-  comment_id: string;
-}
-
-export interface CommentContextResponse {
-  context: Post[]; // Array of parent posts
-  comment_id: string;
+  /**
+   * Ancestor chain for `root`, ordered ROOT POST FIRST and ending at the
+   * immediate parent. `[]` when `root` is itself a root post.
+   *
+   * `undefined` is reserved for the synthetic inbox placeholder written before
+   * the network response arrives. Real server responses must include this key,
+   * matching the web client's hard requirement.
+   */
+  ancestors?: PostWithChildren[];
+  /** Visible ancestors elided between the root post and the nearest few. */
+  ancestors_omitted?: number;
 }
 
 // ============================================
@@ -268,8 +300,9 @@ export interface InboxReply {
   parent_content: string;
   parent_owner: string;
   root_post_id: string;
-  type?: "reply" | "mention" | "award";
+  type?: "reply" | "mention" | "award" | "donation" | "follow" | "subscription_gift";
   award_type?: string;
+  amount?: number;
 }
 
 export interface InboxResponse {
@@ -377,7 +410,8 @@ export interface TxStatusResponse {
 export interface WelcomeStatsResponse {
   registered_users: number;
   posts_24h: number;
-  active_24h: number;
+  active_7d: number;
+  active_24h?: number;
 }
 
 export interface DifficultyHistory {
@@ -476,6 +510,7 @@ export interface ReferralNode {
   children: ReferralNode[];
 }
 
+/** @deprecated Use ReferralSummaryResponse instead */
 export interface ReferralStatsResponse {
   pending_total: number;
   paid_total: number;
@@ -484,6 +519,37 @@ export interface ReferralStatsResponse {
   referred_by?: string;
   last_update_ts: number;
   next_update_ts: number;
+}
+
+export interface ReferralPrecheckResponse {
+  valid: boolean;
+  available?: number;
+  error?: string;
+}
+
+export interface ReferralPrecheckOptInResponse {
+  ok: boolean;
+  precheck_enabled: boolean;
+  updated_at: number;
+}
+
+export interface ReferralSummaryItem {
+  address: string;
+  username: string;
+  referred_at: number;
+  posts: number;
+  votes: number;
+  total_actions: number;
+}
+
+export interface ReferralSummaryResponse {
+  referrals: ReferralSummaryItem[];
+  total: number;
+  period_start: number;
+  period_end: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
 // ============================================
@@ -541,6 +607,13 @@ export interface VideoUploadResponse {
   // API may return snake_case
   stream_customer?: string;
   uid: string;
+  url?: string;
+  thumbnail_url?: string;
+  thumbnailUrl?: string;
+  download_url?: string;
+  downloadUrl?: string;
+  poster_url?: string;
+  posterUrl?: string;
 }
 
 export type UploadUrlResponse = ImageUploadResponse | VideoUploadResponse;

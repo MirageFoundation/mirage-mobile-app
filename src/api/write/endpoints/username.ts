@@ -16,13 +16,13 @@ import { withPowRetry } from "../utils/retry-pow";
 
 export interface SetUsernameInput {
   username: string;
-  referrer?: string;
+  referrer_username?: string;
   invite_code?: string;
 }
 
 export interface SetUsernamePayload {
   username: string;
-  referrer?: string;
+  referrer_username?: string;
   invite_code?: string;
   target: string;
 }
@@ -44,7 +44,7 @@ export async function setUsername(
   input: SetUsernameInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { username, referrer, invite_code } = input;
+  const { username, referrer_username, invite_code } = input;
 
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
@@ -57,9 +57,7 @@ export async function setUsername(
       onPoWProgress,
     });
 
-   const body = { ...payload, ...(invite_code && { invite_code }), ...(referrer && { referrer }) };
-
-    console.log("[setUsername] POST body:", JSON.stringify({ invite_code: (body as any).invite_code, referrer: (body as any).referrer }));
+   const body = { ...payload, ...(invite_code && { invite_code }), ...(referrer_username && { referrer_username }) };
 
     return api.post<WriteResponse>("/core/set_username", body);
   }, "setUsername");

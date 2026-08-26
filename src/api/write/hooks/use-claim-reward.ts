@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@/src/hooks/use-wallet";
-import { claimReward, type ClaimRewardInput, type ClaimRewardResponse } from "../endpoints/rewards";
+import { claimReward, type ClaimRewardResponse } from "../endpoints/rewards";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useAuthStore } from "@/src/stores";
-import type { PoWProgress } from "../signing";
+import { mutationKeys } from "../mutation-keys";
+import * as Sentry from "@sentry/react-native";
 
 interface UseClaimRewardOptions {
   onSuccess?: (data: ClaimRewardResponse) => void;
   onError?: (error: Error) => void;
-  onPoWProgress?: (progress: PoWProgress) => void;
 }
 
 export function useClaimReward(options?: UseClaimRewardOptions) {
@@ -17,9 +17,10 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useMutation({
-    mutationFn: async (input: ClaimRewardInput) => {
+    mutationKey: mutationKeys.rewards.claim(),
+    mutationFn: async () => {
       const wallet = await getWallet();
-      return claimReward(wallet, input, options?.onPoWProgress);
+      return claimReward(wallet);
     },
     onSuccess: (data) => {
       if (walletAddress) {
@@ -33,7 +34,9 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
       options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
-      console.error("[useClaimReward] Failed to claim reward:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "rewards", operation: "claim-reward" },
+      });
       options?.onError?.(error);
     },
   });

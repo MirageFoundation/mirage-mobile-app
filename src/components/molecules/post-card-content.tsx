@@ -1,10 +1,10 @@
-import { ContentWarningBadge, type ContentWarningType } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
+import { hasHashtags, parseHashtags } from "@/src/utils/hashtag-parser";
 
 type PostCardContentProps = {
   title: string;
@@ -12,9 +12,9 @@ type PostCardContentProps = {
   displayDomain: string | null;
   bodyVideoUrl: string | null;
   shouldBlurContent: boolean;
-  contentWarnings?: ContentWarningType[];
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
+  disabled?: boolean;
   onRevealContent?: () => void;
   onPlayNowPress?: () => void;
 };
@@ -25,32 +25,25 @@ export const PostCardContent = memo(function PostCardContent({
   displayDomain,
   bodyVideoUrl,
   shouldBlurContent,
-  contentWarnings,
   showUrlCard = true,
+  disabled = false,
   onRevealContent,
   onPlayNowPress,
 }: PostCardContentProps) {
   const { theme } = useUnistyles();
-  const hasContentWarning = contentWarnings && contentWarnings.length > 0;
 
   return (
     <>
-      {hasContentWarning && (
-        <View style={styles.warningBadge}>
-          <ContentWarningBadge
-            types={contentWarnings}
-            onPress={onRevealContent}
-            compact
-          />
-        </View>
-      )}
-
       <Text
         size="lg"
         weight="bold"
         style={styles.title}
       >
-        {hasSpoilers(title) ? parseSpoilers(title) : title}
+        {hasSpoilers(title)
+          ? parseSpoilers(title)
+          : hasHashtags(title)
+          ? parseHashtags(title)
+          : title}
       </Text>
 
       {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
@@ -70,7 +63,7 @@ export const PostCardContent = memo(function PostCardContent({
               {displayDomain}
             </Text>
           </View>
-          <Pressable onPress={onPlayNowPress} style={styles.playNowButton}>
+          <Pressable onPress={disabled ? undefined : onPlayNowPress} disabled={disabled} style={styles.playNowButton}>
             <Text size="sm" weight="semibold" style={styles.playNowText}>
               Play Now
             </Text>
@@ -82,9 +75,6 @@ export const PostCardContent = memo(function PostCardContent({
 });
 
 const styles = StyleSheet.create((theme) => ({
-  warningBadge: {
-    marginTop: theme.spacing.sm,
-  },
   title: {
     marginTop: theme.spacing.xs,
     lineHeight: 20,

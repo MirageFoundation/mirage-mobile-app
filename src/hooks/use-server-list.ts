@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePreferencesStore, type ApiServer } from "@/src/stores";
 import { useMemo, useRef } from "react";
+import { queryKeys } from "@/src/api/read/query-keys";
 import type { PeersResponse } from "@/src/api/types";
 import axios from "axios";
 
@@ -26,7 +27,7 @@ export function useServerList() {
   const lastServersRef = useRef<ApiServer[]>(DEFAULT_SERVERS);
 
   const { data: peersData, isLoading } = useQuery({
-    queryKey: ["peers", "source"],
+    queryKey: queryKeys.peersSource(),
     queryFn: fetchPeersFromSource,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,

@@ -7,6 +7,7 @@
  */
 
 import { api } from "@/src/api/client";
+import type { ContentWarningId } from "@/src/domain/content";
 import type { MirageWallet } from "@/src/wallet";
 import {
   buildSignedEnvelope,
@@ -21,7 +22,7 @@ import { withPowRetry } from "../utils/retry-pow";
 // Types
 // ============================================
 
-export type ContentTag = "" | "sensitive" | "porn" | "gore" | "violence" | "death";
+export type ContentTag = "" | ContentWarningId;
 
 export interface CreatePostInput {
   /** Topic name (required for posts) */
@@ -47,6 +48,8 @@ export interface CreateCommentInput {
   tag?: ContentTag;
   /** Media URLs (max 10) */
   media?: string[];
+  /** Root post txhash for cache updates when replying to nested comments */
+  rootPostId?: string;
 }
 
 export interface EditPostInput {
@@ -69,6 +72,8 @@ export interface EditPostInput {
 export interface DeletePostInput {
   /** txhash of post/comment to delete */
   postId: string;
+  /** Root post txhash when deleting a comment */
+  rootPostId?: string;
 }
 
 // ============================================
@@ -143,6 +148,10 @@ export async function editPost(
 ): Promise<WriteResponse> {
   const { postId, topic = "", title, content, tag = "", parentId = "", media } = input;
 
+  if (!postId) {
+    throw new Error("editPost: postId is required");
+  }
+
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
       wallet,
@@ -150,8 +159,8 @@ export async function editPost(
       payloadFields: {
         target: parentId,
         topic,
-        title,
-        content,
+        title: title || "",
+        content: content || "",
         tag,
         override: postId,
         media: media ?? [],

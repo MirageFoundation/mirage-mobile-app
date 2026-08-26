@@ -8,6 +8,8 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 type SettingRowBaseProps = {
   /** Icon name from Ionicons */
   icon?: string;
+  /** Custom icon element (overrides icon prop) */
+  iconElement?: React.ReactNode;
   /** Setting title */
   title: string;
   /** Optional subtitle/description */
@@ -20,6 +22,7 @@ type SettingRowToggleProps = SettingRowBaseProps & {
   onValueChange: (value: boolean) => void;
   onPress?: never;
   rightText?: never;
+  disabled?: boolean;
 };
 
 type SettingRowNavigateProps = SettingRowBaseProps & {
@@ -28,6 +31,7 @@ type SettingRowNavigateProps = SettingRowBaseProps & {
   rightText?: string;
   value?: never;
   onValueChange?: never;
+  disabled?: boolean;
 };
 
 type SettingRowValueProps = SettingRowBaseProps & {
@@ -36,6 +40,7 @@ type SettingRowValueProps = SettingRowBaseProps & {
   rightText: string;
   value?: never;
   onValueChange?: never;
+  disabled?: boolean;
 };
 
 export type SettingRowProps =
@@ -45,9 +50,12 @@ export type SettingRowProps =
 
 export function SettingRow(props: SettingRowProps) {
   const { theme } = useUnistyles();
-  const { icon, title, subtitle, type } = props;
+  const { icon, title, subtitle, type, iconElement } = props;
+
+  const isDisabled = Boolean(props.disabled);
 
   const handlePress = () => {
+    if (isDisabled) return;
     if (type === "toggle") {
       triggerHaptic("light");
       props.onValueChange(!props.value);
@@ -62,10 +70,12 @@ export function SettingRow(props: SettingRowProps) {
   return (
     <Pressable
       onPress={handlePress}
-      style={({ pressed }) => [styles.container, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.container, pressed && !isDisabled && { opacity: 0.7 }, isDisabled && { opacity: 0.4 }]}
     >
       <Box direction="row" alignItems="flex-start" gap="md" flex>
-        {icon && (
+        {iconElement ? (
+          <Box style={styles.icon}>{iconElement}</Box>
+        ) : icon ? (
           <Ionicons
             name={icon as any}
             size={20}
@@ -77,8 +87,8 @@ export function SettingRow(props: SettingRowProps) {
               },
             ]}
           />
-        )}
-        <Box flex gap="xxs">
+        ) : null}
+        <Box flex gap="xs">
           <Text
             size="md"
             weight="regular"
@@ -102,9 +112,11 @@ export function SettingRow(props: SettingRowProps) {
         <Switch
           value={props.value}
           onValueChange={(value) => {
+            if (isDisabled) return;
             triggerHaptic("light");
             props.onValueChange(value);
           }}
+          disabled={!!isDisabled}
           trackColor={{
             false: theme.colors.background.emphasis,
             true: activeColor,

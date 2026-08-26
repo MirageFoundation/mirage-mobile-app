@@ -5,15 +5,20 @@
  */
 
 import { useCallback, useRef, useState } from "react";
+import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
+import { getVideoMetaData } from "react-native-compressor";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
+import { processVideo } from "@/src/utils/video-processing";
 import {
   uploadImage,
-  uploadVideo,
+  uploadVideo as uploadVideoEndpoint,
   getContentTypeFromUri,
   isVideoFile,
   type UploadImageResult,
   type UploadVideoResult,
   type UploadProgressCallback,
+  type MediaUploadPhase,
 } from "../endpoints/media";
 
 // ============================================
@@ -48,8 +53,82 @@ export interface UseUploadVideoOptions {
 export interface VideoUploadState {
   isUploading: boolean;
   progress: number;
+  phase: MediaUploadPhase | null;
   error: Error | null;
   result: UploadVideoResult | null;
+}
+
+async function prepareVideoForUpload(
+  uri: string,
+  contentType: string,
+  signal?: AbortSignal,
+  onProgress?: UploadProgressCallback,
+): Promise<{ uri: string; contentType: string }> {
+  if (signal?.aborted) {
+    throw new Error("Video upload aborted");
+  }
+
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Preparing video for upload",
+    level: "info",
+    data: {
+      contentType,
+    },
+  });
+  onProgress?.(0, "processing");
+
+  let totalDurationMs: number | undefined;
+  let sourceWidth: number | undefined;
+  let sourceHeight: number | undefined;
+  try {
+    const meta = await getVideoMetaData(uri);
+    const durationSeconds = Math.round(Number(meta.duration) || 0);
+    sourceWidth = Math.round(Number(meta.width) || 0) || undefined;
+    sourceHeight = Math.round(Number(meta.height) || 0) || undefined;
+    totalDurationMs = durationSeconds > 0 ? durationSeconds * 1000 : undefined;
+    onProgress?.(5, "processing");
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload source metadata loaded",
+      level: "info",
+      data: {
+        durationSeconds,
+        sourceWidth,
+        sourceHeight,
+      },
+    });
+  } catch {
+    onProgress?.(5, "processing");
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload source metadata unavailable before compression",
+      level: "warning",
+    });
+  }
+
+  const processed = await processVideo(uri, {
+    compressForUpload: true,
+    failOnCompressionError: true,
+    totalDurationMs,
+    sourceWidth,
+    sourceHeight,
+    onProgress: (progress) => {
+      const processingProgress = Math.round(5 + (progress / 100) * 95);
+      onProgress?.(processingProgress, "processing");
+    },
+  });
+  if (signal?.aborted) {
+    throw new Error("Video upload aborted");
+  }
+
+  const processedContentType = getContentTypeFromUri(processed.uri);
+  return {
+    uri: processed.uri,
+    contentType: processedContentType === "application/octet-stream"
+      ? contentType
+      : processedContentType,
+  };
 }
 
 // ============================================
@@ -61,6 +140,7 @@ export interface VideoUploadState {
  */
 export function useUploadMedia(options: UseUploadMediaOptions = {}) {
   return useMutation({
+    mutationKey: mutationKeys.media.upload(),
     mutationFn: async (input: UploadMediaInput) => {
       const contentType =
         input.contentType ?? getContentTypeFromUri(input.uri);
@@ -92,9 +172,11 @@ export function useUploadMedia(options: UseUploadMediaOptions = {}) {
  * ```
  */
 export function useUploadVideo(options: UseUploadVideoOptions = {}) {
+  const { onError, onProgress, onSuccess } = options;
   const [state, setState] = useState<VideoUploadState>({
     isUploading: false,
     progress: 0,
+    phase: null,
     error: null,
     result: null,
   });
@@ -102,12 +184,19 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleProgress: UploadProgressCallback = useCallback(
-    (progress: number) => {
+    (progress: number, phase?: MediaUploadPhase) => {
       const clampedProgress = Math.min(100, Math.max(0, progress));
-      setState((prev) => ({ ...prev, progress: clampedProgress }));
-      options.onProgress?.(clampedProgress);
+      setState((prev) => ({
+        ...prev,
+        progress:
+          phase && phase !== prev.phase
+            ? clampedProgress
+            : Math.max(prev.progress, clampedProgress),
+        phase: phase ?? prev.phase,
+      }));
+      onProgress?.(clampedProgress, phase);
     },
-    [options.onProgress]
+    [onProgress]
   );
 
   const uploadVideoFn = useCallback(
@@ -115,6 +204,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
       setState({
         isUploading: true,
         progress: 0,
+        phase: "processing",
         error: null,
         result: null,
       });
@@ -124,30 +214,44 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
       try {
         const contentType =
           input.contentType ?? getContentTypeFromUri(input.uri);
+        const preparedVideo = await prepareVideoForUpload(
+          input.uri,
+          contentType,
+          abortControllerRef.current.signal,
+          handleProgress,
+        );
 
-        const result = await uploadVideo(input.uri, contentType, handleProgress);
+        const result = await uploadVideoEndpoint(
+          preparedVideo.uri,
+          preparedVideo.contentType,
+          handleProgress,
+          abortControllerRef.current.signal
+        );
 
         setState((prev) => ({
           ...prev,
           isUploading: false,
           progress: 100,
+          phase: null,
           result,
         }));
 
-        options.onSuccess?.(result);
+        onSuccess?.(result);
         return result;
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Upload failed");
+        Sentry.captureException(err, { tags: { feature: "media-upload", hook: "useUploadMedia" } });
         setState((prev) => ({
           ...prev,
           isUploading: false,
+          phase: null,
           error: err,
         }));
-        options.onError?.(err);
+        onError?.(err);
         throw err;
       }
     },
-    [handleProgress, options]
+    [handleProgress, onError, onSuccess]
   );
 
   const cancelUpload = useCallback(() => {
@@ -155,6 +259,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     setState({
       isUploading: false,
       progress: 0,
+      phase: null,
       error: null,
       result: null,
     });
@@ -164,6 +269,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     setState({
       isUploading: false,
       progress: 0,
+      phase: null,
       error: null,
       result: null,
     });
@@ -173,6 +279,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     uploadVideo: uploadVideoFn,
     isUploading: state.isUploading,
     progress: state.progress,
+    phase: state.phase,
     error: state.error,
     result: state.result,
     cancelUpload,
@@ -190,11 +297,15 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
  * Standalone function for use outside of React components.
  *
  * @param uri - Local file URI
+ * @param onProgress - Optional progress callback
  * @returns The uploaded image URL
  */
-export async function uploadImageAndGetUrl(uri: string): Promise<string> {
+export async function uploadImageAndGetUrl(
+  uri: string,
+  onProgress?: UploadProgressCallback,
+): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadImage(uri, contentType);
+  const result = await uploadImage(uri, contentType, onProgress);
   return result.url;
 }
 
@@ -209,10 +320,33 @@ export async function uploadImageAndGetUrl(uri: string): Promise<string> {
  */
 export async function uploadVideoAndGetUrl(
   uri: string,
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadVideo(uri, contentType, onProgress);
+  let currentPhase: MediaUploadPhase | undefined;
+  let highestProgress = 0;
+  const reportProgress: UploadProgressCallback = (progress, phase) => {
+    if (phase && phase !== currentPhase) {
+      currentPhase = phase;
+      highestProgress = progress;
+    } else {
+      highestProgress = Math.max(highestProgress, progress);
+    }
+    onProgress?.(highestProgress, phase);
+  };
+  const preparedVideo = await prepareVideoForUpload(
+    uri,
+    contentType,
+    signal,
+    reportProgress,
+  );
+  const result = await uploadVideoEndpoint(
+    preparedVideo.uri,
+    preparedVideo.contentType,
+    reportProgress,
+    signal,
+  );
   return result.url;
 }
 

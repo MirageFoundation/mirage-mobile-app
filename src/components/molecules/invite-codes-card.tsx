@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {

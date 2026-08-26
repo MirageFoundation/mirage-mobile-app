@@ -127,17 +127,19 @@ const SimpleSheetNavigator: React.FC<SheetNavigatorProps> = ({
       // Entrance animation
       backdropOpacity.value = withTiming(1, { duration: 200 });
       translateY.value = withSpring(0, {
-        damping: 30,
-        stiffness: 400,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
       scale.value = withSpring(1, {
-        damping: 35,
-        stiffness: 500,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
     }
-  }, [visible, backdropOpacity, translateY, scale]);
+  }, [visible, backdropOpacity, translateY, scale, currentContentOpacity, currentContentTranslateX]);
 
   const handleClose = () => {
     // Simplified close without runOnJS to prevent crashes
@@ -182,7 +184,7 @@ const SimpleSheetNavigator: React.FC<SheetNavigatorProps> = ({
       
       prevStepIndex.value = currentIndex;
     }
-  }, [navigation.currentStepIndex]);
+  }, [currentContentOpacity, currentContentTranslateX, navigation.currentStepIndex, prevStepIndex]);
 
 
 

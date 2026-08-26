@@ -14,8 +14,8 @@ import {
 
 import { Text } from "@/src/components/ui/primitives";
 import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
-import { formatCompactNumber } from "@/src/utils/format-number";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { FeedDensityToggle } from "./feed-density-toggle";
 
 type FeedOption = {
   label: string;
@@ -31,7 +31,24 @@ type FeedHeaderProps = {
   feedType?: string;
   feedOptions?: FeedOption[];
   onFeedTypeChange?: (value: string) => void;
+  borderBottomColor?: string;
 };
+
+type AppIconProps = {
+  isDark: boolean;
+};
+
+const AppIcon = ({ isDark }: AppIconProps) => (
+  <Image
+    source={
+      isDark
+        ? require("@/assets/images/app-dark-icon.png")
+        : require("@/assets/images/app-icon.png")
+    }
+    style={styles.appIcon}
+    resizeMode="contain"
+  />
+);
 
 export const FeedHeader = ({
   title,
@@ -42,6 +59,7 @@ export const FeedHeader = ({
   feedType,
   feedOptions,
   onFeedTypeChange,
+  borderBottomColor,
 }: FeedHeaderProps) => {
   const insets = useSafeAreaInsets();
   const { theme, rt } = useUnistyles();
@@ -54,21 +72,14 @@ export const FeedHeader = ({
   const hasFeedOptions =
     feedOptions && feedOptions.length > 0 && onFeedTypeChange;
 
-  const AppIcon = () => (
-    <Image
-      source={
-        isDark
-          ? require("@/assets/images/app-dark-icon.png")
-          : require("@/assets/images/app-icon.png")
-      }
-      style={styles.appIcon}
-      resizeMode="contain"
-    />
-  );
-
   return (
     <Animated.View
-      style={[styles.container, { paddingTop: insets.top }, animatedStyle]}
+      style={[
+        styles.container,
+        { paddingTop: insets.top },
+        borderBottomColor ? { borderBottomColor } : null,
+        animatedStyle,
+      ]}
     >
       <View style={styles.content}>
         <View style={[styles.leftSection, !onMenuPress && { paddingLeft: 12 }]}>
@@ -84,7 +95,7 @@ export const FeedHeader = ({
 
           {hasFeedOptions ? (
             <View style={styles.titleButton}>
-              <AppIcon />
+              <AppIcon isDark={isDark} />
               <Text size="xl" weight="bold">
                 {title}
               </Text>
@@ -188,7 +199,7 @@ export const FeedHeader = ({
             </View>
           ) : (
             <View style={styles.titleButton}>
-              <AppIcon />
+              <AppIcon isDark={isDark} />
               <Text size="xl" weight="bold">
                 {title}
               </Text>
@@ -197,6 +208,7 @@ export const FeedHeader = ({
         </View>
 
         <View style={styles.rightSection}>
+          <FeedDensityToggle />
           <AnimatedPressable
             scaleAmount={0.85}
             onPress={onSearchPress}

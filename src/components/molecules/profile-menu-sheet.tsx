@@ -1,7 +1,8 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import {
@@ -11,7 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { Platform, Pressable, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -99,17 +100,17 @@ export const ProfileMenuSheet = forwardRef<
     },
     ref,
   ) => {
-    const bottomSheetRef = useRef<BottomSheet>(null);
+    const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [onlineStatus, setOnlineStatus] = useState(isOnline);
 
     const present = useCallback(() => {
-      bottomSheetRef.current?.expand();
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {
-      bottomSheetRef.current?.close();
+      bottomSheetRef.current?.dismiss();
     }, []);
 
     useImperativeHandle(ref, () => ({
@@ -186,9 +187,8 @@ export const ProfileMenuSheet = forwardRef<
     const activeColor = "rgb(29, 68, 150)";
 
     return (
-      <BottomSheet
+      <BottomSheetModal
         ref={bottomSheetRef}
-        index={-1}
         enableDynamicSizing
         enablePanDownToClose
         onChange={handleSheetChanges}
@@ -205,11 +205,14 @@ export const ProfileMenuSheet = forwardRef<
               My Account
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close account menu"
               onPress={dismiss}
               style={[
                 styles.closeButton,
                 { backgroundColor: theme.colors.background.subtle },
               ]}
+              hitSlop={6}
             >
               <Ionicons
                 name="close"
@@ -227,11 +230,13 @@ export const ProfileMenuSheet = forwardRef<
               onPress={handleSettings}
             />
 
-            <MenuItem
-              iconName="card-outline"
-              title="Subscription"
-              onPress={handleSubscription}
-            />
+            {Platform.OS !== "ios" && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Perks"
+                onPress={handleSubscription}
+              />
+            )}
 
             <MenuItem
               iconName="globe-outline"
@@ -275,7 +280,7 @@ export const ProfileMenuSheet = forwardRef<
             />
           </View>
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
     );
   },
 );

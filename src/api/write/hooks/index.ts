@@ -22,7 +22,7 @@ export {
   useEdit,
   useDelete,
 } from "./use-post";
-export type { CreatePostMutationInput, UsePostOptions } from "./use-post";
+export type { CreatePostMutationInput, EditPostMutationInput, UsePostOptions } from "./use-post";
 
 // Follow
 export {
@@ -30,12 +30,19 @@ export {
   useUnfollowUser,
   useFollowTopic,
   useUnfollowTopic,
-  useFollowModerator,
-  useUnfollowModerator,
+  useEnableAgent,
+  useDisableAgent,
   useToggleFollowUser,
   useToggleFollowTopic,
 } from "./use-follow";
 export type { UseFollowOptions, ToggleFollowUserParams, ToggleFollowTopicParams } from "./use-follow";
+
+// Agents
+export { useSetAgents } from "./use-set-agents";
+export { useAnnotate } from "./use-annotate";
+
+// Biography
+export { useSetBiography } from "./use-set-biography";
 
 // Block
 export {
@@ -68,3 +75,6 @@ export { useDeleteUser } from "./use-delete-user";
 
 // Award
 export { useGiveAward } from "./use-award";
+
+// Gift Subscription
+export { useGiftSubscription } from "./use-gift-subscription";

@@ -1,16 +1,14 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import {
+ CONTENT_WARNING_CONFIG,
+ type ContentWarningType,
+} from "@/src/domain/content";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-export type ContentWarningType = 
-  | "sensitive" 
-  | "porn" 
-  | "violence" 
-  | "gore" 
-  | "death"
-  | "nsfw";
+export type { ContentWarningType } from "@/src/domain/content";
 
 type ContentWarningBadgeProps = {
   /** Warning types to display */
@@ -21,15 +19,6 @@ type ContentWarningBadgeProps = {
   onPress?: () => void;
   /** Whether to show as a compact single badge */
   compact?: boolean;
-};
-
-const WARNING_CONFIG: Record<ContentWarningType, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {
-  sensitive: { label: "Sensitive", icon: "alert-circle", color: "warning" },
-  porn: { label: "Porn", icon: "eye-off", color: "error" },
-  violence: { label: "Violence", icon: "warning", color: "error" },
-  gore: { label: "Gore", icon: "skull", color: "error" },
-  death: { label: "Death", icon: "skull-outline", color: "error" },
-  nsfw: { label: "NSFW", icon: "eye-off-outline", color: "error" },
 };
 
 export const ContentWarningBadge = ({
@@ -64,14 +53,15 @@ export const ContentWarningBadge = ({
   // Compact mode: show single badge with primary warning
   if (compact) {
     const primaryType = types[0];
-    const config = WARNING_CONFIG[primaryType];
-    const badgeColor = getColor(config.color);
+    const config = CONTENT_WARNING_CONFIG[primaryType];
+    const badgeColor = getColor(config.badgeTone);
     const label = types.length > 1 
       ? `${config.label} +${types.length - 1}` 
       : config.label;
 
+    const Wrapper = onPress ? Pressable : View;
     return (
-      <Pressable onPress={onPress ? handlePress : undefined}>
+      <Wrapper onPress={onPress ? handlePress : undefined}>
         <View 
           style={[
             styles.badge, 
@@ -79,7 +69,7 @@ export const ContentWarningBadge = ({
             { backgroundColor: `${badgeColor}20`, borderColor: badgeColor }
           ]}
         >
-          <Ionicons name={config.icon} size={iconSize} color={badgeColor} />
+          <Ionicons name={config.badgeIcon as keyof typeof Ionicons.glyphMap} size={iconSize} color={badgeColor} />
           <Text 
             size={textSize as any} 
             weight="medium" 
@@ -88,17 +78,18 @@ export const ContentWarningBadge = ({
             {label}
           </Text>
         </View>
-      </Pressable>
+      </Wrapper>
     );
   }
 
   // Expanded mode: show all badges
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <Pressable onPress={onPress ? handlePress : undefined}>
+    <Wrapper onPress={onPress ? handlePress : undefined}>
       <View style={styles.container}>
         {types.map((type) => {
-          const config = WARNING_CONFIG[type];
-          const badgeColor = getColor(config.color);
+          const config = CONTENT_WARNING_CONFIG[type];
+          const badgeColor = getColor(config.badgeTone);
 
           return (
             <View 
@@ -109,7 +100,7 @@ export const ContentWarningBadge = ({
                 { backgroundColor: `${badgeColor}20`, borderColor: badgeColor }
               ]}
             >
-              <Ionicons name={config.icon} size={iconSize} color={badgeColor} />
+              <Ionicons name={config.badgeIcon as keyof typeof Ionicons.glyphMap} size={iconSize} color={badgeColor} />
               <Text 
                 size={textSize as any} 
                 weight="medium" 
@@ -121,7 +112,7 @@ export const ContentWarningBadge = ({
           );
         })}
       </View>
-    </Pressable>
+    </Wrapper>
   );
 };
 
@@ -142,7 +133,7 @@ export const ContentWarningChip = ({
   size = "md",
 }: ContentWarningChipProps) => {
   const { theme } = useUnistyles();
-  const config = WARNING_CONFIG[type];
+  const config = CONTENT_WARNING_CONFIG[type];
 
   const handlePress = () => {
     triggerHaptic("selection");
@@ -162,7 +153,7 @@ export const ContentWarningChip = ({
           selected && styles.chipSelected,
         ]}
       >
-        <Ionicons name={config.icon} size={iconSize} color={color} />
+        <Ionicons name={config.badgeIcon as keyof typeof Ionicons.glyphMap} size={iconSize} color={color} />
         <Text 
           size={textSize as any}
           weight={selected ? "semibold" : "medium"}

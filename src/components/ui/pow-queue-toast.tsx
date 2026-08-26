@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -10,15 +10,27 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import * as Sentry from "@sentry/react-native";
 
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
+import { createPowQueueToastPresentationSelector } from "@/src/services/pow-queue-toast-presentation";
 import { getPowProgress } from "@/src/wallet";
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
+import { useIsConnected } from "@/src/hooks/use-network-state";
 import { Text } from "./primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
+const TOAST_MIN_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
+const TOAST_MAX_WIDTH = Math.round(SCREEN_WIDTH * 0.6);
+const TOAST_STACK_ID = "pow-queue-toast";
+const EMPTY_STATE_DISMISS_DELAY_MS = 400;
+const RESULT_DISPLAY_DURATION_MS = 500;
+const VOTE_RESULT_DISPLAY_DURATION_MS = 500;
+const ERROR_RESULT_DISPLAY_DURATION_MS = 1000;
 
 type PowPhase = "preparing" | "solving" | "submitting";
+
+const VOTE_ACTION_TYPES = new Set(["upvote", "downvote", "remove_vote"]);
 
 const PHASE_LABEL: Record<PowPhase, string> = {
   preparing: "Preparing…",
@@ -46,50 +58,101 @@ const formatHashRate = (rate: number): string => {
 export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const isConnected = useIsConnected();
+  const presentationSelectorRef = useRef(
+    createPowQueueToastPresentationSelector(),
+  );
 
   const {
-    isProcessing,
     currentAction,
+    preparingAction,
+    nextAction,
+    hasVisibleWork,
     completedCount,
     totalCount,
     lastCompletedAction,
     successOverlay,
-    queue,
-  } = usePowQueueStore();
+  } = usePowQueueStore(presentationSelectorRef.current);
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
 
   const [elapsedMs, setElapsedMs] = useState(0);
   const [hashRate, setHashRate] = useState(0);
   const [phase, setPhase] = useState<PowPhase>("preparing");
   const [isVisible, setIsVisible] = useState(false);
-  const [overlayData, setOverlayData] = useState<{
+  const [transientResultAction, setTransientResultAction] = useState<{
     type: string;
     success: boolean;
-   elapsedMs: number;
-   hashRate: number;
+    errorMessage?: string;
+    skippedPoW?: boolean;
+    elapsedMs: number;
+    hashRate: number;
   } | null>(null);
+  const [displayedCompletedAction, setDisplayedCompletedAction] = useState<
+    typeof lastCompletedAction
+  >(null);
 
   const isAnimatingOutRef = useRef(false);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transientResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powStartedRef = useRef(false);
+  const activeActionStartedAtRef = useRef(Date.now());
+  const staleProgressBreadcrumbSentRef = useRef(false);
   const lastElapsedMsRef = useRef(0);
   const lastHashRateRef = useRef(0);
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
+  const hasPendingWork = hasVisibleWork;
+  const resultAction = lastCompletedAction ?? displayedCompletedAction;
+  const immediateResultAction = successOverlay
+    ? {
+        ...successOverlay,
+        elapsedMs: lastElapsedMsRef.current,
+        hashRate: lastHashRateRef.current,
+      }
+    : null;
+  const activeResultAction =
+    transientResultAction ?? immediateResultAction ?? resultAction;
+  const isVoteResult =
+    activeResultAction !== null && VOTE_ACTION_TYPES.has(activeResultAction.type);
+  const isErrorResult =
+    activeResultAction !== null && !activeResultAction.success;
+  const resultDisplayDurationMs = isErrorResult
+    ? ERROR_RESULT_DISPLAY_DURATION_MS
+    : isVoteResult
+      ? VOTE_RESULT_DISPLAY_DURATION_MS
+      : RESULT_DISPLAY_DURATION_MS;
+  const hasInlineResultOverlay =
+    transientResultAction !== null || immediateResultAction !== null;
   const isShowingResult =
-    currentAction === null && lastCompletedAction !== null;
-  const isShowingProcessing = currentAction !== null;
+    activeResultAction !== null && (!hasVisibleWork || hasInlineResultOverlay);
+  const hasActiveResultAction = activeResultAction !== null;
+  const isShowingProcessing = hasPendingWork && !isShowingResult;
+  const isShowingPreparingAction =
+    isShowingProcessing && preparingAction !== null && currentAction === null;
+  const isOfflineProcessing = isShowingProcessing && !isConnected;
+  const activeActionKey = currentAction
+    ? `current:${currentAction.id}`
+    : preparingAction
+      ? `preparing:${preparingAction.id}`
+      : null;
 
   const displayLabel = isShowingResult
-    ? lastCompletedAction.success
-      ? getSuccessLabel(lastCompletedAction.type)
-      : "Failed"
-    : currentAction?.label || queue[0]?.label || "Processing…";
+    ? activeResultAction.success
+      ? getSuccessLabel(activeResultAction.type as any)
+      : activeResultAction.errorMessage || "Failed"
+    : currentAction?.label ||
+      preparingAction?.label ||
+      nextAction?.label ||
+      (activeResultAction
+        ? activeResultAction.success
+          ? getSuccessLabel(activeResultAction.type as any)
+          : activeResultAction.errorMessage || "Failed"
+        : "Processing…");
 
-  const animateIn = () => {
+  const animateIn = useCallback(() => {
     isAnimatingOutRef.current = false;
     Animated.parallel([
       Animated.spring(translateY, {
@@ -110,9 +173,9 @@ export const PowQueueToast = () => {
         friction: 12,
       }),
     ]).start();
-  };
+  }, [opacity, scale, translateY]);
 
-  const animateOut = () => {
+  const animateOut = useCallback(() => {
     if (isAnimatingOutRef.current) return;
     isAnimatingOutRef.current = true;
 
@@ -134,68 +197,110 @@ export const PowQueueToast = () => {
       }),
     ]).start(() => {
       setIsVisible(false);
+      setTransientResultAction(null);
+      setDisplayedCompletedAction(null);
       isAnimatingOutRef.current = false;
     });
-  };
+  }, [opacity, scale, translateY]);
 
   useEffect(() => {
-    if (isProcessing && !isVisible) {
+    if (lastCompletedAction) {
+      setDisplayedCompletedAction(lastCompletedAction);
+    }
+  }, [lastCompletedAction]);
+
+  useEffect(() => {
+    if (!successOverlay) {
+      return;
+    }
+
+    setTransientResultAction({
+      ...successOverlay,
+      elapsedMs: lastElapsedMsRef.current,
+      hashRate: lastHashRateRef.current,
+    });
+
+    if (transientResultTimeoutRef.current) {
+      clearTimeout(transientResultTimeoutRef.current);
+    }
+
+    const durationMs = !successOverlay.success
+      ? ERROR_RESULT_DISPLAY_DURATION_MS
+      : VOTE_ACTION_TYPES.has(successOverlay.type)
+        ? VOTE_RESULT_DISPLAY_DURATION_MS
+        : RESULT_DISPLAY_DURATION_MS;
+
+    transientResultTimeoutRef.current = setTimeout(() => {
+      setTransientResultAction(null);
+      transientResultTimeoutRef.current = null;
+    }, durationMs);
+    // NOTE: deliberately no cleanup that clears the timeout here.
+    // The store clears `successOverlay` ~500ms after success, which re-runs
+    // this effect. If cleanup cleared the timer, the timer would be killed
+    // before it could reset `transientResultAction`, leaving the toast stuck
+    // on the previous success state until the NEXT action succeeds (which
+    // on free tier with PoW can be many seconds away). The timer is reset
+    // on the next non-null `successOverlay` (above), and on unmount via
+    // the dedicated unmount-only effect below.
+  }, [successOverlay]);
+
+  // Clear the transient-result timeout on unmount only.
+  useEffect(() => {
+    return () => {
+      if (transientResultTimeoutRef.current) {
+        clearTimeout(transientResultTimeoutRef.current);
+        transientResultTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if ((hasPendingWork || successOverlay) && !isVisible) {
       setIsVisible(true);
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      activeActionStartedAtRef.current = Date.now();
+      staleProgressBreadcrumbSentRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
       animateIn();
     }
-  }, [isProcessing, isVisible]);
+  }, [animateIn, hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
-    if (currentAction) {
+    if (activeActionKey) {
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      activeActionStartedAtRef.current = Date.now();
+      staleProgressBreadcrumbSentRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
+      setTransientResultAction(null);
+      setDisplayedCompletedAction(null);
     }
-  }, [currentAction?.id]);
+  }, [activeActionKey]);
 
   useEffect(() => {
-    if (successOverlay) {
-     setOverlayData({
-       ...successOverlay,
-       elapsedMs: lastElapsedMsRef.current,
-       hashRate: lastHashRateRef.current,
-     });
-      overlayOpacity.setValue(0);
-      Animated.sequence([
-        Animated.timing(overlayOpacity, {
-          toValue: 1,
-          duration: 120,
-          useNativeDriver: true,
-        }),
-        Animated.delay(1200),
-        Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 350,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setOverlayData(null);
-      });
-    }
-  }, [successOverlay]);
-
-  useEffect(() => {
-    if (!isProcessing && !currentAction && isVisible) {
+    if (!hasPendingWork && isVisible) {
       if (dismissTimeoutRef.current) {
         clearTimeout(dismissTimeoutRef.current);
       }
-      if (lastCompletedAction) {
-        dismissTimeoutRef.current = setTimeout(() => {
+
+      dismissTimeoutRef.current = setTimeout(() => {
+        const state = usePowQueueStore.getState();
+        const hasVisibleWork =
+          state.currentAction?.showProgress !== false && state.currentAction !== null ||
+          state.preparingAction?.showProgress !== false && state.preparingAction !== null ||
+          state.queue.some((action) => action.showProgress !== false);
+
+        if (!hasVisibleWork) {
           animateOut();
-        }, 1000);
-      } else {
-        animateOut();
-      }
+        }
+      }, hasActiveResultAction ? resultDisplayDurationMs : EMPTY_STATE_DISMISS_DELAY_MS);
     }
 
     return () => {
@@ -203,14 +308,36 @@ export const PowQueueToast = () => {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
-  }, [isProcessing, currentAction, lastCompletedAction, isVisible]);
+  }, [animateOut, hasActiveResultAction, hasPendingWork, isVisible, resultDisplayDurationMs]);
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
+      if (isShowingPreparingAction) return;
+      if (!isConnected) return;
+
       const interval = setInterval(async () => {
         try {
           const progress = await getPowProgress();
           const { elapsedMs: elapsed, attempts: att } = progress;
+          const actionElapsedMs = Date.now() - activeActionStartedAtRef.current;
+          if (elapsed > actionElapsedMs + 1000) {
+            if (!staleProgressBreadcrumbSentRef.current) {
+              staleProgressBreadcrumbSentRef.current = true;
+              Sentry.addBreadcrumb({
+                category: "pow",
+                message: "Ignored stale native PoW progress for new action",
+                level: "info",
+                data: {
+                  actionElapsedMs,
+                  nativeElapsedMs: elapsed,
+                  attempts: att,
+                  actionType: currentAction?.type,
+                  actionId: currentAction?.id,
+                },
+              });
+            }
+            return;
+          }
 
           if (att > 0 && !powStartedRef.current) {
             powStartedRef.current = true;
@@ -228,21 +355,28 @@ export const PowQueueToast = () => {
             }
           }
         } catch {
-          if (powStartedRef.current) {
+          if (powStartedRef.current && isConnected) {
             setElapsedMs((prev) => prev + 200);
           }
         }
       }, 200);
       return () => clearInterval(interval);
     }
-  }, [isShowingProcessing, isVisible]);
+  }, [
+    isConnected,
+    isShowingPreparingAction,
+    isShowingProcessing,
+    isVisible,
+    currentAction?.id,
+    currentAction?.type,
+  ]);
 
   if (!isVisible) return null;
 
   const isDark = rt.themeName === "dark";
 
   const getColors = (forOverlay?: { success: boolean }) => {
-    const target = forOverlay || (isShowingResult ? lastCompletedAction : null);
+    const target = forOverlay || (isShowingResult ? activeResultAction : null);
     if (target) {
       if (target.success) {
         return {
@@ -258,11 +392,16 @@ export const PowQueueToast = () => {
     }
     return {
       icon: theme.colors.primary[500],
-      border: theme.colors.primary[500] + "40",
+      border: isDark
+        ? theme.colors.primary[500] + "40"
+        : theme.colors.border.default,
     };
   };
 
   const colors = getColors();
+  const baseBackgroundColor = isDark
+    ? "rgba(45, 48, 55, 0.92)"
+    : "rgba(255, 255, 255, 0.92)";
 
   const hasMultiple = totalCount > 1;
 
@@ -272,7 +411,7 @@ export const PowQueueToast = () => {
 
   const renderIcon = () => {
     if (isShowingResult) {
-      if (lastCompletedAction.success) {
+      if (activeResultAction?.success) {
         return (
           <Ionicons name="checkmark-circle" size={18} color={colors.icon} />
         );
@@ -283,9 +422,22 @@ export const PowQueueToast = () => {
     return <ActivityIndicator size={12} color={colors.icon} />;
   };
 
+  const resultElapsedMs =
+    transientResultAction?.elapsedMs ??
+    immediateResultAction?.elapsedMs ??
+    lastElapsedMsRef.current;
+  const resultHashRate =
+    transientResultAction?.hashRate ??
+    immediateResultAction?.hashRate ??
+    lastHashRateRef.current;
+
   const showStats =
-    (isShowingProcessing && phase === "solving" && elapsedMs > 0) ||
-    (isShowingResult && lastElapsedMsRef.current > 0);
+    (isShowingProcessing && !isOfflineProcessing && phase === "solving" && elapsedMs > 0) ||
+    (isShowingResult && resultElapsedMs > 0);
+  const displayedPhase =
+    isShowingPreparingAction && preparingAction?.phase === "submitting"
+      ? "submitting"
+      : phase;
 
   const renderToastContent = (wrapperProps: any) => {
     const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
@@ -294,50 +446,60 @@ export const PowQueueToast = () => {
         <View style={styles.content}>
           <View style={styles.headerRow}>
             <View style={styles.iconContainer}>{renderIcon()}</View>
-            <Text
-              size="xs"
-              weight="semibold"
-              numberOfLines={1}
-              style={styles.labelText}
-            >
-              {displayLabel}
-            </Text>
-            {hasMultiple && isShowingProcessing && (
+            <View style={styles.textContainer}>
               <Text
                 size="xs"
-                weight="bold"
-                style={{
-                  color: statColor,
-                  fontSize: 9,
-                  fontVariant: ["tabular-nums"] as any,
-                }}
+                weight="semibold"
+                numberOfLines={2}
+                style={styles.labelText}
               >
-                {currentIndex}/{totalCount}
+                {displayLabel}
               </Text>
-            )}
+            </View>
+            <View style={styles.rightSection}>
+              {hasMultiple && isShowingProcessing && (
+                <Text
+                  size="xs"
+                  weight="bold"
+                  style={{
+                    color: statColor,
+                    fontSize: 9,
+                    fontVariant: ["tabular-nums"] as any,
+                  }}
+                >
+                  {currentIndex}/{totalCount}
+                </Text>
+              )}
+            </View>
           </View>
 
-          {(isShowingProcessing || isShowingResult) && !overlayData && (
-            <Text style={[styles.phaseText, { color: statColor }]}>
+          {(isShowingProcessing || isShowingResult) && (
+            <Text style={[styles.phaseText, { color: statColor }]}> 
               {isShowingResult
-                ? lastCompletedAction.success
-                  ? "PoW Solved"
-                  : "PoW Failed"
-                : PHASE_LABEL[phase]}
+                ? activeResultAction?.success
+                  ? isVoteResult || activeResultAction.skippedPoW
+                    ? "Submitted"
+                    : "PoW Solved"
+                  : activeResultAction?.skippedPoW
+                    ? "Failed"
+                    : "PoW Failed"
+                : isOfflineProcessing
+                  ? "Waiting for internet…"
+                  : PHASE_LABEL[displayedPhase]}
             </Text>
           )}
 
-          {showStats && !overlayData && (
+          {showStats && (
             <View style={styles.statsRow}>
               <Text style={[styles.statText, { color: statColor }]}>
                 {formatElapsedTime(
-                  isShowingResult ? lastElapsedMsRef.current : elapsedMs,
+                  isShowingResult ? resultElapsedMs : elapsedMs,
                 )}
               </Text>
-              {(isShowingResult ? lastHashRateRef.current : hashRate) > 0 && (
+              {(isShowingResult ? resultHashRate : hashRate) > 0 && (
                 <Text style={[styles.statText, { color: statColor }]}>
                   {formatHashRate(
-                    isShowingResult ? lastHashRateRef.current : hashRate,
+                    isShowingResult ? resultHashRate : hashRate,
                   )}
                 </Text>
               )}
@@ -345,69 +507,6 @@ export const PowQueueToast = () => {
           )}
         </View>
       </ToastWrapper>
-    );
-  };
-
-  const renderOverlay = () => {
-    if (!overlayData) return null;
-
-    const overlayColors = getColors(overlayData);
-    const overlayLabel = overlayData.success
-      ? getSuccessLabel(overlayData.type as any)
-      : "Failed";
-
-    return (
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.overlayContainer,
-          {
-            opacity: overlayOpacity,
-            backgroundColor: isDark
-              ? "rgba(45, 48, 55, 1)"
-              : "rgba(255, 255, 255, 1)",
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: overlayColors.border,
-            overflow: "hidden",
-          },
-        ]}
-      >
-        <View style={styles.overlayContent}>
-          <View style={styles.headerRow}>
-            <View style={styles.iconContainer}>
-              <Ionicons
-                name={overlayData.success ? "checkmark-circle" : "alert-circle"}
-                size={14}
-                color={overlayColors.icon}
-              />
-            </View>
-            <Text
-              size="xs"
-              weight="semibold"
-              numberOfLines={1}
-              style={styles.labelText}
-            >
-              {overlayLabel}
-            </Text>
-          </View>
-          <Text style={[styles.phaseText, { color: statColor }]}>
-            {overlayData.success ? "PoW Solved" : "PoW Failed"}
-          </Text>
-          {overlayData.elapsedMs > 0 && (
-            <View style={styles.statsRow}>
-              <Text style={[styles.statText, { color: statColor }]}>
-                {formatElapsedTime(overlayData.elapsedMs)}
-              </Text>
-              {overlayData.hashRate > 0 && (
-                <Text style={[styles.statText, { color: statColor }]}>
-                  {formatHashRate(overlayData.hashRate)}
-                </Text>
-              )}
-            </View>
-          )}
-        </View>
-      </Animated.View>
     );
   };
 
@@ -422,9 +521,7 @@ export const PowQueueToast = () => {
           style: [
             styles.blurContainer,
             {
-              backgroundColor: isDark
-                ? "rgba(45, 48, 55, 0.92)"
-                : "rgba(255, 255, 255, 0.92)",
+              backgroundColor: baseBackgroundColor,
               borderColor: colors.border,
               elevation: 8,
               shadowColor: "#000",
@@ -436,36 +533,41 @@ export const PowQueueToast = () => {
         };
 
   return (
-    <Animated.View
+    <View
       pointerEvents="box-none"
-      style={[
-        styles.container,
-        {
-          top: insets.top + 4,
+      style={[styles.container, { top: insets.top + 4 + offset }]}
+    >
+      <Animated.View
+        style={{
           transform: [{ translateY }, { scale }],
           opacity,
-        },
-      ]}
-    >
-      {Platform.OS === "ios" ? (
-        <View style={[styles.borderWrap, { borderColor: colors.border }]}>
-          {renderToastContent(wrapperProps)}
+        }}
+      >
+        <View onLayout={onLayout} style={styles.innerWrap}>
+          {Platform.OS === "ios" ? (
+            <View style={[styles.borderWrap, { borderColor: colors.border }]}>
+              {renderToastContent(wrapperProps)}
+            </View>
+          ) : (
+            renderToastContent(wrapperProps)
+          )}
         </View>
-      ) : (
-        renderToastContent(wrapperProps)
-      )}
-      {renderOverlay()}
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    width: TOAST_WIDTH,
-    alignSelf: "center",
-    left: (SCREEN_WIDTH - TOAST_WIDTH) / 2,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
+  },
+  innerWrap: {
+    minWidth: TOAST_MIN_WIDTH,
+    maxWidth: TOAST_MAX_WIDTH,
   },
   blurContainer: {
     overflow: "hidden",
@@ -492,38 +594,40 @@ const styles = StyleSheet.create((theme) => ({
     gap: 6,
   },
   iconContainer: {
-    width: 14,
-    height: 14,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 5,
+    marginRight: 2,
+  },
+  textContainer: {
+    flexShrink: 1,
+    flexGrow: 1,
   },
   labelText: {
-    flex: 1,
-    fontSize: 11,
+    flexShrink: 1,
+    flexGrow: 0,
+    fontSize: 12,
+  },
+  rightSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    minWidth: 28,
   },
   phaseText: {
     fontSize: 12,
-    marginLeft: 25,
+    marginLeft: 28,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 1,
+    marginLeft: 28,
   },
   statText: {
     fontSize: 12,
     fontVariant: ["tabular-nums"],
-  },
-  overlayContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  overlayContent: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
   },
 }));

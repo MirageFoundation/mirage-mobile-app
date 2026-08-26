@@ -4,11 +4,12 @@ import {
   type StyleMap,
 } from "@docren/react-native-markdown";
 import { Image } from "expo-image";
-import * as Linking from "expo-linking";
 import { memo, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
+import { hasHashtags, parseHashtags } from "@/src/utils/hashtag-parser";
+import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
 
 // Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
 const PLAIN_URL_REGEX = /https?:\/\/[^\s<>"]+/g;
@@ -41,11 +42,19 @@ function autoLinkUrls(content: string): string {
 type MarkdownContentProps = {
   content: string;
   onLinkPress?: (url: string) => void;
+  color?: string;
+  size?: "xs" | "sm" | "md";
+  weight?: "light" | "regular" | "medium";
+  boldColor?: string;
 };
 
 export const MarkdownContent = memo(function MarkdownContent({
   content,
   onLinkPress,
+  color,
+  size,
+  weight,
+  boldColor,
 }: MarkdownContentProps) {
   const { theme } = useUnistyles();
 
@@ -55,22 +64,23 @@ export const MarkdownContent = memo(function MarkdownContent({
         onLinkPress(url);
         return true;
       }
-      const fullUrl =
-        url.startsWith("http://") || url.startsWith("https://")
-          ? url
-          : `https://${url}`;
-      Linking.openURL(fullUrl).catch(() => {});
+      openUrlOrInternal(url);
       return true;
     },
     [onLinkPress],
   );
 
+  const textColor = color ?? theme.colors.text.default;
+  const fontSize = size ? theme.typography.size[size] : theme.typography.size.md;
+  const fontWeight = weight ? theme.typography.weight[weight] : undefined;
+
   const markdownStyles = useMemo<StyleMap>(
     () => ({
       root: {
         fontFamily: theme.typography.family.mono,
-        fontSize: theme.typography.size.md,
-        lineHeight: theme.typography.size.md * theme.typography.leading.normal,
+        fontSize,
+        lineHeight: fontSize * theme.typography.leading.normal,
+        ...(fontWeight && { fontWeight }),
       },
       heading1: {
         color: theme.colors.text.default,
@@ -112,11 +122,11 @@ export const MarkdownContent = memo(function MarkdownContent({
         marginBottom: theme.spacing.xs,
       },
       paragraph: {
-        marginBottom: theme.spacing.xs,
-        color: theme.colors.text.default,
+        marginBottom: theme.spacing.md,
+        color: textColor,
       },
       text: {
-        color: theme.colors.text.default,
+        color: textColor,
       },
       link: {
         color: "#3B82F6",
@@ -124,11 +134,11 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       strong: {
         fontWeight: theme.typography.weight.bold,
-        color: theme.colors.text.default,
+        color: boldColor ?? textColor,
       },
       emphasis: {
         fontStyle: "italic",
-        color: theme.colors.text.default,
+        color: textColor,
       },
       code: {
         backgroundColor: theme.colors.background.subtle,
@@ -183,7 +193,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         marginVertical: theme.spacing.sm,
       },
     }),
-    [theme],
+    [theme, textColor, fontSize, fontWeight, boldColor],
   );
 
   const renderRules = useMemo<RenderRules>(
@@ -195,6 +205,13 @@ export const MarkdownContent = memo(function MarkdownContent({
           return (
             <Text key={(node as any).key} style={textStyle}>
               {parseSpoilers(value, textStyle)}
+            </Text>
+          );
+        }
+        if (hasHashtags(value)) {
+          return (
+            <Text key={(node as any).key} style={textStyle} maxFontSizeMultiplier={1.2}>
+              {parseHashtags(value, textStyle)}
             </Text>
           );
         }

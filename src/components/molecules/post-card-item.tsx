@@ -1,17 +1,30 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { PostCard } from "./post-card";
+import { PostCardCompact } from "./post-card-compact";
 import type { Post } from "./post-card-types";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
+import {
+  useCommentCountOverride,
+  useVoteOverride,
+} from "@/src/stores/home-post-card-store";
+import { useFeedDensity } from "@/src/stores";
 import { logPress } from "@/src/utils/press-logger";
+import { markSeen } from "@/src/services/seen-posts";
 
 type PostCardItemProps = {
   post: Post;
  isVisible?: boolean;
+ isFocused?: boolean;
+ isNearVisible?: boolean;
+ screenActive?: boolean;
  isOwnPost?: boolean;
  isTopicFollowed?: boolean;
  contentRevealed?: boolean;
  shareUrl?: string;
   showFollowButton?: boolean;
   showUrlCard?: boolean;
+  allowAutoplay?: boolean;
+  videoSyncScope?: string;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onMorePress?: (postId: string) => void;
@@ -39,34 +52,23 @@ type PostCardItemProps = {
   onBlockPost?: (postId: string) => void;
   onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
+  onTopicPress?: (topic: string) => void;
 };
-
-function arePostCardItemPropsEqual(
-  prevProps: PostCardItemProps,
-  nextProps: PostCardItemProps
-): boolean {
-  const prev = prevProps.post;
-  const next = nextProps.post;
-  if (prev.id !== next.id) return false;
-  if (prev.likes !== next.likes) return false;
-  if (prev.comments !== next.comments) return false;
-  if (prev.hasLiked !== next.hasLiked) return false;
-  if (prev.hasDisliked !== next.hasDisliked) return false;
-  if (prev.awards?.length !== next.awards?.length) return false;
-  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
-  if (prevProps.isVisible !== nextProps.isVisible) return false;
-  return true;
-}
 
 export const PostCardItem = memo(function PostCardItem({
 post,
 isVisible = false,
+isFocused,
+isNearVisible,
+screenActive = true,
 isOwnPost = false,
 isTopicFollowed = false,
 contentRevealed = false,
 shareUrl,
   showFollowButton = true,
   showUrlCard,
+  allowAutoplay,
+  videoSyncScope,
 onPostPress,
   onAuthorPress,
   onMorePress,
@@ -80,7 +82,46 @@ onPostPress,
   onBlockPost,
   onBlockTopic,
   onReport,
+  onTopicPress,
 }: PostCardItemProps) {
+  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+  const voteOverride = useVoteOverride(post.id);
+  const commentCountOverride = useCommentCountOverride(post.id);
+  const [feedDensity] = useFeedDensity();
+  const displayPost = useMemo(() => {
+    let result = post;
+
+    if (voteOverride) {
+      result = {
+        ...result,
+        likes: voteOverride.likes ?? result.likes,
+        hasLiked: voteOverride.hasLiked ?? result.hasLiked,
+        hasDisliked: voteOverride.hasDisliked ?? result.hasDisliked,
+      };
+    }
+
+    if (commentCountOverride && result.comments === commentCountOverride.baseComments) {
+      result = {
+        ...result,
+        comments:
+          commentCountOverride.baseComments +
+          (commentCountOverride.commentDelta ?? 0),
+      };
+    }
+
+    if (!editOverride) return result;
+
+    return {
+      ...result,
+      title: editOverride.title,
+      body: editOverride.content || undefined,
+      topic: editOverride.topic ?? result.topic,
+      media: editOverride.media
+        ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
+        : result.media,
+    };
+  }, [post, voteOverride, commentCountOverride, editOverride]);
+
   const handlePostPress = useCallback(() => {
     logPress({ name: "post_card_item", postId: post.id });
     onPostPress?.(post.id);
@@ -95,24 +136,24 @@ onPostPress,
   }, [onMorePress, post.id]);
 
   const handleLikePress = useCallback(() => {
-    logPress({ name: "post_like", postId: post.id });
+    logPress({ name: "post_like", postId: displayPost.id });
     onLikePress?.(
-      post.id,
-      post.hasLiked ?? false,
-      post.hasDisliked ?? false,
-      post.likes
+      displayPost.id,
+      displayPost.hasLiked ?? false,
+      displayPost.hasDisliked ?? false,
+      displayPost.likes
     );
-  }, [onLikePress, post.id, post.hasLiked, post.hasDisliked, post.likes]);
+  }, [onLikePress, displayPost]);
 
   const handleDislikePress = useCallback(() => {
-    logPress({ name: "post_dislike", postId: post.id });
+    logPress({ name: "post_dislike", postId: displayPost.id });
     onDislikePress?.(
-      post.id,
-      post.hasLiked ?? false,
-      post.hasDisliked ?? false,
-      post.likes
+      displayPost.id,
+      displayPost.hasLiked ?? false,
+      displayPost.hasDisliked ?? false,
+      displayPost.likes
     );
-  }, [onDislikePress, post.id, post.hasLiked, post.hasDisliked, post.likes]);
+  }, [onDislikePress, displayPost]);
 
   const handleCommentPress = useCallback(() => {
     logPress({ name: "post_comment", postId: post.id });
@@ -121,8 +162,8 @@ onPostPress,
 
   const handleFollowUser = useCallback(() => {
     logPress({ name: "post_follow_user", postId: post.id });
-    onFollowUser?.(post.author.id, post.author.username, post.isFollowing ?? false);
-  }, [onFollowUser, post.author.id, post.author.username, post.isFollowing]);
+    onFollowUser?.(post.author.id, post.author.username, displayPost.isFollowing ?? false);
+  }, [onFollowUser, post.id, post.author.id, post.author.username, displayPost.isFollowing]);
 
   const handleFollowTopic = useCallback(() => {
     if (!post.topic) return;
@@ -132,8 +173,9 @@ onPostPress,
 
   const handleRevealContent = useCallback(() => {
     logPress({ name: "post_reveal", postId: post.id });
+    markSeen(post.id, "open", post.title);
     onRevealContent?.(post.id);
-  }, [onRevealContent, post.id]);
+  }, [onRevealContent, post.id, post.title]);
 
   const handleBlockUser = useCallback(() => {
     logPress({ name: "post_block_user", postId: post.id });
@@ -156,13 +198,52 @@ onPostPress,
     onReport?.(post.id);
   }, [onReport, post.id]);
 
+  const handleTopicPress = useCallback(() => {
+    if (!post.topic) return;
+    logPress({ name: "post_topic_press", postId: post.id });
+    onTopicPress?.(post.topic);
+  }, [onTopicPress, post.topic, post.id]);
+
+ if (feedDensity === "compact") {
+   return (
+     <PostCardCompact
+       post={displayPost}
+       isOwnPost={isOwnPost}
+       isTopicFollowed={isTopicFollowed}
+       showFollowButton={showFollowButton}
+       contentRevealed={contentRevealed}
+       shareUrl={shareUrl}
+       onPress={handlePostPress}
+       onAuthorPress={handleAuthorPress}
+       onMorePress={handleMorePress}
+       onLikePress={handleLikePress}
+       onDislikePress={handleDislikePress}
+       onCommentPress={handleCommentPress}
+       onFollowUser={handleFollowUser}
+       onFollowTopic={handleFollowTopic}
+       onRevealContent={handleRevealContent}
+       onBlockUser={handleBlockUser}
+       onBlockPost={handleBlockPost}
+       onBlockTopic={handleBlockTopic}
+       onReport={handleReport}
+       onTopicPress={handleTopicPress}
+       onMediaPress={handlePostPress}
+     />
+   );
+ }
+
  return (
    <PostCard
-     post={post}
+     post={displayPost}
      isOwnPost={isOwnPost}
      isVisible={isVisible}
+     isFocused={isFocused ?? isVisible}
+     isNearVisible={isNearVisible}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
+     screenActive={screenActive}
+     allowAutoplay={allowAutoplay}
+     videoSyncScope={videoSyncScope}
     onPress={handlePostPress}
     onAuthorPress={handleAuthorPress}
      onMorePress={handleMorePress}
@@ -176,10 +257,11 @@ onPostPress,
     onBlockPost={handleBlockPost}
     onBlockTopic={handleBlockTopic}
     onReport={handleReport}
+    onTopicPress={handleTopicPress}
      onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
      shareUrl={shareUrl}
       showUrlCard={showUrlCard}
    />
   );
-}, arePostCardItemPropsEqual);
+});

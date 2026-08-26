@@ -1,45 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { ResizeMode, Video } from "expo-av";
-import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
   FlatList,
-  LayoutAnimation,
   Platform,
   Pressable,
-  UIManager,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
-import { useVideoMuteStore } from "@/src/stores";
-
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const MEDIA_HORIZONTAL_PADDING = 32;
-const GALLERY_WIDTH = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
-const MEDIA_MAX_HEIGHT = 450;
-
-const ASPECT_RATIO_CACHE = new Map<string, number>();
-
-function getItemAspectRatio(item: ResolvedMedia): number {
-  const cached = ASPECT_RATIO_CACHE.get(item.uri);
-  if (cached) return cached;
-  if (item.aspectRatio && item.aspectRatio !== 16 / 9) return item.aspectRatio;
-  if (item.width && item.height) return item.width / item.height;
-  return 16 / 9;
-}
-
-function computeGalleryHeight(aspectRatio: number): number {
-  return Math.min(GALLERY_WIDTH / aspectRatio, MEDIA_MAX_HEIGHT);
-}
+import { GalleryImageItem } from "./gallery-image-item";
+import { GalleryVideoItem } from "./gallery-video-item";
+import {
+  GALLERY_WIDTH,
+  computeGalleryHeight,
+  galleryStyles,
+  getGalleryItemAspectRatio,
+} from "./media-gallery-shared";
 
 type MediaGalleryProps = {
   media: ResolvedMedia[];
@@ -47,237 +26,24 @@ type MediaGalleryProps = {
   screenActive?: boolean;
   allowAutoplay?: boolean;
   isVisible?: boolean;
+  isFocused?: boolean;
   isPostDetail?: boolean;
   shouldBlurContent?: boolean;
   onRevealContent?: () => void;
 };
 
-const GalleryVideoItem = memo(function GalleryVideoItem({
-  item,
-  width,
-  height,
-  isActive,
-  screenActive,
-  onPress,
-  onAspectRatioDetected,
-  allowAutoplay,
-  isVisible,
-  isPostDetail,
-}: {
-  item: ResolvedMedia;
-  width: number;
-  height: number;
-  isActive: boolean;
-  screenActive: boolean;
-  onPress?: () => void;
-  onAspectRatioDetected?: (uri: string, ratio: number) => void;
-  allowAutoplay?: boolean;
-  isVisible?: boolean;
-  isPostDetail?: boolean;
-}) {
-  const videoRef = useRef<Video>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const isMuted = useVideoMuteStore((s) => s.isMuted);
-  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-  const [isLoading, setIsLoading] = useState(true);
-  const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      videoRef.current?.pauseAsync().catch(() => {});
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isActive || !screenActive || !isVisible) {
-      setIsPlaying(false);
-      videoRef.current?.pauseAsync().catch(() => {});
-    } else if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
-      setIsPlaying(true);
-    }
-  }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay]);
-
-  const handlePlayPause = useCallback(() => {
-    setIsPlaying((p) => !p);
-  }, []);
-
-  const handleFeedVideoTap = useCallback(() => {
-    if (isPostDetail) return;
-    if (!allowAutoplay && !isPlaying && !feedTappedToPlay) {
-      setFeedTappedToPlay(true);
-      setIsPlaying(true);
-      return;
-    }
-    onPress?.();
-  }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress]);
-
-  const handleMuteToggle = useCallback(async () => {
-    const newMuted = !isMuted;
-    toggleMute();
-    try {
-      if (videoRef.current) {
-        if (!newMuted) {
-          await videoRef.current.pauseAsync();
-          await videoRef.current.setStatusAsync({ isMuted: false });
-          await videoRef.current.playAsync();
-        } else {
-          await videoRef.current.setStatusAsync({ isMuted: true });
-        }
-      }
-    } catch {}
-  }, [isMuted, toggleMute]);
-
-  return (
-    <View style={{ width, height, overflow: "hidden" }}>
-      <Video
-        ref={videoRef}
-        source={{ uri: item.uri }}
-        style={{ width, height }}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay={isPlaying && isActive && screenActive && (isVisible ?? true)}
-        isMuted={isMuted}
-        isLooping
-        useNativeControls={false}
-        onLoad={() => {
-          setIsLoading(false);
-          videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
-        }}
-        onPlaybackStatusUpdate={(status) => {
-          if (status.isLoaded && status.isPlaying) {
-            setIsLoading(false);
-          }
-        }}
-        onReadyForDisplay={(event) => {
-          const { width: w, height: h } = event.naturalSize ?? {};
-          if (w && h) {
-            const ratio = w / h;
-            if (Number.isFinite(ratio) && ratio > 0) {
-              ASPECT_RATIO_CACHE.set(item.uri, ratio);
-              onAspectRatioDetected?.(item.uri, ratio);
-            }
-          }
-        }}
-      />
-
-      <View style={galleryStyles.playOverlay}>
-        {isPostDetail ? (
-          <>
-            <Pressable onPress={handlePlayPause} style={galleryStyles.videoTapArea} />
-            {isLoading ? (
-              <View style={galleryStyles.controlButton} pointerEvents="none">
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
-            ) : !isPlaying ? (
-              <View style={galleryStyles.controlButton} pointerEvents="none">
-                <Ionicons name="play" size={28} color="#fff" />
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Pressable onPress={handleFeedVideoTap} style={galleryStyles.videoTapArea} />
-            {isLoading ? (
-              <View style={galleryStyles.controlButton}>
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
-            ) : !allowAutoplay && !isPlaying && !feedTappedToPlay ? (
-              <View style={galleryStyles.tapToPlayContainer} pointerEvents="none">
-                <Text size="sm" weight="semibold" numberOfLines={1} style={{ color: "#fff" }}>
-                  Tap to play
-                </Text>
-              </View>
-            ) : null}
-          </>
-        )}
-      </View>
-
-      {isPostDetail && (
-        <Pressable
-          onPress={onPress}
-          style={galleryStyles.fullscreenButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <View style={galleryStyles.fullscreenButtonInner}>
-            <Ionicons name="expand" size={16} color="#fff" />
-          </View>
-        </Pressable>
-      )}
-
-      <Pressable
-        onPress={handleMuteToggle}
-        style={galleryStyles.muteButton}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <View style={galleryStyles.muteButtonInner}>
-          <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={16} color="#fff" />
-        </View>
-      </Pressable>
-
-      <View style={galleryStyles.typeBadge}>
-        <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-          VIDEO
-        </Text>
-      </View>
-    </View>
-  );
-});
-
-const GalleryImageItem = memo(function GalleryImageItem({
-  item,
-  width,
-  height,
-  onPress,
-  onAspectRatioDetected,
-}: {
-  item: ResolvedMedia;
-  width: number;
-  height: number;
-  onPress?: () => void;
-  onAspectRatioDetected?: (uri: string, ratio: number) => void;
-}) {
-  const [loaded, setLoaded] = useState(false);
-  return (
-    <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
-      <Image
-        source={{ uri: item.uri }}
-        style={{ width, height }}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        onLoad={({ source }) => {
-          setLoaded(true);
-          const w = source?.width;
-          const h = source?.height;
-          if (w && h) {
-            const ratio = w / h;
-            if (Number.isFinite(ratio) && ratio > 0) {
-              ASPECT_RATIO_CACHE.set(item.uri, ratio);
-              onAspectRatioDetected?.(item.uri, ratio);
-            }
-          }
-        }}
-      />
-
-      {!loaded && (
-        <View style={galleryStyles.loadingOverlay}>
-          <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
-        </View>
-      )}
-
-      <View style={galleryStyles.typeBadge}>
-        <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-          {item.type === "gif" ? "GIF" : "IMG"}
-        </Text>
-      </View>
-    </Pressable>
-  );
-});
-
+/**
+ * Horizontal pager for multi-media posts. Owns paging, active-index
+ * tracking, and per-item height sizing; the items themselves are
+ * self-contained (`GalleryVideoItem`, `GalleryImageItem`).
+ */
 export const MediaGallery = memo(function MediaGallery({
   media,
   onMediaPress,
   screenActive = true,
   allowAutoplay = true,
   isVisible = true,
+  isFocused = true,
   isPostDetail = false,
   shouldBlurContent = false,
   onRevealContent,
@@ -293,10 +59,19 @@ export const MediaGallery = memo(function MediaGallery({
     if (!item) return computeGalleryHeight(16 / 9);
     const cached = itemRatiosRef.current.get(item.uri);
     if (cached) return computeGalleryHeight(cached);
-    return computeGalleryHeight(getItemAspectRatio(item));
+    return computeGalleryHeight(getGalleryItemAspectRatio(item));
   }, [media]);
 
-  const [containerHeight, setContainerHeight] = useState(() => getHeightForIndex(0));
+  const firstItemHeight = getHeightForIndex(0);
+  const [containerHeight, setContainerHeight] = useState(firstItemHeight);
+  const mediaIdentity = media.map((item) => item.uri).join("|");
+
+  useEffect(() => {
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    setContainerHeight(firstItemHeight);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [firstItemHeight, mediaIdentity]);
 
   const handleAspectRatioDetected = useCallback(
     (uri: string, ratio: number) => {
@@ -306,7 +81,6 @@ export const MediaGallery = memo(function MediaGallery({
         const newHeight = computeGalleryHeight(ratio);
         setContainerHeight((prev) => {
           if (Math.abs(prev - newHeight) < 1) return prev;
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           return newHeight;
         });
       }
@@ -314,64 +88,84 @@ export const MediaGallery = memo(function MediaGallery({
     [media],
   );
 
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        const newIndex = viewableItems[0].index;
-        activeIndexRef.current = newIndex;
-        setActiveIndex(newIndex);
+  const updateActiveIndex = useCallback(
+    (requestedIndex: number) => {
+      const newIndex = Math.max(0, Math.min(requestedIndex, media.length - 1));
+      const item = media[newIndex];
+      if (!item) return;
 
-        const item = media[newIndex];
-        if (item) {
-          const ratio = itemRatiosRef.current.get(item.uri) ?? getItemAspectRatio(item);
-          const newHeight = computeGalleryHeight(ratio);
-          setContainerHeight((prev) => {
-            if (Math.abs(prev - newHeight) < 1) return prev;
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            return newHeight;
-          });
-        }
-      }
+      activeIndexRef.current = newIndex;
+      setActiveIndex((current) => (current === newIndex ? current : newIndex));
+
+      const ratio = itemRatiosRef.current.get(item.uri) ?? getGalleryItemAspectRatio(item);
+      const newHeight = computeGalleryHeight(ratio);
+      setContainerHeight((current) =>
+        Math.abs(current - newHeight) < 1 ? current : newHeight,
+      );
     },
     [media],
   );
 
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        updateActiveIndex(viewableItems[0].index);
+      }
+    },
+    [updateActiveIndex],
+  );
 
-  const maxHeight = Math.max(...media.map((_, i) => getHeightForIndex(i)));
+  const handleMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateActiveIndex(
+        Math.round(event.nativeEvent.contentOffset.x / GALLERY_WIDTH),
+      );
+    },
+    [updateActiveIndex],
+  );
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   const renderItem = useCallback(
     ({ item, index }: { item: ResolvedMedia; index: number }) => {
-      const itemHeight = getHeightForIndex(index);
       const isVideo = item.type === "video";
       return (
-        <View style={{ width: GALLERY_WIDTH, height: maxHeight }}>
+        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: containerHeight }]}>
           {isVideo ? (
             <GalleryVideoItem
               item={item}
               width={GALLERY_WIDTH}
-              height={itemHeight}
-              isActive={index === activeIndexRef.current}
+              height={containerHeight}
+              isActive={index === activeIndex}
               screenActive={screenActive}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
               allowAutoplay={allowAutoplay && !shouldBlurContent}
               isVisible={isVisible}
+              isFocused={isFocused}
               isPostDetail={isPostDetail}
+              shouldPrepare={
+                screenActive &&
+                isVisible &&
+                isFocused &&
+                Math.abs(index - activeIndex) <= 1
+              }
             />
           ) : (
             <GalleryImageItem
               item={item}
               width={GALLERY_WIDTH}
-              height={itemHeight}
+              height={containerHeight}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
+              isPostDetail={isPostDetail}
+              isVisible={isVisible}
             />
           )}
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isPostDetail, shouldBlurContent],
+    [onMediaPress, containerHeight, activeIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(
@@ -380,7 +174,7 @@ export const MediaGallery = memo(function MediaGallery({
   );
 
   return (
-    <View style={{ height: containerHeight, overflow: "hidden" }}>
+    <View style={[galleryStyles.galleryRoot, { height: containerHeight }]}>
       <FlatList
         ref={flatListRef}
         data={media}
@@ -391,10 +185,14 @@ export const MediaGallery = memo(function MediaGallery({
         showsHorizontalScrollIndicator={false}
         scrollEnabled={!shouldBlurContent}
         onViewableItemsChanged={onViewableItemsChanged}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
         viewabilityConfig={viewabilityConfig}
         snapToInterval={GALLERY_WIDTH}
         decelerationRate="fast"
-        extraData={activeIndex}
+        extraData={`${activeIndex}:${containerHeight}`}
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
         getItemLayout={(_, index) => ({
           length: GALLERY_WIDTH,
           offset: GALLERY_WIDTH * index,
@@ -416,145 +214,22 @@ export const MediaGallery = memo(function MediaGallery({
       )}
       {shouldBlurContent && (
         <Pressable onPress={onRevealContent} style={galleryStyles.blurOverlay}>
-          {Platform.OS === "ios" ? (
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={galleryStyles.blurViewFill}
-            >
-              <View style={galleryStyles.revealTextContainer}>
-                <Ionicons name="eye-outline" size={24} color="#fff" />
-                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                  Tap to reveal
-                </Text>
-              </View>
-            </BlurView>
-          ) : (
-            <View style={galleryStyles.androidBlurOverlay}>
+          <BlurView
+            intensity={80}
+            tint="dark"
+            // Real blur on Android too (web parity, BUG-020).
+            experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+            style={galleryStyles.blurViewFill}
+          >
+            <View style={galleryStyles.revealTextContainer}>
               <Ionicons name="eye-outline" size={24} color="#fff" />
               <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
                 Tap to reveal
               </Text>
             </View>
-          )}
+          </BlurView>
         </Pressable>
       )}
     </View>
   );
-});
-
-const galleryStyles = StyleSheet.create({
-  indicators: {
-    position: "absolute",
-    bottom: 10,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.4)",
-  },
-  dotActive: {
-    backgroundColor: "#fff",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  videoTapArea: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  controlButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tapToPlayContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  muteButton: {
-    position: "absolute",
-    bottom: 8,
-    right: 8,
-  },
-  muteButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fullscreenButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 20,
-  },
-  fullscreenButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  typeBadge: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    zIndex: 20,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-  },
-  blurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
-  },
-  blurViewFill: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  revealTextContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
-    gap: 8,
-  },
 });

@@ -1,11 +1,25 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
-import type { Post } from "@/src/components/molecules/post-card-types";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
+import type { Post } from "@/src/domain/content";
 
 export type HistoryEntry = Post & {
   viewedAt: number;
 };
+
+function normalizeHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  if (entry.likes === 0 && entry.dislikes > 0) {
+    return {
+      ...entry,
+      likes: -entry.dislikes,
+    };
+  }
+
+  return entry;
+}
 
 const MAX_HISTORY = 100;
 
@@ -24,7 +38,7 @@ export const useHistoryStore = create<HistoryState>()(
       addEntry: (post: Post) => {
         set((state) => {
           const filtered = state.entries.filter((e) => e.id !== post.id);
-          const updated = [{ ...post, viewedAt: Date.now() }, ...filtered];
+          const updated = [normalizeHistoryEntry({ ...post, viewedAt: Date.now() }), ...filtered];
           return { entries: updated.slice(0, MAX_HISTORY) };
         });
       },
@@ -41,7 +55,25 @@ export const useHistoryStore = create<HistoryState>()(
     }),
     {
       name: "history-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as {
+          entries?: HistoryEntry[];
+        };
+
+        return {
+          ...state,
+          entries: (state.entries ?? []).map((entry) => normalizeHistoryEntry(entry)),
+        };
+      },
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "history-storage",
+  reset: () => useHistoryStore.getState().clearAll(),
+  rehydrate: () => useHistoryStore.persist.rehydrate(),
+});

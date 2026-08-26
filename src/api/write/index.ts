@@ -13,6 +13,8 @@
  * ```
  */
 
+export { mutationKeys } from "./mutation-keys";
+
 // ============================================
 // Hooks (recommended for React components)
 // ============================================
@@ -35,10 +37,15 @@ export {
   useUnfollowUser,
   useFollowTopic,
   useUnfollowTopic,
-  useFollowModerator,
-  useUnfollowModerator,
+  useEnableAgent,
+  useDisableAgent,
   useToggleFollowUser,
   useToggleFollowTopic,
+  // Agents
+  useSetAgents,
+  useAnnotate,
+  // Biography
+  useSetBiography,
   // Block
   useBlockUser,
   useUnblockUser,
@@ -63,6 +70,7 @@ export type {
   VoteMutationInput,
   UseVoteOptions,
   CreatePostMutationInput,
+  EditPostMutationInput,
   UsePostOptions,
   UseFollowOptions,
   UseBlockOptions,
@@ -93,14 +101,19 @@ export {
   unfollowUser,
   followTopic,
   unfollowTopic,
-  followModerator,
-  unfollowModerator,
+  enableAgent,
+  disableAgent,
+  setAgents,
   blockUser,
   unblockUser,
   blockPost,
   unblockPost,
   blockTopic,
   unblockTopic,
+  // Biography
+  setBiography,
+  // Annotate
+  annotate,
   // Tokens
   sendTokens,
   upgradeLevel,
@@ -111,6 +124,8 @@ export {
   deleteUser,
   // Award
   giveAward,
+  // Referral
+  referralPrecheckOptIn,
 } from "./endpoints";
 
 // Endpoint types
@@ -128,6 +143,8 @@ export type {
   ReportInput,
   DeleteUserInput,
   GiveAwardInput,
+  AnnotateInput,
+  ReferralPrecheckOptInInput,
 } from "./endpoints";
 
 // ============================================
@@ -143,8 +160,11 @@ export {
   canonBaseEdit,
   canonBaseVote,
   canonBaseDelete,
-  canonBaseFollowModerator,
-  canonBaseUnfollowModerator,
+  canonBaseEnableAgent,
+  canonBaseDisableAgent,
+  canonBaseSetAgents,
+  canonBaseSetBiography,
+  canonBaseAnnotate,
   canonBaseFollowUser,
   canonBaseUnfollowUser,
   canonBaseFollowTopic,
@@ -188,7 +208,10 @@ export type {
   EditParams,
   VoteParams,
   DeleteParams,
-  FollowModeratorParams,
+  EnableAgentParams,
+  SetAgentsParams,
+  SetBiographyParams,
+  AnnotateParams,
   FollowUserParams,
   FollowTopicParams,
   BlockPostParams,

@@ -4,7 +4,7 @@
  * Builds canonical bytes for signing according to the Mirage protocol.
  *
  * Format:
- * [prefix][tag2:pubkey][tag3:block_hash][tag4:difficulty][tag6:timestamp][tag100+:payload...]
+ * [prefix][tag2:pubkey][tag3:block_hash][tag4:difficulty][tag6:timestamp][tag7:envelope_nonce][tag100+:payload...]
  *
  * - Tag 1 (authority) is NOT included
  * - Tag 5 (pow) is only in signed bytes, not base bytes
@@ -93,10 +93,12 @@ export interface BaseParams {
   difficulty: number;
   /** Timestamp in milliseconds */
   timestampMs: number;
+  /** Replay-protection nonce */
+  envelopeNonce: bigint;
 }
 
 /**
- * Encode common header tags (2, 3, 4, 6)
+ * Encode common header tags (2, 3, 4, 6, 7)
  * These are included in every message
  */
 function encodeHeader(params: BaseParams): Uint8Array {
@@ -104,7 +106,8 @@ function encodeHeader(params: BaseParams): Uint8Array {
     encBytes(2, params.pubkey33), // tag 2: pubkey
     encBytes(3, params.lastBlockHashBytes), // tag 3: block_hash
     encU64(4, params.difficulty), // tag 4: difficulty
-    encU64(6, params.timestampMs) // tag 6: timestamp
+    encU64(6, params.timestampMs), // tag 6: timestamp
+    encU64(7, params.envelopeNonce) // tag 7: envelope_nonce
   );
 }
 
@@ -206,7 +209,7 @@ export interface PostParams extends BaseParams {
   title: string;
   /** Post content */
   content: string;
-  /** Content tag: "", "sensitive", "porn", "gore", "violence", "death" */
+  /** Content tag: "", "sensitive", "adult", "gore", "violence", "death" */
   tag: string;
   /** Media URLs */
   media?: string[];
@@ -318,30 +321,30 @@ export function canonBaseDelete(params: DeleteParams): Uint8Array {
   );
 }
 
-// --- MsgFollowModerator / MsgUnfollowModerator ---
+// --- MsgEnableAgent / MsgDisableAgent ---
 
-export interface FollowModeratorParams extends BaseParams {
+export interface EnableAgentParams extends BaseParams {
   /** Your address */
   target: string;
-  /** Moderator address to follow/unfollow */
-  moderator: string;
+  /** Agent address to enable/disable */
+  agent: string;
 }
 
-export function canonBaseFollowModerator(params: FollowModeratorParams): Uint8Array {
+export function canonBaseEnableAgent(params: EnableAgentParams): Uint8Array {
   return concatBytes(
-    prefix("MsgFollowModerator"),
+    prefix("MsgEnableAgent"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.moderator)
+    encString(101, params.agent)
   );
 }
 
-export function canonBaseUnfollowModerator(params: FollowModeratorParams): Uint8Array {
+export function canonBaseDisableAgent(params: EnableAgentParams): Uint8Array {
   return concatBytes(
-    prefix("MsgUnfollowModerator"),
+    prefix("MsgDisableAgent"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.moderator)
+    encString(101, params.agent)
   );
 }
 
@@ -491,19 +494,23 @@ export function canonBaseSendTokens(params: SendTokensParams): Uint8Array {
   );
 }
 
-// --- MsgUpgradeLevel (No PoW) ---
+// --- MsgSubscribe (self-subscribe, no PoW) ---
 
 export interface UpgradeLevelParams {
   pubkey33: Uint8Array;
   lastBlockHashBytes: Uint8Array;
   timestampMs: number;
-  /** Target level: 1, 2, or 3 */
+  envelopeNonce: bigint;
+  /** Target level: 1 (Subscriber) or 10 (Agent) */
   level: number;
 }
 
 /**
- * Build canonical base bytes for MsgUpgradeLevel
- * NOTE: difficulty is always 0 for upgrade
+ * Build canonical base bytes for self-subscription.
+ *
+ * The protocol renamed MsgUpgradeLevel to MsgSubscribe. Keep the exported
+ * function name for existing mobile call sites, but sign the current message.
+ * NOTE: difficulty is always 0 for paid subscription operations.
  */
 export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
   const baseParams: BaseParams = {
@@ -511,10 +518,11 @@ export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
     lastBlockHashBytes: params.lastBlockHashBytes,
     difficulty: 0, // Always 0 for paid operations
     timestampMs: params.timestampMs,
+    envelopeNonce: params.envelopeNonce,
   };
 
   return concatBytes(
-    prefix("MsgUpgradeLevel"),
+    prefix("MsgSubscribe"),
     encodeHeader(baseParams),
     encU64(100, params.level)
   );
@@ -526,6 +534,7 @@ export interface SetAutoRenewalParams {
   pubkey33: Uint8Array;
   lastBlockHashBytes: Uint8Array;
   timestampMs: number;
+  envelopeNonce: bigint;
   /** Auto renew flag */
   autoRenew: boolean;
 }
@@ -540,6 +549,7 @@ export function canonBaseSetAutoRenewal(params: SetAutoRenewalParams): Uint8Arra
     lastBlockHashBytes: params.lastBlockHashBytes,
     difficulty: 0, // Always 0 for paid operations
     timestampMs: params.timestampMs,
+    envelopeNonce: params.envelopeNonce,
   };
 
   return concatBytes(
@@ -565,24 +575,6 @@ export function canonBaseReport(params: ReportParams): Uint8Array {
    encString(100, params.target),
    encString(101, params.reason)
  );
-}
-
-// --- ClaimReward (Daily Quest Rewards) ---
-
-export interface ClaimRewardParams extends BaseParams {
-  /** Your address */
-  target: string;
-  /** Quest ID to claim */
-  questId: string;
-}
-
-export function canonBaseClaimReward(params: ClaimRewardParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgClaimReward"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.questId)
-  );
 }
 
 // --- MsgDeleteUser (Account Deletion) ---
@@ -612,5 +604,95 @@ export function canonBaseAward(params: AwardParams): Uint8Array {
     encodeHeader(params),
     encString(100, params.target),
     encString(101, params.award_type)
+  );
+}
+
+// --- MsgSetBiography ---
+
+export interface SetBiographyParams extends BaseParams {
+  target: string;
+  biography: string;
+}
+
+export function canonBaseSetBiography(params: SetBiographyParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetBiography"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.biography)
+  );
+}
+
+// --- MsgSetAgents ---
+
+export interface SetAgentsParams extends BaseParams {
+  target: string;
+  agents: string[];
+}
+
+export function canonBaseSetAgents(params: SetAgentsParams): Uint8Array {
+  const base = concatBytes(
+    prefix("MsgSetAgents"),
+    encodeHeader(params),
+    encString(100, params.target)
+  );
+  if (!params.agents || params.agents.length === 0) return base;
+  const agentFields = params.agents.map((addr) => encString(101, addr));
+  return concatBytes(base, ...agentFields);
+}
+
+// --- MsgAnnotate (Agent-only) ---
+
+export interface AnnotateParams extends BaseParams {
+  topic: string;
+  title: string;
+  content: string;
+  tag: string;
+  override: string;
+  media?: string[];
+  appendix: string;
+}
+
+export function canonBaseAnnotate(params: AnnotateParams): Uint8Array {
+  const base = concatBytes(
+    prefix("MsgAnnotate"),
+    encodeHeader(params),
+    encString(100, params.appendix),
+    encString(101, params.topic),
+    encString(102, params.title),
+    encString(103, params.content),
+    encString(104, params.tag),
+    encString(105, params.override)
+  );
+  const mediaFields = (params.media && params.media.length > 0)
+    ? params.media.map((url) => encString(106, url))
+    : [];
+  return concatBytes(base, ...mediaFields);
+}
+
+// --- MsgSubscribe / Gift Subscription (No PoW) ---
+
+export interface GiftSubscriptionParams {
+  pubkey33: Uint8Array;
+  lastBlockHashBytes: Uint8Array;
+  timestampMs: number;
+  envelopeNonce: bigint;
+  level: number;
+  target: string;
+}
+
+export function canonBaseGiftSubscription(params: GiftSubscriptionParams): Uint8Array {
+  const baseParams: BaseParams = {
+    pubkey33: params.pubkey33,
+    lastBlockHashBytes: params.lastBlockHashBytes,
+    difficulty: 0,
+    timestampMs: params.timestampMs,
+    envelopeNonce: params.envelopeNonce,
+  };
+  return concatBytes(
+    prefix("MsgSubscribe"),
+    encodeHeader(baseParams),
+    encU64(100, params.level),
+    encString(101, params.target)
   );
 }

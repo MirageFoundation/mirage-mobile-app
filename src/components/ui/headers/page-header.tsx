@@ -1,6 +1,5 @@
-import { Box, Button, Icon, Text } from "../primitives";
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { Box, Button, Text } from "../primitives";
+import { router } from "@/src/navigation/guarded-router";
 import BlurView from "../primitives/blur-view";
 import { StyleSheet } from "react-native-unistyles";
 

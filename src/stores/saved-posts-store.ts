@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
-import type { Post } from "@/src/components/molecules/post-card-types";
-import type { Comment } from "@/src/components/molecules/comment-item";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
+import type { Comment, Post } from "@/src/domain/content";
 
 export type SavedPost = Post & {
   savedAt: number;
@@ -12,6 +14,26 @@ export type SavedComment = Comment & {
   savedAt: number;
   rootPostId?: string;
 };
+
+function normalizeScoreLikeCount<T extends { likes: number; dislikes: number }>(item: T): T {
+  if (item.likes === 0 && item.dislikes > 0) {
+    return {
+      ...item,
+      likes: -item.dislikes,
+    };
+  }
+
+  return item;
+}
+
+function normalizeCommentScores<T extends Comment>(comment: T): T {
+  const normalized = normalizeScoreLikeCount(comment);
+
+  return {
+    ...normalized,
+    replies: normalized.replies?.map((reply) => normalizeCommentScores(reply)),
+  };
+}
 
 interface SavedPostsState {
   savedPosts: SavedPost[];
@@ -37,7 +59,7 @@ export const useSavedPostsStore = create<SavedPostsState>()(
         const existing = get().savedPosts.find((p) => p.id === post.id);
         if (existing) return;
         set((state) => ({
-          savedPosts: [{ ...post, savedAt: Date.now() }, ...state.savedPosts],
+          savedPosts: [normalizeScoreLikeCount({ ...post, savedAt: Date.now() }), ...state.savedPosts],
         }));
       },
 
@@ -67,7 +89,7 @@ export const useSavedPostsStore = create<SavedPostsState>()(
         if (existing) return;
         set((state) => ({
           savedComments: [
-            { ...comment, savedAt: Date.now(), rootPostId },
+            normalizeCommentScores({ ...comment, savedAt: Date.now(), rootPostId }),
             ...state.savedComments,
           ],
         }));
@@ -100,7 +122,27 @@ export const useSavedPostsStore = create<SavedPostsState>()(
     }),
     {
       name: "saved-posts-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as {
+          savedPosts?: SavedPost[];
+          savedComments?: SavedComment[];
+        };
+
+        return {
+          ...state,
+          savedPosts: (state.savedPosts ?? []).map((post) => normalizeScoreLikeCount(post)),
+          savedComments: (state.savedComments ?? []).map((comment) => normalizeCommentScores(comment)),
+        };
+      },
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "saved-posts-storage",
+  reset: () => useSavedPostsStore.getState().clearAll(),
+  rehydrate: () => useSavedPostsStore.persist.rehydrate(),
+});

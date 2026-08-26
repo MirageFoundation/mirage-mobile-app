@@ -16,13 +16,17 @@ import "@/src/utils/buffer";
 import "fast-text-encoding"; // Redundant if in ai.ts, but safe
 import "react-native-url-polyfill/auto";
 
-// 6. Styles (Unistyles/others)
+// 6. Crash reporting and startup diagnostics must run before native UI setup.
+import "@/src/services/sentry";
+import "@/src/services/startup-diagnostics";
+
+// 7. Styles (Unistyles/others)
 import "@/utils/unistyles"; // Replace with your style setup if different
 
-// 7. Expo Router Entry
+// 8. Expo Router Entry
 import "expo-router/entry";
 
-// 8. Reanimated Logger Configuration (Optional but recommended)
+// 9. Reanimated Logger Configuration (Optional but recommended)
 try {
   const { configureReanimatedLogger } = require("react-native-reanimated");
   if (configureReanimatedLogger) {

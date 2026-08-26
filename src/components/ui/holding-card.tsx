@@ -64,7 +64,10 @@ const HoldingCard: React.FC<HoldingCardProps> = ({
     return { opacity };
   });
 
-  const CardWrapper = width ? Animated.View : Box;
+  const CardWrapper = (width ? Animated.View : Box) as React.ComponentType<{
+    style?: ReturnType<typeof useAnimatedStyle>;
+    children?: React.ReactNode;
+  }>;
   const cardProps = width ? { style: animatedStyle } : {};
 
   return (

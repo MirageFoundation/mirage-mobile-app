@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import Animated, {
   useSharedValue,
+  cancelAnimation,
   withRepeat,
   withTiming,
   useAnimatedStyle,
@@ -30,9 +31,11 @@ const CoinFlipAnimation: React.FC<CoinFlipAnimationProps> = ({
         false
       );
     } else {
+      cancelAnimation(coinRotation);
       coinRotation.value = 0;
     }
-  }, [isAnimating]);
+    return () => cancelAnimation(coinRotation);
+  }, [coinRotation, isAnimating]);
 
   const coinAnimatedStyle = useAnimatedStyle(() => {
     const rotateY = interpolate(

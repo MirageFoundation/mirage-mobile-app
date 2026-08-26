@@ -1,10 +1,12 @@
 import { api } from "../../client";
-import type {
-  PostsResponse,
-  CommentsResponse,
-  RootPostIdResponse,
-  CommentContextResponse,
-} from "../../types";
+import type { PostsResponse, CommentsResponse } from "../../types";
+import { fetchCompleteCommentTree } from "../deep-comment-expansion";
+import { normalizeUserPostsQueryParams } from "../request-params";
+
+export {
+  normalizeUserPostsQueryParams,
+  type UserPostsQueryParams,
+} from "../request-params";
 
 // ============================================
 // Posts & Feed
@@ -38,9 +40,10 @@ export async function getPosts(
 export interface GetUserPostsParams {
   owner: string; // Required
   address?: string; // Viewer address
-  type?: "submissions" | "comments";
+  type?: "" | "submissions" | "comments";
   page?: number;
   limit?: number; // max 50
+  allowed_tags?: string;
 }
 
 /**
@@ -49,7 +52,10 @@ export interface GetUserPostsParams {
 export async function getUserPosts(
   params: GetUserPostsParams
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/get_user_posts", params);
+  return api.get<PostsResponse>("/get_user_posts", {
+    ...params,
+    ...normalizeUserPostsQueryParams(params),
+  });
 }
 
 // ============================================
@@ -57,45 +63,28 @@ export async function getUserPosts(
 // ============================================
 
 export interface GetCommentsParams {
-  post_id: string; // Required root txhash
+  post_id: string; // Required post OR comment txhash
   address?: string; // Viewer address
 }
 
 /**
- * Get comment tree for a post
+ * Get the complete thread for a post or comment.
+ *
+ * One request returns everything the thread UI needs: `ancestors` (the chain
+ * from the root post down to the immediate parent), `root` (the focused post
+ * or comment), and `children` (its nested reply subtree). Deeply nested
+ * replies that the API truncates are resolved transparently.
  */
 export async function getComments(
-  params: GetCommentsParams
+  params: GetCommentsParams,
+  options?: { signal?: AbortSignal },
 ): Promise<CommentsResponse> {
-  return api.get<CommentsResponse>("/get_comments", params);
-}
-
-export interface GetRootPostIdParams {
-  comment_id: string;
-}
-
-/**
- * Get the root post ID for a comment
- */
-export async function getRootPostId(
-  params: GetRootPostIdParams
-): Promise<RootPostIdResponse> {
-  return api.get<RootPostIdResponse>("/get_root_post_id", params);
-}
-
-export interface GetCommentContextParams {
-  comment_id: string;
-  address?: string;
-  max_depth?: number; // 1-10
-}
-
-/**
- * Get parent context for a comment
- */
-export async function getCommentContext(
-  params: GetCommentContextParams
-): Promise<CommentContextResponse> {
-  return api.get<CommentContextResponse>("/get_comment_context", params);
+  return fetchCompleteCommentTree(
+    params,
+    (requestParams, signal) =>
+      api.get<CommentsResponse>("/get_comments", requestParams, { signal }),
+    options?.signal,
+  );
 }
 
 // ============================================
@@ -107,9 +96,16 @@ export async function getCommentContext(
  * Adjusts for viewer's own vote weight
  */
 export function calculateDisplayPoints(post: {
-  points: number;
-  user_weight: number;
-  user_vote: number;
+  points?: number;
+  user_weight?: number;
+  user_vote?: number;
 }): number {
-  return Math.round(post.points - post.user_weight + post.user_vote);
+  const points = Number.isFinite(post.points) ? (post.points as number) : 0;
+  const userWeight = Number.isFinite(post.user_weight)
+    ? (post.user_weight as number)
+    : 0;
+  const userVote = Number.isFinite(post.user_vote)
+    ? (post.user_vote as number)
+    : 0;
+  return Math.round(points - userWeight + userVote);
 }

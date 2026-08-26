@@ -1,0 +1,44 @@
+diff --git a/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt b/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+index 0153c89c7e2ce4fa20351bc2d5e7b1c6cd341dbe..c8a550e00213caf02e334e58a9f5255f90a14384 100644
+--- a/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
++++ b/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+@@ -190,6 +190,8 @@ class ExpoShareIntentModule : Module() {
+ 
+         Function("clearShareIntent") { _: String ->
+             ExpoShareIntentSingleton.intent = null
++            ExpoShareIntentSingleton.isPending = false
++            currentActivity?.intent = Intent()
+         }
+ 
+         Function("hasShareIntent") { _: String ->
+diff --git a/build/useShareIntent.js b/build/useShareIntent.js
+index 1ab12c4c9e429ef8adfdac61c096acc906063dcf..d10d3d3c77371ffed38895bf15a961446bb94936 100644
+--- a/build/useShareIntent.js
++++ b/build/useShareIntent.js
+@@ -49,11 +49,14 @@ export default function useShareIntent(options = SHAREINTENT_OPTIONS_DEFAULT) {
+                 console.debug("useShareIntent[refresh] not a valid refresh url");
+         }
+     };
++    const isShareIntentListenerReady = useRef(false);
+     useEffect(() => {
+         if (options.disabled)
+             return;
+         options.debug &&
+             console.debug("useShareIntent[mount]", getScheme(options), options);
++        if (!isShareIntentListenerReady.current)
++            return;
+         refreshShareIntent();
+     }, [url, options.disabled]);
+     /**
+@@ -109,8 +112,11 @@ export default function useShareIntent(options = SHAREINTENT_OPTIONS_DEFAULT) {
+             options.debug && console.debug("useShareIntent[error]", event?.value);
+             setError(event?.value);
+         });
++        isShareIntentListenerReady.current = true;
+         setIsReady(true);
++        refreshShareIntent();
+         return () => {
++            isShareIntentListenerReady.current = false;
+             changeSubscription.remove();
+             errorSubscription.remove();
+         };

@@ -9,6 +9,12 @@ import * as SecureStore from "expo-secure-store";
 import * as Sentry from "@sentry/react-native";
 import { storage } from "@/src/stores/mmkv-storage";
 import {
+  migrateWalletAccessibility,
+  recoverWalletReplacement,
+  replaceWalletTransaction,
+  type SecureWalletStore,
+} from "@/src/services/wallet-secure-transactions";
+import {
   generateMnemonic,
   isValidMnemonic,
   createWalletFromMnemonic,
@@ -31,16 +37,66 @@ import {
 // ============================================
 
 const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
-  // Only accessible when device is unlocked
-  keychainAccessible: SecureStore.WHEN_UNLOCKED,
+  // Accessible after first unlock — survives background kills
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
 };
 
 // ============================================
 // Wallet Service Class
 // ============================================
 
+const OLD_SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED,
+};
+
+const secureWalletStore: SecureWalletStore = {
+  get: (key) => SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS),
+  set: (key, value) => SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS),
+  remove: (key) => SecureStore.deleteItemAsync(key, SECURE_STORE_OPTIONS),
+};
+
 class WalletService {
   private cachedMnemonic: string | null = null;
+  private cachedWallet: MirageWallet | null = null;
+
+  async migrateKeychainAccessibility(): Promise<void> {
+    try {
+      await recoverWalletReplacement({
+        deriveAddress: (value) => createWalletFromMnemonic(value).address,
+        secureStore: secureWalletStore,
+        metadataStore: { get: () => this.getWalletMetadata() },
+        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+        candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
+        backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
+      });
+      const mnemonic = await migrateWalletAccessibility({
+        deriveAddress: (value) => createWalletFromMnemonic(value).address,
+        secureStore: {
+          get: (key) => SecureStore.getItemAsync(
+            key,
+            key === STORAGE_KEYS.MNEMONIC
+              ? OLD_SECURE_STORE_OPTIONS
+              : SECURE_STORE_OPTIONS,
+          ),
+          set: secureWalletStore.set,
+          remove: (key) => SecureStore.deleteItemAsync(
+            key,
+            key === STORAGE_KEYS.MNEMONIC
+              ? OLD_SECURE_STORE_OPTIONS
+              : SECURE_STORE_OPTIONS,
+          ),
+        },
+        legacyKey: STORAGE_KEYS.MNEMONIC,
+        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+        setMigrated: () => storage.set("wallet_keychain_migrated_v2", true),
+      });
+      this.cachedMnemonic = mnemonic;
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { action: "wallet_keychain_migration" },
+      });
+    }
+  }
 
   // ============================================
   // Wallet Creation & Import
@@ -143,7 +199,7 @@ class WalletService {
    *
    * @param mnemonic - 12 or 24 word BIP39 mnemonic
    * @returns Wallet metadata
-   * @throws WalletError if mnemonic is invalid or wallet exists
+   * @throws WalletError if mnemonic is invalid or replacement fails
    */
   async importWallet(mnemonic: string): Promise<WalletMetadata> {
     // Validate mnemonic first
@@ -153,19 +209,8 @@ class WalletService {
       throw new WalletError("Invalid mnemonic phrase", WalletErrorCode.INVALID_MNEMONIC);
     }
 
-    // Check if wallet already exists
-    if (await this.hasWallet()) {
-      throw new WalletError("Wallet already exists. Clear existing wallet first.", WalletErrorCode.WALLET_ALREADY_EXISTS);
-    }
-
     try {
-      // Create wallet from mnemonic
       const wallet = createWalletFromMnemonic(normalizedMnemonic);
-
-      // Store mnemonic securely
-      await this.storeMnemonic(normalizedMnemonic);
-
-      // Create and store metadata
       const metadata: WalletMetadata = {
         address: wallet.address,
         publicKeyBase64: getPublicKeyBase64(wallet),
@@ -173,10 +218,31 @@ class WalletService {
         hasUsername: false,
       };
 
-      this.storeMetadata(metadata);
+      await replaceWalletTransaction({
+        prepare: () => ({
+          mnemonic: normalizedMnemonic,
+          address: wallet.address,
+          metadata,
+        }),
+        deriveAddress: (value) => createWalletFromMnemonic(value).address,
+        secureStore: secureWalletStore,
+        metadataStore: {
+          get: () => this.getWalletMetadata(),
+          set: (value) => this.storeMetadata(value),
+          remove: () => storage.remove(STORAGE_KEYS.WALLET_META),
+        },
+        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+        candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
+        backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
+        onCleanupError: (cleanupError) => {
+          Sentry.captureException(cleanupError, {
+            tags: { action: "wallet_import_cleanup" },
+          });
+        },
+      });
 
-      // Cache mnemonic for session
       this.cachedMnemonic = normalizedMnemonic;
+      this.cachedWallet = wallet;
 
       return metadata;
     } catch (error) {
@@ -205,7 +271,13 @@ class WalletService {
       const mnemonic = await this.getMnemonic();
       if (!mnemonic) return null;
 
-      return createWalletFromMnemonic(mnemonic);
+      if (this.cachedWallet && this.cachedWallet.mnemonic === mnemonic) {
+        return this.cachedWallet;
+      }
+
+      const wallet = createWalletFromMnemonic(mnemonic);
+      this.cachedWallet = wallet;
+      return wallet;
     } catch {
       return null;
     }
@@ -216,8 +288,15 @@ class WalletService {
    */
   async hasWallet(): Promise<boolean> {
     try {
-      const mnemonic = await SecureStore.getItemAsync(STORAGE_KEYS.MNEMONIC, SECURE_STORE_OPTIONS);
-      return !!mnemonic;
+      const mnemonic = await SecureStore.getItemAsync(
+        STORAGE_KEYS.MNEMONIC_V2,
+        SECURE_STORE_OPTIONS,
+      );
+      if (mnemonic) return true;
+      return !!(await SecureStore.getItemAsync(
+        STORAGE_KEYS.MNEMONIC,
+        OLD_SECURE_STORE_OPTIONS,
+      ));
     } catch {
       return false;
     }
@@ -298,6 +377,8 @@ class WalletService {
     }
 
     const timestamp = Date.now();
+    const envelopeNonce = (BigInt(timestamp) * 1000000n + BigInt(Math.floor(Math.random() * 0x100000000)))
+      .toString();
     const privateKey = derivePrivateKey(mnemonic);
     const publicKey = getCompressedPublicKey(privateKey);
 
@@ -336,6 +417,7 @@ class WalletService {
       last_block_hash: lastBlockHash,
       pow_difficulty: powDifficulty,
       pow: powNonce,
+      envelope_nonce: envelopeNonce,
     };
   }
 
@@ -351,7 +433,12 @@ class WalletService {
   async clearWallet(): Promise<void> {
     try {
       // Clear secure store
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC, SECURE_STORE_OPTIONS);
+      await Promise.all([
+        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_V2, SECURE_STORE_OPTIONS),
+        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_CANDIDATE, SECURE_STORE_OPTIONS),
+        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_BACKUP, SECURE_STORE_OPTIONS),
+        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC, OLD_SECURE_STORE_OPTIONS),
+      ]);
 
       // Clear MMKV data
       storage.remove(STORAGE_KEYS.WALLET_META);
@@ -360,6 +447,7 @@ class WalletService {
 
       // Clear cached mnemonic
       this.cachedMnemonic = null;
+      this.cachedWallet = null;
     } catch (error) {
       Sentry.captureException(error, {
         tags: { action: "wallet_clear" },
@@ -394,7 +482,14 @@ class WalletService {
     }
 
     try {
-      const mnemonic = await SecureStore.getItemAsync(STORAGE_KEYS.MNEMONIC, SECURE_STORE_OPTIONS);
+      const currentMnemonic = await SecureStore.getItemAsync(
+        STORAGE_KEYS.MNEMONIC_V2,
+        SECURE_STORE_OPTIONS,
+      );
+      const mnemonic = currentMnemonic ?? await SecureStore.getItemAsync(
+        STORAGE_KEYS.MNEMONIC,
+        OLD_SECURE_STORE_OPTIONS,
+      );
 
       if (mnemonic) {
         // Cache for future use
@@ -415,7 +510,7 @@ class WalletService {
    * Store mnemonic in secure store
    */
   private async storeMnemonic(mnemonic: string): Promise<void> {
-    await SecureStore.setItemAsync(STORAGE_KEYS.MNEMONIC, mnemonic, SECURE_STORE_OPTIONS);
+    await SecureStore.setItemAsync(STORAGE_KEYS.MNEMONIC_V2, mnemonic, SECURE_STORE_OPTIONS);
   }
 
   /**

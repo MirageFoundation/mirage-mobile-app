@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { Box, Button, Text } from "../primitives";
-import { router } from "expo-router";
+import { router } from "@/src/navigation/guarded-router";
 
 export const ModalHeader = ({
   title,

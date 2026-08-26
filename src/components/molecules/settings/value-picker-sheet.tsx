@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import {
@@ -13,7 +14,7 @@ import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 export type ValueOption<T> = {
@@ -38,16 +39,16 @@ function ValuePickerSheetInner<T>(
   { title, options, value, onChange, onDismiss }: ValuePickerSheetProps<T>,
   ref: React.Ref<ValuePickerSheetRef>
 ) {
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
 
   const present = useCallback(() => {
-    bottomSheetRef.current?.expand();
+    bottomSheetRef.current?.present();
   }, []);
 
   const dismiss = useCallback(() => {
-    bottomSheetRef.current?.close();
+    bottomSheetRef.current?.dismiss();
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -90,7 +91,7 @@ const handleSelect = useCallback(
         } else {
           dismiss();
         }
-      } catch (err) {
+      } catch {
         dismiss();
       }
     },
@@ -98,9 +99,8 @@ const handleSelect = useCallback(
   );
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={bottomSheetRef}
-      index={-1}
       enableDynamicSizing
       enablePanDownToClose
       onChange={handleSheetChanges}
@@ -117,11 +117,14 @@ const handleSelect = useCallback(
             {title}
           </Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close ${title}`}
             onPress={dismiss}
             style={[
               styles.closeButton,
               { backgroundColor: theme.colors.background.subtle },
             ]}
+            hitSlop={6}
           >
             <Ionicons
               name="close"
@@ -139,6 +142,8 @@ const handleSelect = useCallback(
             return (
               <Pressable
                 key={String(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
                 onPress={() => handleSelect(option.value)}
                 style={({ pressed }) => [
                   styles.optionItem,
@@ -150,7 +155,7 @@ const handleSelect = useCallback(
                   weight={isSelected ? "semibold" : "regular"}
                   style={{
                     color: isSelected
-                      ? theme.colors.brand
+                      ? theme.colors.brand[500]
                       : theme.colors.text.default,
                   }}
                 >
@@ -168,7 +173,7 @@ const handleSelect = useCallback(
           })}
         </View>
       </BottomSheetView>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 

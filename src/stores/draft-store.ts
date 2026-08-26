@@ -1,30 +1,12 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+ registerWalletScopedStore,
+ walletScopedStorage,
+} from "./wallet-scoped-storage";
+import type { AttachmentType, PostDraft } from "@/src/domain/content";
 
-export type Community = {
-  id: string;
-  name: string;
-  avatar?: string;
-  memberCount: number;
-  description?: string;
-  isSubscribed: boolean;
-  isNewTopic?: boolean;
-};
-
-export type AttachmentType = "link" | "image" | "video" | "poll" | null;
-
-export type PostDraft = {
-  community: Community | null;
-  topic: string | null;
-  title: string;
-  body: string;
-  contentWarning: string[];
-  mediaUris: string[];
-  linkUrl: string | null;
-  attachmentType: AttachmentType;
-  tags: string[];
-};
+export type { AttachmentType, Community, PostDraft } from "@/src/domain/content";
 
 const MAX_MEDIA_ITEMS = 10;
 
@@ -49,6 +31,7 @@ const emptyDraft: PostDraft = {
   body: "",
   contentWarning: [],
   mediaUris: [],
+  stickerUrls: [],
   linkUrl: null,
   attachmentType: null,
   tags: [],
@@ -67,32 +50,33 @@ export const useDraftStore = create<DraftState>()(
         })),
       clearDraft: () => set({ draft: emptyDraft, hasDraft: false }),
       setAttachment: (type, uri) =>
-        set((state) => ({
-          draft: {
-            ...state.draft,
-            attachmentType: type,
-            linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
-            mediaUris:
-              type === "image"
-                ? uri
-                  ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
-                  : state.draft.mediaUris
-                : type === "video"
-                  ? uri
-                    ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
-                    : state.draft.mediaUris
-                  : [],
-          },
-          hasDraft: true,
-        })),
+        set((state) => {
+          const mediaUris =
+            type === "image" || type === "video"
+              ? uri
+                ? Array.from(new Set([...state.draft.mediaUris, uri])).slice(0, MAX_MEDIA_ITEMS)
+                : state.draft.mediaUris
+              : [];
+
+          return {
+            draft: {
+              ...state.draft,
+              attachmentType: type,
+              linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
+              mediaUris,
+            },
+            hasDraft: true,
+          };
+        }),
       addMediaUri: (uri) =>
         set((state) => {
-          if (state.draft.mediaUris.length >= MAX_MEDIA_ITEMS) return state;
+          const mediaUris = Array.from(new Set([...state.draft.mediaUris, uri])).slice(0, MAX_MEDIA_ITEMS);
+          if (mediaUris.length === state.draft.mediaUris.length) return state;
           return {
             draft: {
               ...state.draft,
               attachmentType: "image",
-              mediaUris: [...state.draft.mediaUris, uri],
+              mediaUris,
             },
             hasDraft: true,
           };
@@ -112,7 +96,9 @@ export const useDraftStore = create<DraftState>()(
         set((state) => ({
           draft: {
             ...state.draft,
-            mediaUris: state.draft.mediaUris.map((u) => u === oldUri ? newUri : u),
+            mediaUris: Array.from(
+              new Set(state.draft.mediaUris.map((u) => u === oldUri ? newUri : u))
+            ),
           },
         })),
       removeAttachment: () =>
@@ -127,7 +113,14 @@ export const useDraftStore = create<DraftState>()(
     }),
     {
       name: "draft-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
     }
   )
 );
+
+registerWalletScopedStore({
+ storageName: "draft-storage",
+ reset: () => useDraftStore.getState().clearDraft(),
+ rehydrate: () => useDraftStore.persist.rehydrate(),
+});

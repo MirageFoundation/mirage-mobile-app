@@ -1,28 +1,37 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { useAwardConfigs } from "@/src/api/read/hooks/use-award-configs";
 import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useGiveAward } from "@/src/api/write/hooks/use-award";
 import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore } from "@/src/stores";
 import { AWARD_TYPES, formatAwardCost, getFriendlyAwardError } from "@/src/data/awards";
+import {
+  generateActionId,
+  getActionLabel,
+  usePowQueueStore,
+} from "@/src/services/pow-queue";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 import type { AwardConfig } from "@/src/api/types";
-import axios from "axios";
 
 type AwardPickerSheetProps = {
   targetId: string;
+  // Backend `/core/award` only accepts 64-hex post/comment ids (chain-level
+  // MsgAward validates the target as a tx hash too) — user awards do not exist.
   targetType: "post" | "comment";
   isOwnContent?: boolean;
   onDismiss?: () => void;
@@ -120,19 +129,25 @@ export const AwardPickerSheet = forwardRef<
     const userLevel = useAuthStore((s) => s.userLevel);
     const isAdmin = userLevel >= 100;
 
-    const { data: awardConfigs } = useAwardConfigs();
-    const { data: userStatus } = useUserStatus();
-    const giveAwardMutation = useGiveAward();
-
+    const [isPresented, setIsPresented] = useState(false);
     const [selectedType, setSelectedType] = useState<string | null>(null);
-    const [isSending, setIsSending] = useState(false);
+    const { data: awardConfigs } = useAwardConfigs({ enabled: isPresented });
+    const { data: userStatus, isPending: isBalanceLoading } = useUserStatus({
+      enabled: isPresented,
+    });
+    const giveAwardMutation = useGiveAward();
+    const awardAsyncRef = useRef(giveAwardMutation.mutateAsync);
+    const sendGuardRef = useRef(createDuplicateActionGuard());
+    useEffect(() => {
+      awardAsyncRef.current = giveAwardMutation.mutateAsync;
+    }, [giveAwardMutation.mutateAsync]);
+    const enqueue = usePowQueueStore((state) => state.enqueue);
 
     const present = useCallback(() => {
+      setIsPresented(true);
       setSelectedType(null);
-      setIsSending(false);
-      giveAwardMutation.reset();
       bottomSheetRef.current?.present();
-    }, [giveAwardMutation]);
+    }, []);
 
     const dismiss = useCallback(() => {
       bottomSheetRef.current?.dismiss();
@@ -146,6 +161,7 @@ export const AwardPickerSheet = forwardRef<
     const handleSheetChanges = useCallback(
       (index: number) => {
         if (index === -1) {
+          setIsPresented(false);
           onDismiss?.();
         }
       },
@@ -159,51 +175,60 @@ export const AwardPickerSheet = forwardRef<
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
+          pressBehavior="close"
         />
       ),
       [],
     );
 
     const selectedConfig = awardConfigs?.find((c) => c.name === selectedType);
+    const balanceKnown = userStatus != null;
     const balance = userStatus?.balance ?? 0;
+    // Only flag insufficient balance once the balance is actually known;
+    // an unresolved status query must not surface a false "Insufficient Balance".
     const hasInsufficientBalance =
-      !isAdmin && selectedConfig ? balance < selectedConfig.cost : false;
+      !isAdmin && balanceKnown && selectedConfig
+        ? balance < selectedConfig.cost
+        : false;
 
-    const handleSendAward = useCallback(async () => {
-      if (!selectedType || !targetId || isSending) return;
-      setIsSending(true);
+    // C-3: awards go through the shared PoW queue like votes/comments — the
+    // sheet dismisses immediately and the queue toast owns progress and the
+    // success/failure overlay. No blocking modal transaction.
+    const handleSendAward = useCallback(() => {
+      if (!selectedType || !targetId || !sendGuardRef.current.tryAcquire()) return;
+      const awardType = selectedType;
+      const awardLabel = AWARD_TYPES[awardType]?.label ?? "Award";
       triggerHaptic("medium");
+      dismiss();
 
-      try {
-        await giveAwardMutation.mutateAsync({
-          target: targetId,
-          award_type: selectedType,
-        });
-        triggerHaptic("success");
-        const info = AWARD_TYPES[selectedType];
-        toast.success(`${info?.label ?? "Award"} given!`);
-        dismiss();
-        onSuccess?.();
-      } catch (err) {
-        triggerHaptic("error");
-        let errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (axios.isAxiosError(err)) {
-          const data = err.response?.data;
-          if (typeof data === "string" && data.trim()) {
-            errorMessage = data;
-          } else if (data && typeof data === "object") {
-            const msg =
-              (data as any).error ??
-              (data as any).message ??
-              (data as any).raw_log;
-            if (msg) errorMessage = String(msg);
-          }
-        }
-        toast.error(getFriendlyAwardError(errorMessage));
-      } finally {
-        setIsSending(false);
-      }
-    }, [selectedType, targetId, giveAwardMutation, toast, dismiss, onSuccess]);
+      enqueue({
+        id: generateActionId(),
+        type: "award",
+        label: getActionLabel("award"),
+        execute: () =>
+          awardAsyncRef.current({
+            target: targetId,
+            award_type: awardType,
+          }),
+        onSuccess: () => {
+          sendGuardRef.current.release();
+          triggerHaptic("success");
+          onSuccess?.();
+        },
+        onError: (err) => {
+          sendGuardRef.current.release();
+          triggerHaptic("error");
+          Sentry.captureException(err, { tags: { feature: "award", operation: "give-award" } });
+          toast.error(
+            `${awardLabel} wasn't sent`,
+            getFriendlyAwardError(getApiErrorMessage(err)),
+          );
+        },
+        onRollback: () => {
+          sendGuardRef.current.release();
+        },
+      });
+    }, [selectedType, targetId, enqueue, toast, dismiss, onSuccess]);
 
     const footerHeight = Platform.OS === "ios" ? insets.bottom : insets.bottom + 30;
 
@@ -222,7 +247,13 @@ export const AwardPickerSheet = forwardRef<
             <Text size="lg" weight="bold">
               Give Award
             </Text>
-            <Pressable onPress={dismiss} style={styles.closeButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close award picker"
+              onPress={dismiss}
+              style={styles.closeButton}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}
@@ -235,9 +266,17 @@ export const AwardPickerSheet = forwardRef<
             <Text size="md" mode="subtle">
               Balance:{" "}
             </Text>
-            <Text size="md" weight="bold">
-              {formatCompactNumber(balance / 1_000_000)} MIRAGE
-            </Text>
+            {balanceKnown ? (
+              <Text size="md" weight="bold">
+                {formatCompactNumber(balance / 1_000_000)} MIRAGE
+              </Text>
+            ) : isBalanceLoading ? (
+              <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+            ) : (
+              <Text size="md" weight="bold" mode="subtle">
+                — MIRAGE
+              </Text>
+            )}
           </View>
 
           <View style={styles.optionsList}>
@@ -257,11 +296,7 @@ export const AwardPickerSheet = forwardRef<
 
           <Pressable
             onPress={handleSendAward}
-            disabled={
-              !selectedType ||
-              isSending ||
-              hasInsufficientBalance
-            }
+            disabled={!selectedType || hasInsufficientBalance}
             style={({ pressed }) => [
               styles.sendButton,
               {
@@ -274,24 +309,20 @@ export const AwardPickerSheet = forwardRef<
               (!selectedType || hasInsufficientBalance) && { opacity: 0.5 },
             ]}
           >
-            {isSending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text
-                size="md"
-                weight="bold"
-                style={{
-                  color:
-                    !selectedType || hasInsufficientBalance
-                      ? theme.colors.text.subtle
-                      : "#fff",
-                }}
-              >
-                {hasInsufficientBalance
-                  ? "Insufficient Balance"
-                  : "Send Award"}
-              </Text>
-            )}
+            <Text
+              size="md"
+              weight="bold"
+              style={{
+                color:
+                  !selectedType || hasInsufficientBalance
+                    ? theme.colors.text.subtle
+                    : "#fff",
+              }}
+            >
+              {hasInsufficientBalance
+                ? "Insufficient Balance"
+                : "Send Award"}
+            </Text>
           </Pressable>
 
           <View style={{ height: footerHeight }} />

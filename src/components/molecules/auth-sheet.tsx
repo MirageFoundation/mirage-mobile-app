@@ -1,31 +1,20 @@
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
-import {
+import BottomSheet, {
   BottomSheetBackdrop,
-  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef } from "react";
+import { useRouter } from "@/src/navigation/guarded-router";
+import { useCallback } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export const AuthSheet = () => {
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const router = useRouter();
   const { theme } = useUnistyles();
 
   const authSheetVisible = useUIStore((s) => s.authSheetVisible);
   const hideAuthSheet = useUIStore((s) => s.hideAuthSheet);
-
-  // Control sheet visibility based on store state
-  useEffect(() => {
-    if (authSheetVisible) {
-      bottomSheetRef.current?.present();
-    } else {
-      bottomSheetRef.current?.dismiss();
-    }
-  }, [authSheetVisible]);
 
   const handleSheetChanges = useCallback(
     (index: number) => {
@@ -35,10 +24,6 @@ export const AuthSheet = () => {
     },
     [hideAuthSheet]
   );
-
-  const handleDismiss = useCallback(() => {
-    hideAuthSheet();
-  }, [hideAuthSheet]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -55,19 +40,22 @@ export const AuthSheet = () => {
 
   const handleCreateAccount = () => {
     hideAuthSheet();
-    router.push("/(auth)/username");
+    router.push("/username");
   };
 
   const handleLogin = () => {
     hideAuthSheet();
-    router.push("/(auth)/login");
+    router.push("/login");
   };
 
+  if (!authSheetVisible) {
+    return null;
+  }
+
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
+    <BottomSheet
+      index={0}
       onChange={handleSheetChanges}
-      onDismiss={handleDismiss}
       enablePanDownToClose
       enableDynamicSizing
       backdropComponent={renderBackdrop}
@@ -130,7 +118,7 @@ export const AuthSheet = () => {
           </Button>
         </Box>
       </BottomSheetView>
-    </BottomSheetModal>
+    </BottomSheet>
   );
 };
 

@@ -4,17 +4,36 @@
  * Uses react-native-video-trim for video trimming and processing.
  */
 
+import * as Sentry from '@sentry/react-native';
+import { Video } from 'react-native-compressor';
 import { trim, isValidFile } from 'react-native-video-trim';
+import { sanitizedTelemetryError } from '@/src/services/react-query-telemetry';
+
+const UPLOAD_VIDEO_MAX_SIZE = 1280;
+const LONGFORM_VIDEO_THRESHOLD_MS = 60 * 1000;
+const LONGFORM_VIDEO_MAX_SIZE = 1080;
+const UPLOAD_VIDEO_BITRATE = 1_800_000;
+const MIN_VIDEO_SIZE_TO_COMPRESS_MB = 2;
 
 export interface ProcessVideoOptions {
   /** Remove audio track from video */
   removeAudio?: boolean;
+  /** Compress video for faster upload and stream provider processing */
+  compressForUpload?: boolean;
+  /** Throw instead of falling back to the original/current file when compression fails */
+  failOnCompressionError?: boolean;
   /** Trim start time in milliseconds */
   trimStartMs?: number;
   /** Trim end time in milliseconds */
   trimEndMs?: number;
   /** Total video duration in milliseconds (needed to detect if trimming is required) */
   totalDurationMs?: number;
+  /** Source video width in pixels */
+  sourceWidth?: number;
+  /** Source video height in pixels */
+  sourceHeight?: number;
+  /** Reports preprocessing progress from 0 to 100. */
+  onProgress?: (progress: number) => void;
 }
 
 export interface ProcessVideoResult {
@@ -45,6 +64,90 @@ function needsTrimming(options: ProcessVideoOptions): boolean {
   return trimStartMs > 100;
 }
 
+function getCompressionMaxSize(options: ProcessVideoOptions): number {
+  const isLongForm = (options.totalDurationMs ?? 0) > LONGFORM_VIDEO_THRESHOLD_MS;
+  if (isLongForm && (!options.sourceHeight || options.sourceHeight > LONGFORM_VIDEO_MAX_SIZE)) {
+    return LONGFORM_VIDEO_MAX_SIZE;
+  }
+  return UPLOAD_VIDEO_MAX_SIZE;
+}
+
+async function compressVideoForUpload(
+  inputUri: string,
+  options: ProcessVideoOptions,
+): Promise<ProcessVideoResult> {
+  const compressionStartedAt = Date.now();
+  const compressionMaxSize = getCompressionMaxSize(options);
+  console.log("[VideoProcessing] Compressing video for upload...");
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Starting video compression',
+    level: 'info',
+    data: {
+      maxSize: compressionMaxSize,
+      bitrate: UPLOAD_VIDEO_BITRATE,
+      stripAudio: options.removeAudio === true,
+      totalDurationMs: options.totalDurationMs,
+      sourceWidth: options.sourceWidth,
+      sourceHeight: options.sourceHeight,
+    },
+  });
+
+  const outputUri = await Video.compress(
+    inputUri,
+    {
+      compressionMethod: 'manual',
+      maxSize: compressionMaxSize,
+      bitrate: UPLOAD_VIDEO_BITRATE,
+      minimumFileSizeForCompress: MIN_VIDEO_SIZE_TO_COMPRESS_MB,
+      stripAudio: options.removeAudio === true,
+    },
+    (progress) => {
+      options.onProgress?.(Math.round(progress * 100));
+      if (progress === 0 || progress === 1 || Math.round(progress * 100) % 25 === 0) {
+        console.log("[VideoProcessing] Compression progress:", Math.round(progress * 100));
+      }
+    },
+  );
+
+  const compressionDurationMs = Date.now() - compressionStartedAt;
+
+  console.log("[VideoTiming] compression complete", {
+    durationMs: compressionDurationMs,
+    wasCompressed: !!outputUri && outputUri !== inputUri,
+  });
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Video compression complete',
+    level: 'info',
+    data: {
+      durationMs: compressionDurationMs,
+      wasCompressed: !!outputUri && outputUri !== inputUri,
+      maxSize: compressionMaxSize,
+      bitrate: UPLOAD_VIDEO_BITRATE,
+    },
+  });
+  if (compressionDurationMs > 15000) {
+    Sentry.captureMessage('Video compression was slow', {
+      level: 'warning',
+      tags: {
+        feature: 'video-posting',
+        operation: 'video-compression',
+      },
+      extra: {
+        durationMs: compressionDurationMs,
+        maxSize: compressionMaxSize,
+        bitrate: UPLOAD_VIDEO_BITRATE,
+      },
+    });
+  }
+
+  return {
+    uri: outputUri || inputUri,
+    wasProcessed: !!outputUri && outputUri !== inputUri,
+  };
+}
+
 /**
  * Process a video file with the given options
  * 
@@ -56,62 +159,195 @@ export async function processVideo(
   inputUri: string,
   options: ProcessVideoOptions
 ): Promise<ProcessVideoResult> {
+  const processingStartedAt = Date.now();
   const shouldTrim = needsTrimming(options);
   const shouldRemoveAudio = options.removeAudio === true;
-  
-  // If no processing needed, return original
-  if (!shouldRemoveAudio && !shouldTrim) {
-    console.log("[VideoProcessing] No processing needed, returning original");
-    return { uri: inputUri, wasProcessed: false };
-  }
+  const shouldCompress = options.compressForUpload !== false;
+  options.onProgress?.(0);
 
   console.log("[VideoProcessing] Starting video processing...");
-  console.log("[VideoProcessing] Input:", inputUri);
   console.log("[VideoProcessing] Options:", options);
   console.log("[VideoProcessing] Will trim:", shouldTrim);
+  console.log("[VideoProcessing] Will compress:", shouldCompress);
   console.log("[VideoProcessing] Will remove audio:", shouldRemoveAudio);
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Starting video processing',
+    level: 'info',
+    data: {
+      shouldTrim,
+      shouldCompress,
+      shouldRemoveAudio,
+      trimStartMs: options.trimStartMs,
+      trimEndMs: options.trimEndMs,
+      totalDurationMs: options.totalDurationMs,
+      sourceWidth: options.sourceWidth,
+      sourceHeight: options.sourceHeight,
+    },
+  });
 
   // Validate the file first
+  const validationStartedAt = Date.now();
   try {
     const validationResult = await isValidFile(inputUri);
+    options.onProgress?.(10);
+    console.log("[VideoTiming] validation complete", {
+      durationMs: Date.now() - validationStartedAt,
+    });
     const isValid = typeof validationResult === 'boolean' ? validationResult : Boolean(validationResult);
     if (!isValid) {
       console.error("[VideoProcessing] Invalid video file");
+      Sentry.addBreadcrumb({
+        category: 'video-processing',
+        message: 'Invalid video file detected',
+        level: 'warning',
+      });
       return { uri: inputUri, wasProcessed: false };
     }
-  } catch (e) {
-    console.warn("[VideoProcessing] Could not validate file:", e);
+  } catch {
+    options.onProgress?.(10);
+    console.log("[VideoTiming] validation failed", {
+      durationMs: Date.now() - validationStartedAt,
+    });
+    console.warn("[VideoProcessing] Could not validate file");
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video validation failed',
+      level: 'warning',
+    });
+  }
+
+  let currentUri = inputUri;
+  let wasProcessed = false;
+
+  if (shouldTrim) {
+    try {
+      const trimStartedAt = Date.now();
+      const startTime = options.trimStartMs ?? 0;
+      const endTime = options.trimEndMs ?? options.totalDurationMs ?? 0;
+
+      const outputExt = 'mp4';
+
+      const cleanUri = inputUri.startsWith('file://') ? inputUri.replace('file://', '') : inputUri;
+
+      console.log("[VideoProcessing] Trimming from", startTime, "to", endTime, "outputExt:", outputExt);
+
+      const result = await trim(cleanUri, {
+        startTime,
+        endTime,
+        outputExt,
+      });
+      
+      console.log("[VideoProcessing] Trim succeeded");
+      console.log("[VideoTiming] trim complete", {
+        durationMs: Date.now() - trimStartedAt,
+        startTime,
+        endTime,
+      });
+      
+      const outputUri = typeof result === 'string' ? result : (result as any).outputPath;
+      if (outputUri) {
+        currentUri = outputUri;
+        wasProcessed = true;
+      }
+      options.onProgress?.(25);
+    } catch {
+      options.onProgress?.(25);
+      console.warn("[VideoProcessing] Trim failed, using original file");
+      Sentry.captureException(sanitizedTelemetryError('media-upload', {
+        error_class: 'unexpected',
+      }), {
+        tags: {
+          feature: 'video-processing',
+          stage: 'trim',
+        },
+        extra: {
+          trimStartMs: options.trimStartMs,
+          trimEndMs: options.trimEndMs,
+          totalDurationMs: options.totalDurationMs,
+          removeAudio: shouldRemoveAudio,
+        },
+      });
+    }
+  }
+
+  if (!shouldCompress) {
+    options.onProgress?.(100);
+    const totalDurationMs = Date.now() - processingStartedAt;
+    console.log("[VideoTiming] processing complete", {
+      totalDurationMs,
+      wasProcessed,
+      skippedCompression: true,
+    });
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing complete',
+      level: 'info',
+      data: {
+        totalDurationMs,
+        wasProcessed,
+        skippedCompression: true,
+      },
+    });
+    return { uri: currentUri, wasProcessed };
   }
 
   try {
-    const startTime = options.trimStartMs ?? 0;
-    const endTime = options.trimEndMs ?? options.totalDurationMs ?? 0;
-
-    const inputExtension = inputUri.split('.').pop()?.toLowerCase() || 'mp4';
-    const outputExt = ['mov', 'mp4', 'm4v'].includes(inputExtension) ? inputExtension : 'mp4';
-
-    const cleanUri = inputUri.startsWith('file://') ? inputUri.replace('file://', '') : inputUri;
-
-    console.log("[VideoProcessing] Trimming from", startTime, "to", endTime, "outputExt:", outputExt);
-
-    const result = await trim(cleanUri, {
-      startTime,
-      endTime,
-      outputExt,
+    const compressed = await compressVideoForUpload(currentUri, options);
+    options.onProgress?.(100);
+    const totalDurationMs = Date.now() - processingStartedAt;
+    console.log("[VideoTiming] processing complete", {
+      totalDurationMs,
+      wasProcessed: wasProcessed || compressed.wasProcessed,
+      skippedCompression: false,
     });
-    
-    console.log("[VideoProcessing] Success! Output:", result);
-    
-    // The result is the output file path
-    const outputUri = typeof result === 'string' ? result : (result as any).outputPath;
-    
-    return { 
-      uri: outputUri || inputUri, 
-      wasProcessed: true 
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing complete',
+      level: 'info',
+      data: {
+        totalDurationMs,
+        wasProcessed: wasProcessed || compressed.wasProcessed,
+        skippedCompression: false,
+      },
+    });
+    return {
+      uri: compressed.uri,
+      wasProcessed: wasProcessed || compressed.wasProcessed,
     };
   } catch (error) {
-    console.warn("[VideoProcessing] Trim failed, using original file:", error);
-    return { uri: inputUri, wasProcessed: false };
+    console.warn("[VideoProcessing] Compression failed");
+    if (options.failOnCompressionError) {
+      throw error;
+    }
+    Sentry.captureException(sanitizedTelemetryError('media-upload', {
+      error_class: 'unexpected',
+    }), {
+      tags: {
+        feature: 'video-processing',
+        stage: 'compress',
+      },
+      extra: {
+        maxSize: UPLOAD_VIDEO_MAX_SIZE,
+        bitrate: UPLOAD_VIDEO_BITRATE,
+      },
+    });
+    const totalDurationMs = Date.now() - processingStartedAt;
+    console.log("[VideoTiming] processing complete", {
+      totalDurationMs,
+      wasProcessed,
+      compressionFailed: true,
+    });
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing completed after compression failure',
+      level: 'warning',
+      data: {
+        totalDurationMs,
+        wasProcessed,
+      },
+    });
+    return { uri: currentUri, wasProcessed };
   }
 }
 
@@ -151,4 +387,29 @@ export async function validateVideoFile(uri: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000;
+
+export async function trimToMaxDuration(
+  uri: string,
+  durationMs: number,
+): Promise<string> {
+  if (durationMs <= MAX_VIDEO_DURATION_MS) return uri;
+  console.log("[VideoProcessing] Auto-trimming to 30m, original duration:", durationMs);
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Auto-trimming video to max duration',
+    level: 'info',
+    data: {
+      durationMs,
+      maxDurationMs: MAX_VIDEO_DURATION_MS,
+    },
+  });
+  const result = await processVideo(uri, {
+    trimStartMs: 0,
+    trimEndMs: MAX_VIDEO_DURATION_MS,
+    totalDurationMs: durationMs,
+  });
+  return result.uri;
 }

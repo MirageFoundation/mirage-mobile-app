@@ -1,14 +1,14 @@
-import { useRootPostId } from "@/src/api/read";
 import type { Post } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Dimensions, Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, View } from "react-native";
+import { Pressable } from "react-native-gesture-handler";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -109,6 +109,9 @@ const CommentImage = memo(({ url, onPress }: { url: string; onPress?: (url: stri
     </View>
   );
 });
+
+CommentImage.displayName = "CommentImage";
+
 interface ProfileCommentItemProps {
   comment: Post;
   onPress: (commentId: string, rootPostId: string) => void;
@@ -125,26 +128,20 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
  const { theme } = useUnistyles();
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
- const hasValidRootPostId = useMemo(() => {
-    return (
-      comment.root_post_id &&
-      comment.root_post_id.trim() !== "" &&
-      comment.root_post_id !== "undefined"
-    );
-  }, [comment.root_post_id]);
-
-  const { data: rootPostData, isLoading: isLoadingRootPostId } = useRootPostId(
-    !hasValidRootPostId ? comment.post_id : null,
-  );
-
+  // Thread entry point. When the comment carries no root post id we open the
+  // comment itself — `get_comments` accepts a comment id and returns the
+  // ancestor chain, so the detail screen derives the root. This used to fire a
+  // blocking `get_root_post_id` query per rendered row (a request storm on the
+  // profile comments tab, often 404-ing on deleted parents).
   const resolvedRootPostId = useMemo(() => {
-    if (hasValidRootPostId) {
-      return comment.root_post_id;
+    const rootPostId = comment.root_post_id?.trim();
+    if (rootPostId && rootPostId !== "undefined" && rootPostId !== "null") {
+      return rootPostId;
     }
-    return rootPostData?.root_post_id || null;
-  }, [hasValidRootPostId, comment.root_post_id, rootPostData]);
+    return comment.post_id;
+  }, [comment.root_post_id, comment.post_id]);
 
-  const isLoading = !hasValidRootPostId && isLoadingRootPostId;
+  const isLoading = false;
 
   const handlePress = useCallback(() => {
     if (!resolvedRootPostId) {

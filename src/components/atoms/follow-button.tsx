@@ -92,6 +92,7 @@ export const FollowButton = ({
         onPressOut={handlePressOut}
         onPress={handlePress}
         disabled={disabled}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         style={[
           styles.container,
           { height: isFollowing ? height + 2 : height, paddingHorizontal },

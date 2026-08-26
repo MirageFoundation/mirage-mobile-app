@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Dimensions } from "react-native";
+import { Dimensions, Platform } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import {
   interpolate,
@@ -13,6 +13,12 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const TAB_COUNT = 3;
 const VELOCITY_THRESHOLD = 500;
+// Higher threshold prevents accidental Pan activation that swallows
+// child Pressable taps (likes, comments, share, etc.). Android dispatches
+// touch streams through the gesture handler more eagerly, so it needs a
+// noticeably larger activation distance than iOS.
+const HORIZONTAL_ACTIVATION = Platform.OS === "android" ? 50 : 30;
+const VERTICAL_FAIL = Platform.OS === "android" ? 8 : 12;
 
 export function useTabSwipeGesture({
   onTabChange,
@@ -40,8 +46,10 @@ export function useTabSwipeGesture({
   );
 
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-15, 15])
-    .failOffsetY([-10, 10])
+    .activeOffsetX([-HORIZONTAL_ACTIVATION, HORIZONTAL_ACTIVATION])
+    .failOffsetY([-VERTICAL_FAIL, VERTICAL_FAIL])
+    .minDistance(HORIZONTAL_ACTIVATION)
+    .shouldCancelWhenOutside(false)
     .onStart(() => {
       startTab.value = Math.round(animatedIndex.value);
       isGestureActive.value = true;

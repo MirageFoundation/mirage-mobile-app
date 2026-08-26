@@ -3,14 +3,48 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import * as Sentry from "@sentry/react-native";
 import { walletService } from "@/src/services/wallet-service";
-import { getUserStatus } from "@/src/api/read/endpoints/users";
-import { queryKeys } from "@/src/api/read/query-keys";
-import { queryClient } from "@/src/providers/query-provider";
-import type { WalletMetadata } from "@/src/wallet";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { usePreferencesStore } from "./preferences-store";
+import { useHomePostCardStore } from "./home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
+import { useDraftStore } from "./draft-store";
+import "./comment-compose-store";
+import "./history-store";
+import "./pending-posts-store";
+import "./saved-posts-store";
+import "./search-store";
+import {
+  clearWalletScopedState,
+  selectWalletStorageNamespace,
+} from "./wallet-scoped-storage";
+import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
+import { getServerIdentity } from "@/src/api/server-runtime";
+import {
+  identifyUser,
+  registerTierSuperProperty,
+  resetAnalyticsIdentity,
+  trackEvent,
+  updateUserProfile,
+} from "@/src/services/analytics";
 import { getTierName } from "@/src/utils/tiers";
+import {
+  resolveAuthSessionStatus,
+  resolvePendingWalletStartup,
+  type AuthSessionStatus,
+} from "@/src/domain/auth/session";
+import {
+  addAuthBootstrapBreadcrumb,
+  bootstrapAnonymousAfterLogout,
+  bootstrapAnonymousStartup,
+  bootstrapAuthSession,
+  resolveAndCacheAuthUserStatus,
+  startAuthUserStatusBootstrap,
+  type AuthUserStatusSnapshot,
+} from "@/src/services/auth-bootstrap";
+import {
+  authSessionCoordinator,
+  type AuthSessionToken,
+} from "@/src/services/auth-session-coordinator";
 
 // ============================================
 // Types
@@ -37,10 +71,37 @@ const MOCK_USER: User = {
   id: "user_123",
   username: "sonali",
   walletAddress: "mirage1mockaddress123456789",
-  tier: "Premium",
+  tier: "Free",
   avatar: undefined,
   followerCount: 128,
 };
+
+function buildUserFromStatus(
+  walletAddress: string,
+  snapshot: AuthUserStatusSnapshot,
+): User {
+  return {
+    id: walletAddress,
+    username: snapshot.username,
+    walletAddress,
+    tier: snapshot.tier,
+  };
+}
+
+function beginAuthTransition(walletAddress?: string | null): AuthSessionToken {
+  const token = authSessionCoordinator.begin(walletAddress);
+  clearWalletScopedState();
+  return token;
+}
+
+async function selectWalletStorageForSession(
+  token: AuthSessionToken,
+): Promise<void> {
+  await authSessionCoordinator.enqueueIdentityMutation(async () => {
+    if (!authSessionCoordinator.isCurrent(token)) return;
+    await selectWalletStorageNamespace(token.walletAddress);
+  });
+}
 
 // ============================================
 // Auth State
@@ -54,16 +115,17 @@ type AuthState = {
   // Wallet state
   walletAddress: string | null;
   publicKeyBase64: string | null;
-  userLevel: number; // 0 = free, 1-3 = paid tiers
+  userLevel: number; // 0 = free, 1 = subscriber, 10 = agent
   hasUsername: boolean;
 
-  // Onboarding state
+  // Kept in lockstep with isLoggedIn for older persisted clients.
   hasOnboarded: boolean;
-  recoveryPhrase: string | null; // Temporarily stored during onboarding flow
+  recoveryPhrase: string | null; // Live only during pending signup
 
   // Loading state
   isInitializing: boolean;
   isCreatingWallet: boolean;
+  isBootstrapping: boolean;
 
   // Actions - Initialization
   initializeWallet: () => Promise<void>;
@@ -75,9 +137,9 @@ type AuthState = {
   logout: () => Promise<void>;
 
   // Actions - User state updates
-  setUser: (user: User) => void;
-  setUserLevel: (level: number) => void;
-  setHasUsername: (has: boolean, username?: string) => void;
+  setUser: (user: User) => Promise<void>;
+  setUserLevel: (level: number, walletAddress: string) => void;
+  setHasUsername: (has: boolean, username: string | undefined, walletAddress: string) => void;
   setRecoveryPhrase: (phrase: string | null) => void;
 
   // Actions - Helpers
@@ -102,6 +164,7 @@ export const useAuthStore = create<AuthState>()(
       recoveryPhrase: null,
       isInitializing: true,
       isCreatingWallet: false,
+      isBootstrapping: false,
 
       // ============================================
       // Initialization
@@ -113,17 +176,67 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
+        let session = beginAuthTransition(null);
         try {
           set({ isInitializing: true });
 
-          const cleanedUp = await walletService.cleanupPendingWallet();
-          if (cleanedUp) {
-            console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
+          await walletService.migrateKeychainAccessibility();
+          if (!authSessionCoordinator.isCurrent(session)) return;
+
+          const pendingMetadata = walletService.getWalletMetadata();
+          const pendingStartup = resolvePendingWalletStartup(pendingMetadata);
+          if (pendingStartup === "resume" && pendingMetadata) {
+            const mnemonic = await walletService.exportMnemonic();
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            if (!mnemonic) {
+              Sentry.captureMessage("Pending signup wallet is missing its mnemonic", {
+                level: "error",
+                tags: { feature: "auth", operation: "resume-pending-signup" },
+              });
+            }
+            set({
+              isLoggedIn: false,
+              hasOnboarded: false,
+              isBootstrapping: false,
+              walletAddress: pendingMetadata.address,
+              publicKeyBase64: pendingMetadata.publicKeyBase64,
+              hasUsername: true,
+              recoveryPhrase: mnemonic,
+              user: {
+                id: pendingMetadata.address,
+                username: null,
+                walletAddress: pendingMetadata.address,
+                tier: "Free",
+              },
+              isInitializing: false,
+            });
+            return;
+          }
+          if (pendingStartup === "wipe") {
+            const cleanedUp = await walletService.cleanupPendingWallet();
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            if (cleanedUp) {
+              console.log(
+                "[AuthStore] Cleaned up pending wallet from incomplete signup",
+              );
+            }
           }
 
-          const hasWallet = await walletService.hasWallet();
+          let hasWalletResult = await walletService.hasWallet();
+          if (!authSessionCoordinator.isCurrent(session)) return;
 
-          if (!hasWallet) {
+          if (!hasWalletResult && get().isLoggedIn) {
+            await new Promise((r) => setTimeout(r, 500));
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            hasWalletResult = await walletService.hasWallet();
+            if (!authSessionCoordinator.isCurrent(session)) return;
+          }
+
+          if (!hasWalletResult) {
+            await selectWalletStorageForSession(session);
+            const isCurrent = () => authSessionCoordinator.isCurrent(session);
+            await bootstrapAnonymousStartup(isCurrent);
+            if (!isCurrent()) return;
             set({
               isLoggedIn: false,
               walletAddress: null,
@@ -137,11 +250,19 @@ export const useAuthStore = create<AuthState>()(
           const metadata = walletService.getWalletMetadata();
 
           if (metadata) {
+            if (!authSessionCoordinator.isCurrent(session)) return;
+            session = beginAuthTransition(metadata.address);
+            const isCurrent = () =>
+              authSessionCoordinator.matches(session, metadata.address);
+            await selectWalletStorageForSession(session);
+            if (!isCurrent()) return;
             Sentry.setUser({
               id: metadata.address,
             });
+            identifyUser(metadata.address);
             set({
               isLoggedIn: true,
+              isBootstrapping: true,
               walletAddress: metadata.address,
               publicKeyBase64: metadata.publicKeyBase64,
               hasUsername: metadata.hasUsername,
@@ -153,47 +274,66 @@ export const useAuthStore = create<AuthState>()(
                 walletAddress: metadata.address,
                 tier: "Free",
               },
-              isInitializing: false,
             });
 
-            getUserStatus({ address: metadata.address })
-              .then((userStatus) => {
-                queryClient.setQueryData(
-                  queryKeys.userStatus(metadata.address),
-                  userStatus,
-                );
+            const bootstrapResponse = await bootstrapAuthSession(
+              metadata.address,
+              "Logged-in startup",
+              isCurrent,
+            );
 
-                const newUserLevel = userStatus.user_level;
-                const newHasUsername = !!userStatus.username;
-                const newTier = getTierName(userStatus.user_level);
+            if (!isCurrent()) return;
+            set({ isInitializing: false });
 
-                if (userStatus.username) {
-                  walletService.updateMetadata({ hasUsername: true });
-                }
-
+            resolveAndCacheAuthUserStatus(
+              metadata.address,
+              bootstrapResponse,
+              isCurrent,
+            )
+              .then((snapshot) => {
+                if (!snapshot || !isCurrent()) return;
                 set({
-                  hasUsername: newHasUsername,
-                  userLevel: newUserLevel,
-                  user: {
-                    id: metadata.address,
-                    username: userStatus.username,
-                    walletAddress: metadata.address,
-                    tier: newTier,
-                  },
+                  hasUsername: snapshot.hasUsername,
+                  userLevel: snapshot.userLevel,
+                  user: buildUserFromStatus(metadata.address, snapshot),
+                });
+                updateUserProfile({
+                  username: snapshot.username,
+                  tier: snapshot.tier,
                 });
               })
               .catch((apiError) => {
-                console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+                if (!isCurrent()) return;
+                console.warn(
+                  "[AuthStore] Failed to fetch user status from API:",
+                  apiError,
+                );
                 Sentry.addBreadcrumb({
                   category: "auth",
                   message: "Failed to fetch user status",
                   level: "warning",
                 });
+                Sentry.captureException(apiError, {
+                  tags: {
+                    feature: "auth-bootstrap",
+                    operation: "startup-user-status",
+                  },
+                });
+              })
+              .finally(() => {
+                if (!isCurrent()) return;
+                addAuthBootstrapBreadcrumb("Logged-in startup bootstrap gating disabled");
+                set({ isBootstrapping: false });
               });
 
             return;
           }
         } catch (error) {
+          if (!authSessionCoordinator.isCurrent(session)) return;
+          session = beginAuthTransition(null);
+          await selectWalletStorageForSession(session);
+          if (!authSessionCoordinator.isCurrent(session)) return;
+          set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to initialize wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_init" },
@@ -214,17 +354,31 @@ export const useAuthStore = create<AuthState>()(
       // ============================================
 
       createNewWallet: async () => {
+        let session = beginAuthTransition(null);
         set({ isCreatingWallet: true });
 
         try {
-          const metadata = await walletService.createWallet();
-
-          const mnemonic = await walletService.exportMnemonic();
+          removePersistedQueryCache(getServerIdentity(), get().walletAddress);
+          await selectWalletStorageForSession(session);
+          const { metadata, mnemonic } =
+            await authSessionCoordinator.enqueueIdentityMutation(async () => {
+              const metadata = await walletService.createWallet();
+              const mnemonic = await walletService.exportMnemonic();
+              return { metadata, mnemonic };
+            });
 
           if (!mnemonic) {
-            throw new Error("Failed to retrieve mnemonic after wallet creation");
+            throw new Error(
+              "Failed to retrieve mnemonic after wallet creation",
+            );
           }
 
+          if (!authSessionCoordinator.isCurrent(session)) return mnemonic;
+          session = beginAuthTransition(metadata.address);
+          await selectWalletStorageForSession(session);
+          if (!authSessionCoordinator.matches(session, metadata.address)) {
+            return mnemonic;
+          }
           set({
             recoveryPhrase: mnemonic,
             walletAddress: metadata.address,
@@ -233,26 +387,36 @@ export const useAuthStore = create<AuthState>()(
 
           return mnemonic;
         } catch (error) {
+          if (!authSessionCoordinator.isCurrent(session)) throw error;
           console.error("[AuthStore] Failed to create wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_create" },
           });
           throw error;
         } finally {
-          set({ isCreatingWallet: false });
+          if (authSessionCoordinator.isCurrent(session)) {
+            set({ isCreatingWallet: false });
+          }
         }
       },
 
       importWallet: async (mnemonic: string) => {
+        let session = beginAuthTransition(null);
         set({ isCreatingWallet: true });
 
         try {
-          if (await walletService.hasWallet()) {
-            await walletService.clearWallet();
-          }
+          removePersistedQueryCache(getServerIdentity(), get().walletAddress);
+          await selectWalletStorageForSession(session);
+          const metadata = await authSessionCoordinator.enqueueIdentityMutation(() =>
+            walletService.importWallet(mnemonic),
+          );
+          if (!authSessionCoordinator.isCurrent(session)) return;
 
-          const metadata = await walletService.importWallet(mnemonic);
-
+          session = beginAuthTransition(metadata.address);
+          const isCurrent = () =>
+            authSessionCoordinator.matches(session, metadata.address);
+          await selectWalletStorageForSession(session);
+          if (!isCurrent()) return;
           Sentry.setUser({
             id: metadata.address,
           });
@@ -261,8 +425,11 @@ export const useAuthStore = create<AuthState>()(
             message: "Wallet imported successfully",
             level: "info",
           });
+          identifyUser(metadata.address);
+          trackEvent("login_completed", { login_method: "wallet_import" });
           set({
             isLoggedIn: true,
+            isBootstrapping: true,
             walletAddress: metadata.address,
             publicKeyBase64: metadata.publicKeyBase64,
             hasUsername: metadata.hasUsername,
@@ -274,28 +441,62 @@ export const useAuthStore = create<AuthState>()(
               tier: "Free",
             },
           });
+          const bootstrapResponse = await bootstrapAuthSession(
+            metadata.address,
+            "Import",
+            isCurrent,
+          );
+          if (!isCurrent()) return;
+          const snapshot = await resolveAndCacheAuthUserStatus(
+            metadata.address,
+            bootstrapResponse,
+            isCurrent,
+          );
+
+          if (!snapshot || !isCurrent()) return;
+          set({
+            hasUsername: snapshot.hasUsername,
+            userLevel: snapshot.userLevel,
+            user: buildUserFromStatus(metadata.address, snapshot),
+          });
+          updateUserProfile({
+            username: snapshot.username,
+            tier: snapshot.tier,
+          });
         } catch (error) {
+          if (!authSessionCoordinator.isCurrent(session)) throw error;
+          set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to import wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_import" },
           });
           throw error;
         } finally {
-          set({ isCreatingWallet: false });
+          if (authSessionCoordinator.isCurrent(session)) {
+            set({ isCreatingWallet: false, isBootstrapping: false });
+          }
         }
       },
 
       confirmWalletCreation: async () => {
-        const { walletAddress, publicKeyBase64, user } = get();
+        const { walletAddress, user } = get();
 
         if (!walletAddress) {
           throw new Error("No wallet to confirm");
         }
 
+        const session = authSessionCoordinator.begin(walletAddress);
+        const isCurrent = () =>
+          authSessionCoordinator.matches(session, walletAddress);
         walletService.confirmWallet();
+
+        if (!isCurrent()) return;
+        identifyUser(walletAddress);
+        trackEvent("sign_up_completed", { sign_up_method: "wallet_created" });
 
         set({
           isLoggedIn: true,
+          isBootstrapping: true,
           hasOnboarded: true,
           recoveryPhrase: null,
           user: {
@@ -305,24 +506,58 @@ export const useAuthStore = create<AuthState>()(
             tier: "Free",
           },
         });
+
+        startAuthUserStatusBootstrap(
+          walletAddress,
+          "New wallet",
+          (snapshot) => {
+            if (!isCurrent()) return;
+            set({
+              hasUsername: snapshot.hasUsername,
+              userLevel: snapshot.userLevel,
+              user: buildUserFromStatus(walletAddress, snapshot),
+            });
+          },
+          () => {
+            if (!isCurrent()) return;
+            addAuthBootstrapBreadcrumb("New wallet bootstrap gating disabled");
+            set({ isBootstrapping: false });
+          },
+          isCurrent,
+        );
       },
 
       logout: async () => {
+        const outgoingWalletAddress = get().walletAddress;
+        const session = beginAuthTransition(null);
+        removePersistedQueryCache(getServerIdentity(), outgoingWalletAddress);
+        await selectWalletStorageForSession(session);
         try {
-          await walletService.clearWallet();
+          await authSessionCoordinator.enqueueIdentityMutation(async () => {
+            const wallet = await walletService.getWallet();
+            // Lazy import: push-notifications imports the inbox hooks, which
+            // import back into stores. A static import here creates a require
+            // cycle (auth-store <-> push-notifications).
+            const { unregisterPush } = await import("@/src/services/push-notifications");
+            await unregisterPush(wallet);
+            await walletService.clearWallet();
+          });
         } catch (error) {
+          if (!authSessionCoordinator.isCurrent(session)) return;
           console.error("[AuthStore] Failed to clear wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_clear" },
           });
         }
 
+        if (!authSessionCoordinator.isCurrent(session)) return;
         Sentry.setUser(null);
         Sentry.addBreadcrumb({
           category: "auth",
           message: "User logged out",
           level: "info",
         });
+        resetAnalyticsIdentity();
         set({
           user: null,
           isLoggedIn: false,
@@ -330,6 +565,7 @@ export const useAuthStore = create<AuthState>()(
           publicKeyBase64: null,
           userLevel: 0,
           hasUsername: false,
+          isBootstrapping: true,
           hasOnboarded: false,
           recoveryPhrase: null,
         });
@@ -337,31 +573,50 @@ export const useAuthStore = create<AuthState>()(
         useHomePostCardStore.getState().reset();
         useContentModerationStore.getState().clearAll();
         useInboxStore.getState().resetForLogout();
+        usePreferencesStore.setState({ hasSeenAdultPrompt: false });
+        usePreferencesStore.setState({ ageVerified: false });
+        useDraftStore.getState().clearDraft();
+        bootstrapAnonymousAfterLogout(
+          () => set({ isBootstrapping: false }),
+          () => authSessionCoordinator.isCurrent(session),
+        );
       },
 
       // ============================================
       // State Updates
       // ============================================
 
-      setUser: (user) =>
+      setUser: async (user) => {
+        const session = beginAuthTransition(user.walletAddress);
+        await selectWalletStorageForSession(session);
+        if (!authSessionCoordinator.matches(session, user.walletAddress)) return;
         set({
           user,
           isLoggedIn: true,
           walletAddress: user.walletAddress,
-        }),
+        });
+      },
 
-      setUserLevel: (level) => {
+      setUserLevel: (level, walletAddress) => {
+        const session = authSessionCoordinator.current();
+        if (!authSessionCoordinator.matches(session, walletAddress)) return;
         set({ userLevel: level });
+
+        const tierName = getTierName(level);
+        registerTierSuperProperty(tierName);
+        updateUserProfile({ tier: tierName });
 
         const { user } = get();
         if (user) {
           set({
-            user: { ...user, tier: getTierName(level) },
+            user: { ...user, tier: tierName },
           });
         }
       },
 
-      setHasUsername: (has, username) => {
+      setHasUsername: (has, username, expectedWalletAddress) => {
+        const session = authSessionCoordinator.current();
+        if (!authSessionCoordinator.matches(session, expectedWalletAddress)) return;
         set({ hasUsername: has });
 
         if (username) {
@@ -376,7 +631,9 @@ export const useAuthStore = create<AuthState>()(
           });
         }
 
-        walletService.updateMetadata({ hasUsername: has });
+        if (authSessionCoordinator.isCurrent(session)) {
+          walletService.updateMetadata({ hasUsername: has });
+        }
       },
 
       setRecoveryPhrase: (phrase) => set({ recoveryPhrase: phrase }),
@@ -390,6 +647,9 @@ export const useAuthStore = create<AuthState>()(
         hasOnboarded: state.hasOnboarded,
         userLevel: state.userLevel,
         hasUsername: state.hasUsername,
+        isLoggedIn: state.isLoggedIn,
+        walletAddress: state.walletAddress,
+        publicKeyBase64: state.publicKeyBase64,
       }),
       merge: (persistedState, currentState) => {
         if (USE_MOCK_USER) {
@@ -407,16 +667,66 @@ export const useAuthStore = create<AuthState>()(
           ...(persistedState as Partial<AuthState>),
         };
       },
-    }
-  )
+    },
+  ),
 );
 
 // ============================================
 // Selectors (for performance optimization)
 // ============================================
 
+export function selectAuthSessionStatus(state: {
+  isLoggedIn: boolean;
+  walletAddress: string | null;
+  recoveryPhrase: string | null;
+}): AuthSessionStatus {
+  return resolveAuthSessionStatus({
+    hasConfirmedSession: state.isLoggedIn,
+    hasPendingWallet:
+      !state.isLoggedIn && !!state.walletAddress && !!state.recoveryPhrase,
+    walletAddress: state.walletAddress,
+  });
+}
+
+export const useAuthSessionStatus = () => useAuthStore(selectAuthSessionStatus);
 export const useIsLoggedIn = () => useAuthStore((s) => s.isLoggedIn);
 export const useWalletAddress = () => useAuthStore((s) => s.walletAddress);
 export const useUserLevel = () => useAuthStore((s) => s.userLevel);
 export const useHasUsername = () => useAuthStore((s) => s.hasUsername);
 export const useIsInitializing = () => useAuthStore((s) => s.isInitializing);
+
+export function ensureLocallyLoggedOutAfterAccountDeletion(
+  deletedWalletAddress: string | null,
+): void {
+  const state = useAuthStore.getState();
+  if (
+    !state.isLoggedIn ||
+    state.walletAddress?.toLowerCase() !== deletedWalletAddress?.toLowerCase()
+  ) {
+    return;
+  }
+
+  const session = beginAuthTransition(null);
+  Sentry.setUser(null);
+  resetAnalyticsIdentity();
+  useAuthStore.setState({
+    user: null,
+    isLoggedIn: false,
+    walletAddress: null,
+    publicKeyBase64: null,
+    userLevel: 0,
+    hasUsername: false,
+    isBootstrapping: true,
+    hasOnboarded: false,
+    recoveryPhrase: null,
+  });
+  useHomePostCardStore.getState().reset();
+  useContentModerationStore.getState().clearAll();
+  useInboxStore.getState().resetForLogout();
+  usePreferencesStore.setState({ hasSeenAdultPrompt: false, ageVerified: false });
+  useDraftStore.getState().clearDraft();
+  bootstrapAnonymousAfterLogout(
+    () => useAuthStore.setState({ isBootstrapping: false }),
+    () => authSessionCoordinator.isCurrent(session),
+  );
+}

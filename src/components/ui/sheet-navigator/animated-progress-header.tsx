@@ -29,35 +29,6 @@ export const AnimatedProgressHeader = ({
   steps,
   isCurrentStepComplete = false,
 }: AnimatedProgressHeaderProps) => {
-  // Title animation
-  const titleAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: withSpring(title ? 1 : 0, { damping: 15, stiffness: 150 }),
-      transform: [
-        {
-          translateX: withSpring(title ? 0 : -20, {
-            damping: 15,
-            stiffness: 150,
-          }),
-        },
-      ],
-    };
-  });
-
-  // Subtitle animation (step info)
-  const subtitleAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: withSpring(0.7, { damping: 15, stiffness: 150 }),
-      transform: [
-        {
-          translateX: withSpring(0, {
-            damping: 15,
-            stiffness: 150,
-          }),
-        },
-      ],
-    };
-  });
 
   return (
     <Box style={styles.container}>

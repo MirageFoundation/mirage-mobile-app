@@ -2,7 +2,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { Box, Text, Icon } from "@/primitives";
 import { Feather } from "@expo/vector-icons";
 import AnimatedPressable from "./primitives/animated-pressable";
-import haptics from "@/components/utils/haptics";
+import { lightImpact, selection } from "@/components/utils/haptics";
 
 type NumpadProps = {
   onPress: (value: string) => void;
@@ -21,10 +21,10 @@ const Numpad = ({ onPress, onClear, onBackspace }: NumpadProps) => {
   const handlePress = (value: string) => {
     // Trigger haptic feedback
     if (value === "delete") {
-      haptics.lightImpact();
+      lightImpact();
       onBackspace?.();
     } else {
-      haptics.selection();
+      selection();
       onPress(value);
     }
   };

@@ -1,16 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
-  Easing,
+  Extrapolation,
   interpolate,
   SharedValue,
   useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -19,8 +17,6 @@ import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
-
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
@@ -98,28 +94,6 @@ export const UserProfileContentAnimated = memo(
    const walletScale = useRef(new RNAnimated.Value(1)).current;
     const followingScale = useRef(new RNAnimated.Value(1)).current;
 
-   const gradientAnimation = useSharedValue(0);
-
-    useEffect(() => {
-      gradientAnimation.value = withRepeat(
-        withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true,
-      );
-    }, [gradientAnimation]);
-
-    const gradientAnimatedStyle = useAnimatedStyle(() => {
-      const translateY = interpolate(gradientAnimation.value, [0, 1], [0, -20]);
-      const scale = interpolate(
-        gradientAnimation.value,
-        [0, 0.5, 1],
-        [1, 1.05, 1],
-      );
-      return {
-        transform: [{ translateY }, { scale }],
-      };
-    });
-
     const truncatedAddress = useMemo(() => {
       if (!walletAddress) return "";
       return walletAddress;
@@ -138,7 +112,7 @@ export const UserProfileContentAnimated = memo(
         setCopied(true);
         triggerHaptic("success");
       } catch (error) {
-        console.error("Failed to copy address:", error);
+        Sentry.addBreadcrumb({ category: "user-profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
       }
     }, [walletAddress]);
 
@@ -185,7 +159,7 @@ export const UserProfileContentAnimated = memo(
         scrollY.value,
         [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
         [1, 0.3, 0],
-        "clamp",
+        Extrapolation.CLAMP,
       );
 
       return { opacity };
@@ -200,11 +174,11 @@ export const UserProfileContentAnimated = memo(
       <View style={[styles.container, headerHeight > 0 && { marginTop: -headerHeight, paddingTop: headerHeight }]}>
         <View style={[styles.overscrollFill, { backgroundColor: gradientColorsArray[0] }]} />
         <View style={styles.gradientWrapper}>
-          <AnimatedLinearGradient
+          <LinearGradient
             colors={gradientColorsArray}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            style={[styles.gradientContent, gradientAnimatedStyle]}
+            style={styles.gradientContent}
           />
         </View>
         <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
@@ -213,8 +187,9 @@ export const UserProfileContentAnimated = memo(
               size={80}
               seed={avatarSeed || username}
               source={avatarUrl ? { uri: avatarUrl } : undefined}
-              rounded="full"
-              bordered
+              rounded="sm"
+              paddingRatio={0.2}
+              containerStyle={styles.profileAvatar}
             />
 
             <Box mt="sm">
@@ -352,9 +327,15 @@ export const UserProfileContentAnimated = memo(
   },
 );
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     width: "100%",
+  },
+  profileAvatar: {
+    backgroundColor:
+      rt.themeName === "light" ? "#FFFFFF" : theme.colors.background.subtle,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
   },
   gradientContent: {
     ...StyleSheet.absoluteFillObject,
@@ -366,7 +347,7 @@ const styles = StyleSheet.create((theme) => ({
     top: -1000,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 1000,
   },
   gradientWrapper: {
     ...StyleSheet.absoluteFillObject,

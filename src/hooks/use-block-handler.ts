@@ -24,6 +24,24 @@ export interface BlockTarget {
   label?: string;
 }
 
+/**
+ * Returns the subtitle/message shown in the block confirmation popup.
+ * Combines what was previously a two-line message + description into a
+ * single sentence per block type.
+ */
+export function getBlockConfirmationMessage(type: BlockType): string {
+  switch (type) {
+    case "topic":
+      return "Posts tagged with this topic will stop appearing in your Home and discovery feeds. You can unblock them later from settings.";
+    case "user":
+      return "Posts and replies from this user will be hidden from your feeds, comments, and inbox. You can unblock them later from settings.";
+    case "post":
+    case "comment":
+    default:
+      return "This post will be hidden from every feed you see. The author won't be notified. You can unblock them later from settings.";
+  }
+}
+
 export interface UseBlockHandlerOptions {
   onSuccess?: (targetId: string, blockType: BlockType) => void;
   onError?: (targetId: string, error: Error) => void;

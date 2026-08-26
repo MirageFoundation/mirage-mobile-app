@@ -26,6 +26,7 @@ export {
   useAddressFromUsername,
   useUsernameAvailability,
   useUsernameFromAddress,
+  useBatchUsernamesFromAddresses,
   useUsers,
 } from "./use-username-resolution";
 
@@ -38,11 +39,7 @@ export {
 } from "./use-posts";
 
 // Comments
-export {
-  useComments,
-  useRootPostId,
-  useCommentContext,
-} from "./use-comments";
+export { useComments } from "./use-comments";
 
 // Inbox
 export { useInbox, useInfiniteInbox } from "./use-inbox";
@@ -102,3 +99,9 @@ export {
 
 // Awards
 export { useAwardConfigs } from "./use-award-configs";
+
+// Agents
+export { useAgents } from "./use-agents";
+
+// Referrals
+export { useReferralPrecheck, useReferralSummary } from "./use-referrals";

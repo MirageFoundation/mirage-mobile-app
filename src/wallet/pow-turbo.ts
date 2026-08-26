@@ -3,6 +3,9 @@ import {
   cancelPow,
   getPowProgress,
 } from "react-native-argon2-turbo";
+import * as Sentry from "@sentry/react-native";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { Platform } from "react-native";
 
 import { bytesToHex } from "./crypto";
 import { difficultyFactor, checkPowTarget } from "./pow";
@@ -64,11 +67,62 @@ function computeEffectiveBits(powDifficulty: number, powBaseBits: number, powFac
 // ============================================
 
 const MAX_NATIVE_RETRIES = 8;
+const DEFAULT_MAX_POW_COMPUTE_TIME_MS = 60_000;
+const NATIVE_TIMEOUT_GRACE_MS = 5_000;
+const POW_TIMEOUT_ERROR_MESSAGE = "Transaction did not work. Please try again.";
+const POW_WATCHDOG_TIMEOUT_MESSAGE = "PoW compute watchdog timed out";
+const LOW_HASH_RATE_REPORT_COOLDOWN_MS = 10 * 60_000;
+let lastLowHashRateReportAt = 0;
+
+const POW_KEEP_AWAKE_TAG = "mirage-pow";
+
+function getPowDeviceExtras(): Record<string, string | number> {
+  const extras: Record<string, string | number> = {
+    platform: Platform.OS,
+    osVersion: String(Platform.Version),
+  };
+  if (Platform.OS === "android") {
+    const constants = Platform.constants as {
+      Brand?: string;
+      Manufacturer?: string;
+      Model?: string;
+    };
+    if (constants.Brand) extras.androidBrand = constants.Brand;
+    if (constants.Manufacturer) extras.androidManufacturer = constants.Manufacturer;
+    if (constants.Model) extras.androidModel = constants.Model;
+  }
+  return extras;
+}
+
+function reportPowTimeout(
+  reason: string,
+  input: PoWInput,
+  elapsedMs: number,
+  attempts: number,
+  retry: number,
+): void {
+  Sentry.captureMessage("PoW computation timed out", {
+    level: "warning",
+    tags: { feature: "pow", operation: "compute_pow_timeout" },
+    extra: {
+      reason,
+      elapsedMs,
+      attempts,
+      retry,
+      powDifficulty: input.powDifficulty,
+      powBaseBits: input.powBaseBits,
+      powFactor: input.powFactor,
+      ...getPowDeviceExtras(),
+    },
+  });
+}
 
 export async function computePoW(
   input: PoWInput,
   onProgress?: (attempts: number, elapsedMs: number) => void,
-  maxAttempts = 10_000_000
+  maxAttempts = 10_000_000,
+  maxComputeTimeMs = DEFAULT_MAX_POW_COMPUTE_TIME_MS,
+  reportTimeout = true,
 ): Promise<PoWResult> {
   const { base, lastBlockHash, powDifficulty, powBaseBits, powFactor } = input;
 
@@ -80,11 +134,45 @@ export async function computePoW(
   const effectiveBits = computeEffectiveBits(powDifficulty, powBaseBits, powFactor);
   console.log(`[PoW Turbo] Starting with powDifficulty=${powDifficulty}, baseBits=${powBaseBits}, factor=${powFactor}, effectiveBits=${effectiveBits} (4 parallel workers)`);
 
+  let keepAwakeActive = false;
+  try {
+    await activateKeepAwakeAsync(POW_KEEP_AWAKE_TAG);
+    keepAwakeActive = true;
+  } catch {
+    // Best-effort: Pixel-class Android throttles CPU hard once the screen dims.
+  }
+
   let progressInterval: ReturnType<typeof setInterval> | undefined;
   if (onProgress) {
     progressInterval = setInterval(async () => {
       try {
         const progress = await getPowProgress();
+        const hashRate =
+          progress.elapsedMs > 0
+            ? progress.attempts / (progress.elapsedMs / 1000)
+            : 0;
+        if (
+          Date.now() - lastLowHashRateReportAt >=
+            LOW_HASH_RATE_REPORT_COOLDOWN_MS &&
+          progress.elapsedMs >= 10_000 &&
+          progress.attempts > 0 &&
+          hashRate < 20
+        ) {
+          lastLowHashRateReportAt = Date.now();
+          Sentry.captureMessage("PoW hash rate is unusually low", {
+            level: "warning",
+            tags: { feature: "pow", operation: "compute_pow_low_rate" },
+            extra: {
+              hashRate,
+              elapsedMs: progress.elapsedMs,
+              attempts: progress.attempts,
+              powDifficulty,
+              powBaseBits,
+              powFactor,
+              ...getPowDeviceExtras(),
+            },
+          });
+        }
         onProgress(progress.attempts, progress.elapsedMs);
       } catch {
       }
@@ -96,23 +184,85 @@ export async function computePoW(
 
   try {
     for (let retry = 0; retry < MAX_NATIVE_RETRIES; retry++) {
+      const elapsedMs = Date.now() - overallStart;
+      const remainingMs = maxComputeTimeMs - elapsedMs;
+      if (remainingMs <= 0) {
+        cancelPow();
+        if (reportTimeout) {
+          reportPowTimeout("pre_native_call_limit", input, elapsedMs, totalAttempts, retry);
+        }
+        throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+      }
+
       const startNonce = Math.floor(Math.random() * 0xffffffff);
-      const result = await computePowNative({
-        base: baseHex,
-        salt: saltHex,
-        difficulty: effectiveBits,
-        startNonce,
-        maxAttempts,
-        timeoutMs: 60000,
-        iterations: ARGON2_TIME_COST,
-        memory: ARGON2_MEMORY_COST,
-        parallelism: ARGON2_PARALLELISM,
-        hashLength: ARGON2_OUTPUT_LENGTH,
-      } as any);
+      let result: Awaited<ReturnType<typeof computePowNative>>;
+      let watchdogTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const nativeComputation = computePowNative({
+          base: baseHex,
+          salt: saltHex,
+          difficulty: effectiveBits,
+          startNonce,
+          maxAttempts,
+          timeoutMs: remainingMs,
+          iterations: ARGON2_TIME_COST,
+          memory: ARGON2_MEMORY_COST,
+          parallelism: ARGON2_PARALLELISM,
+          hashLength: ARGON2_OUTPUT_LENGTH,
+        } as any);
+        const watchdog = new Promise<never>((_, reject) => {
+          watchdogTimeout = setTimeout(
+            () => reject(new Error(POW_WATCHDOG_TIMEOUT_MESSAGE)),
+            remainingMs + NATIVE_TIMEOUT_GRACE_MS,
+          );
+        });
+        result = await Promise.race([nativeComputation, watchdog]);
+      } catch (error) {
+        const msg = String((error as Error)?.message || error || "");
+        if (
+          Date.now() - overallStart >= maxComputeTimeMs ||
+          /timeout|timed\s*out/i.test(msg)
+        ) {
+          const elapsedAfterErrorMs = Date.now() - overallStart;
+          cancelPow();
+          if (reportTimeout) {
+            reportPowTimeout(
+              msg === POW_WATCHDOG_TIMEOUT_MESSAGE
+                ? "js_watchdog_timeout"
+                : "native_timeout_or_limit",
+              input,
+              elapsedAfterErrorMs,
+              totalAttempts,
+              retry,
+            );
+          }
+          throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+        }
+        throw error;
+      } finally {
+        if (watchdogTimeout) {
+          clearTimeout(watchdogTimeout);
+        }
+      }
 
       const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
       const digest = hexToUint8Array(result.digest);
       totalAttempts += result.attempts;
+
+      if (Date.now() - overallStart >= maxComputeTimeMs) {
+        const elapsedAfterResultMs = Date.now() - overallStart;
+        cancelPow();
+        if (reportTimeout) {
+          reportPowTimeout(
+            "post_native_result_limit",
+            input,
+            elapsedAfterResultMs,
+            totalAttempts,
+            retry,
+          );
+        }
+        throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+      }
 
       if (checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
         const computeTimeMs = Date.now() - overallStart;
@@ -131,10 +281,27 @@ export async function computePoW(
     if (progressInterval) {
       clearInterval(progressInterval);
     }
+    if (keepAwakeActive) {
+      try {
+        await deactivateKeepAwake(POW_KEEP_AWAKE_TAG);
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 
 export { cancelPow, getPowProgress };
+
+export function isPowCancelled(error: unknown): boolean {
+  const msg = String((error as Error)?.message || error || "");
+  return msg === "pow_cancelled" || msg.includes("PoW computation was cancelled");
+}
+
+export function isPowTimedOut(error: unknown): boolean {
+  const msg = String((error as Error)?.message || error || "");
+  return msg === POW_TIMEOUT_ERROR_MESSAGE || /pow.*timed?\s*out/i.test(msg);
+}
 
 export function estimatePoWTime(
   powDifficulty: number,

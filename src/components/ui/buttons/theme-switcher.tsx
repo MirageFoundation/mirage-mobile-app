@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { Button, Icon } from "@/primitives";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { useCallback } from "react";
 import Animated, {
   withTiming,
@@ -9,18 +9,16 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { useTheme } from "@/providers/theme-context";
-import { usePreferencesStore } from "@/src/stores";
 
 const ThemeSwitcher = () => {
-  const { currentTheme } = useTheme();
-  const setTheme = usePreferencesStore((s) => s.setTheme);
+  const { currentTheme, setThemeMode } = useTheme();
   const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
 
   const handleChangeTheme = useCallback(() => {
     // Toggle to opposite of current resolved theme
     const newTheme = currentTheme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
+    setThemeMode(newTheme);
 
     // Single smooth rotation animation
     rotation.value = withTiming(rotation.value + 360, {
@@ -33,7 +31,7 @@ const ThemeSwitcher = () => {
       withTiming(1.1, { duration: 100 }),
       withTiming(1, { duration: 100 }),
     );
-  }, [currentTheme, setTheme, rotation, scale]);
+  }, [currentTheme, setThemeMode, rotation, scale]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {

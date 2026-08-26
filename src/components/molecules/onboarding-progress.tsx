@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { View, Animated } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusStep } from "@/src/components/atoms";
 import { Box, Text, ProgressBar } from "@/src/components/ui/primitives";
 
 type StepStatus = "pending" | "active" | "complete" | "error";
@@ -172,12 +171,13 @@ export const OnboardingProgress = ({
 
               {/* Progress bar for active step */}
               {step.status === "active" && (
-                <ProgressBar
-                  progress={0.4} // Indeterminate-ish
-                  size="sm"
-                  animated
-                  style={{ marginTop: 8 }}
-                />
+                <View style={{ marginTop: 8 }}>
+                  <ProgressBar
+                    progress={0.4} // Indeterminate-ish
+                    size="sm"
+                    animated
+                  />
+                </View>
               )}
 
               {/* Completed bar for complete steps */}
@@ -260,4 +260,3 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.md,
   },
 }));
-

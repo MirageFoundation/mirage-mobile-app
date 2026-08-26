@@ -1,13 +1,13 @@
 import {
   BlurView as ExpoBlurView,
   type BlurTint,
-  type ExperimentalBlurMethod,
+  type BlurMethod,
 } from "expo-blur";
 import { withUnistyles } from "react-native-unistyles";
 
 const BlurView = withUnistyles(ExpoBlurView, (_theme, rt) => ({
   tint: (rt.themeName === "dark" ? "dark" : "light") as BlurTint,
-  experimentalBlurMethod: "dimezisBlurView" as ExperimentalBlurMethod,
+  blurMethod: "dimezisBlurView" as BlurMethod,
 }));
 
 export default BlurView;

@@ -1,0 +1,232 @@
+import { Ionicons } from "@expo/vector-icons";
+import { VideoView } from "expo-video";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import type { ResolvedMedia } from "./post-card-utils";
+import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
+import {
+  buildVideoPositionKey,
+  useVideoMuteStore,
+  useVideoPositionStore,
+} from "@/src/stores";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
+import {
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+  type VideoPlayerLease,
+} from "@/src/utils/video-player-handoff";
+import { previewItemStyles } from "./media-preview-item-styles";
+
+type PreviewVideoItemProps = {
+  item: ResolvedMedia;
+  width: number;
+  height: number;
+  isActive: boolean;
+  shouldPrepare: boolean;
+  videoSyncScope?: string;
+};
+
+/**
+ * Fullscreen native-video page inside the media-preview gallery. Owns its
+ * player, tap-to-toggle playback, mute, and saved-position sync.
+ */
+export const PreviewVideoItem = memo(function PreviewVideoItem({
+  item,
+  width,
+  height,
+  isActive,
+  shouldPrepare,
+  videoSyncScope,
+}: PreviewVideoItemProps) {
+  const [playing, setPlaying] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const muted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
+  const positionKey = buildVideoPositionKey(item.uri, videoSyncScope);
+  const currentPositionRef = useRef(0);
+  const hasRestoredRef = useRef(false);
+  // Adopt the underlying screen's already-buffered player for this video
+  // (feed or detail card stays mounted beneath the fullscreen modal), so
+  // fullscreen opens continue instantly instead of re-streaming. The
+  // adopted player is already at the live position, so the saved-position
+  // restore must be skipped.
+  const handoffKey = item.uri.startsWith("file://")
+    ? null
+    : canonicalVideoAssetId(item.uri);
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
+  // The lease is held for as long as this page is mounted (the whole modal
+  // session), not just while inside the prepare window: releasing it on a
+  // page swipe would let the suppressed card underneath the modal resume
+  // playing audio.
+  const adoptedLeaseRef = useRef<VideoPlayerLease | null>(null);
+  useLayoutEffect(() => {
+    if (!handoffKey || !shouldPrepare || adoptedLeaseRef.current) return;
+    const lease = adoptHandoffPlayer(handoffKey, item.uri);
+    if (!lease) return;
+    adoptedLeaseRef.current = lease;
+    hasRestoredRef.current = true;
+    setAdoptedLease(lease);
+  }, [handoffKey, item.uri, shouldPrepare]);
+  useEffect(() => {
+    return () => {
+      if (adoptedLeaseRef.current) {
+        releaseHandoffPlayer(adoptedLeaseRef.current);
+        adoptedLeaseRef.current = null;
+      }
+      setAdoptedLease(null);
+    };
+  }, [item.uri]);
+  const controllerPlayer = useVideoPlayerController(
+    shouldPrepare && !adoptedLease ? item.uri : null,
+    {
+      loop: true,
+      muted,
+      shouldPlay: playing && isActive && !adoptedLease,
+      timeUpdateInterval: 0.1,
+    },
+  );
+  const player = adoptedPlayer ?? controllerPlayer;
+
+  // An adopted player bypasses the controller's option effects; as the top
+  // lease holder this surface applies its settings directly.
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.loop = true;
+      adoptedPlayer.timeUpdateEventInterval = 0.1;
+      setIsLoading(false);
+    } catch {
+      // Native player was released underneath us.
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.muted = muted;
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, muted]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      if (playing && isActive) {
+        adoptedPlayer.play();
+      } else {
+        adoptedPlayer.pause();
+      }
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, playing, isActive]);
+
+  useEffect(() => {
+    if (!isActive) {
+      if (item.uri && currentPositionRef.current > 0.5) {
+        setPositionStore(positionKey, currentPositionRef.current);
+      }
+    }
+  }, [isActive, item.uri, positionKey, setPositionStore]);
+
+  useEffect(() => {
+    return () => {
+      if (item.uri && currentPositionRef.current > 0.5) {
+        useVideoPositionStore.getState().setPosition(positionKey, currentPositionRef.current);
+      }
+    };
+  }, [item.uri, positionKey]);
+
+  useEffect(() => {
+    if (!shouldPrepare) return;
+    if (player.status !== "readyToPlay") setIsLoading(true);
+    const restorePosition = () => {
+      if (hasRestoredRef.current || !item.uri) return;
+      const saved = getPosition(positionKey);
+      if (saved > 0.5) {
+        hasRestoredRef.current = true;
+        player.currentTime = saved;
+      }
+    };
+    const timeSubscription = player.addListener("timeUpdate", ({ currentTime }) => {
+      currentPositionRef.current = currentTime;
+    });
+    const statusSubscription = player.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay") {
+        setIsLoading(false);
+        restorePosition();
+      }
+    });
+    const playingSubscription = player.addListener("playingChange", ({ isPlaying }) => {
+      if (isActive && isPlaying) {
+        setPlaying(true);
+      }
+    });
+    const sourceSubscription = player.addListener("sourceLoad", () => {
+      setIsLoading(false);
+      restorePosition();
+    });
+    if (player.status === "readyToPlay") {
+      setIsLoading(false);
+      restorePosition();
+    }
+
+    return () => {
+      timeSubscription.remove();
+      statusSubscription.remove();
+      playingSubscription.remove();
+      sourceSubscription.remove();
+    };
+  }, [getPosition, isActive, item.uri, player, positionKey, shouldPrepare]);
+
+  const handleTogglePlay = useCallback(() => {
+    setPlaying((p) => !p);
+  }, []);
+
+  const handleToggleMute = useCallback(() => {
+    toggleMute();
+  }, [toggleMute]);
+
+  return (
+    <View style={{ width, height, justifyContent: "center", alignItems: "center" }}>
+      <Pressable onPress={handleTogglePlay} style={{ width, height }}>
+        {shouldPrepare ? (
+          <VideoView
+            player={player}
+            style={{ width: "100%", height: "100%" }}
+            contentFit="contain"
+            nativeControls={false}
+            fullscreenOptions={{ enable: false }}
+            allowsPictureInPicture={false}
+            surfaceType={Platform.OS === "android" ? "textureView" : undefined}
+            onFirstFrameRender={() => setIsLoading(false)}
+          />
+        ) : null}
+        {isLoading && (
+          <View style={previewItemStyles.playOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+        {!playing && !isLoading && (
+          <View style={previewItemStyles.playOverlay}>
+            <View style={previewItemStyles.playButton}>
+              <Ionicons name="play" size={40} color="#fff" />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={handleToggleMute}
+        style={previewItemStyles.muteButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <View style={previewItemStyles.muteButtonInner}>
+          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
+        </View>
+      </Pressable>
+    </View>
+  );
+});

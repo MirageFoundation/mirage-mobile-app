@@ -1,0 +1,5 @@
+Mirage is a mobile social app for participating in the Mirage network.
+
+Use Mirage to create posts, follow topics and people, share media, receive notifications, and manage your Mirage wallet identity from your Android device.
+
+This F-Droid build is generated from the Expo source using a reproducible Android prebuild during the F-Droid build process.

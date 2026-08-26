@@ -2,10 +2,17 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   getAddressFromUsername,
   getUsernameFromAddress,
+  bulkGetUsernameFromAddress,
   getUsers,
   type GetUsersParams,
 } from "../endpoints/users";
 import { queryKeys } from "../query-keys";
+import {
+  buildUsernameResolutionCandidates,
+  normalizeUsernameIdentity,
+  selectUsernameResolution,
+} from "../username-resolution";
+import { useAuthStore } from "@/src/stores";
 
 /**
  * Resolve username to address
@@ -14,12 +21,14 @@ import { queryKeys } from "../query-keys";
  * @param username - The username to resolve
  */
 export function useAddressFromUsername(username: string | undefined | null) {
+  const normalizedUsername = normalizeUsernameIdentity(username);
+
   return useQuery({
-    queryKey: queryKeys.addressFromUsername(username!),
-    queryFn: () => getAddressFromUsername({ username: username! }),
-    enabled: !!username && username.length >= 2,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 60, // 1 hour
+    queryKey: queryKeys.addressFromUsername(normalizedUsername),
+    queryFn: () => getAddressFromUsername({ username: normalizedUsername }),
+    enabled: normalizedUsername.length >= 2,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 
@@ -30,65 +39,36 @@ export function useAddressFromUsername(username: string | undefined | null) {
  * @param username - The username to check availability for
  */
 export function useUsernameAvailability(username: string | undefined | null) {
-  const isEnabled = !!username && username.length >= 2;
-  const safeUsername = username ?? "__disabled__";
-  const anonUsername = `anon-${safeUsername}`;
-
+  const candidates = buildUsernameResolutionCandidates(username);
+  const isEnabled = (candidates[0]?.length ?? 0) >= 2;
   const results = useQueries({
-    queries: [
-      {
-        queryKey: queryKeys.addressFromUsername(safeUsername),
-        queryFn: () => getAddressFromUsername({ username: safeUsername }),
-        enabled: isEnabled,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 60,
-      },
-      {
-        queryKey: queryKeys.addressFromUsername(anonUsername),
-        queryFn: () => getAddressFromUsername({ username: anonUsername }),
-        enabled: isEnabled,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 60,
-      },
-    ],
+    queries: isEnabled
+      ? candidates.map((candidate) => ({
+          queryKey: queryKeys.addressFromUsername(candidate),
+          queryFn: () => getAddressFromUsername({ username: candidate }),
+          staleTime: 0,
+          gcTime: 0,
+        }))
+      : [],
   });
-
-  const [regularResult, anonResult] = results;
-
-  const isLoading = regularResult.isLoading || anonResult.isLoading;
-  const isFetched = regularResult.isFetched && anonResult.isFetched;
-  const isError = regularResult.isError || anonResult.isError;
-
-  // Username is only available if BOTH regular and anon- versions are available
-  const isAvailable =
-    isFetched &&
-    regularResult.data?.exists === false &&
-    anonResult.data?.exists === false;
-
-  // Determine which version is taken (for better error messaging)
-  const regularTaken = regularResult.data?.exists === true;
-  const anonTaken = anonResult.data?.exists === true;
+  const isError = results.some((result) => result.isError);
+  const isFetched =
+    results.length > 0 && results.every((result) => result.isFetched);
 
   return {
-    isLoading,
+    data:
+      isFetched && !isError
+        ? selectUsernameResolution(
+            candidates,
+            results.map((result) => result.data),
+          )
+        : undefined,
+    isLoading: results.some((result) => result.isLoading),
+    isFetching: results.some((result) => result.isFetching),
     isFetched,
     isError,
-    isAvailable,
-    // Combined response for compatibility
-    data: isFetched
-      ? {
-          exists: regularTaken || anonTaken,
-          username: username!,
-          address:
-            regularResult.data?.address ?? anonResult.data?.address ?? null,
-          // Additional info for debugging/messaging
-          regularTaken,
-          anonTaken,
-        }
-      : undefined,
-    // Individual results if needed
-    regularResult,
-    anonResult,
+    error: results.find((result) => result.error)?.error ?? null,
+    refetch: () => Promise.all(results.map((result) => result.refetch())),
   };
 }
 
@@ -104,6 +84,30 @@ export function useUsernameFromAddress(address: string | undefined | null) {
     enabled: !!address,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60, // 1 hour
+  });
+}
+
+export function useBatchUsernamesFromAddresses(
+  addresses: string[],
+  options?: { enabled?: boolean },
+) {
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+  const stableKey = addresses.slice().sort().join(",");
+  return useQuery({
+    queryKey: queryKeys.batchUsernames(stableKey),
+    queryFn: async () => {
+      if (addresses.length === 0) return {};
+      const resp = await bulkGetUsernameFromAddress(addresses);
+      return resp.map ?? {};
+    },
+    enabled:
+      !isInitializing &&
+      !isBootstrapping &&
+      addresses.length > 0 &&
+      (options?.enabled ?? true),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 60,
   });
 }
 

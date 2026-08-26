@@ -213,11 +213,11 @@ const GorhomPopupSheet = forwardRef<GorhomPopupSheetRef, GorhomPopupSheetProps>(
   ({ children, title, disableCloseButton, onDismiss }, ref) => {
     const bottomSheetModalRef = useRef<BottomSheetModal>(null);
 
-    // Spring animation configs - More bouncy like your original
+    // Keep the sheet responsive without overshooting at rest.
     const animationConfigs = useBottomSheetSpringConfigs({
-      damping: 30,
-      overshootClamping: false,
-      stiffness: 400,
+      damping: 36,
+      overshootClamping: true,
+      stiffness: 280,
       mass: 1,
     });
 
@@ -247,10 +247,8 @@ const GorhomPopupSheet = forwardRef<GorhomPopupSheetRef, GorhomPopupSheetProps>(
     }, []);
 
     const renderContainerComponent = useCallback(
-      ({ children }: { children: React.ReactNode }) => (
-        <FullWindowOverlay style={{ flex: 1 }}>
-          {children}
-        </FullWindowOverlay>
+      ({ children }: { children?: React.ReactNode }) => (
+        <FullWindowOverlay>{children}</FullWindowOverlay>
       ),
       []
     );

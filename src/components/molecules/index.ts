@@ -1,9 +1,11 @@
 export { AuthSheet } from "./auth-sheet";
+export { AgeVerificationModal } from "./age-verification-modal";
 export { FeedHeader } from "./feed-header";
 export { FeedTypeTabBar, FEED_TAB_BAR_HEIGHT } from "./feed-type-tab-bar";
 export { NewPostsButton } from "./new-posts-button";
 export { InviteCodesCard } from "./invite-codes-card";
 export { QuestsSummaryCard } from "./quests-summary-card";
+export { ModerationReminderCard } from "./moderation-reminder-card";
 export { PostActions } from "./post-actions";
 export {
   PostCard,
@@ -13,7 +15,10 @@ export {
 } from "./post-card";
 export { MediaPreviewModal } from "./media-preview-modal";
 export { PostCardItem } from "./post-card-item";
+export { PostCardCompact } from "./post-card-compact";
+export { FeedDensityToggle } from "./feed-density-toggle";
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
+export { MediaPostDetailSkeleton } from "./media-post-detail-skeleton";
 
 // Comment system
 export { CommentInput, type CommentInputRef } from "./comment-input";
@@ -22,6 +27,10 @@ export {
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
 } from "./comment-options-sheet";
+export {
+  InboxOptionsSheet,
+  type InboxOptionsSheetRef,
+} from "./inbox-options-sheet";
 export { CommentThread } from "./comment-thread";
 
 // Moderation & Actions
@@ -35,9 +44,18 @@ export {
   AwardPickerSheet,
   type AwardPickerSheetRef,
 } from "./award-picker-sheet";
+export {
+  GiftMirageSheet,
+  type GiftMirageSheetRef,
+} from "./gift-mirage-sheet";
+export {
+  GiftSubscriptionSheet,
+  type GiftSubscriptionSheetRef,
+} from "./gift-subscription-sheet";
 
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";
+export { ForceUpdatePopup } from "./force-update-popup";
 export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
@@ -63,26 +81,17 @@ export {
 ProfileMenuSheet,
 type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
-export {
-  UserProfileMenuSheet,
-  type UserProfileMenuSheetRef,
-} from "./user-profile-menu-sheet";
-export { SideMenu, type SideMenuRef } from "./side-menu";
 export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
   ProfileTabBar,
-  ProfileTabContent,
-  ProfileTabs,
   type TabType,
 } from "./profile-tabs";
 export { ProfileCommentItem } from "./profile-comment-item";
 export { InboxItem } from "./inbox-item";
-export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";
 export { UserProfileContentAnimated } from "./user-profile-content-animated";
-export { ProfileAboutTab } from "./profile-about-tab";
 
 // Settings
 export {
@@ -104,3 +113,5 @@ export {
   type Plan,
   type PlanFeature,
 } from "./subscription";
+
+export { MentionSuggestions } from "./mention-suggestions";

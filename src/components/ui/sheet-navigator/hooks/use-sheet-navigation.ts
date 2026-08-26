@@ -66,7 +66,7 @@ export const useSheetNavigation = ({
         if (onComplete) {
           await onComplete(data);
         }
-      } catch (error) {
+      } catch {
         setErrors(prev => ({ ...prev, complete: "Failed to complete" }));
         setIsLoading(false);
       }

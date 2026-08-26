@@ -115,8 +115,6 @@ export const WordChip = ({
 const styles = StyleSheet.create((theme) => ({
   wrapper: {
     flex: 1,
-    minWidth: 70,
-    maxWidth: 100,
   },
   container: {
     flexDirection: "row",

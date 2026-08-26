@@ -1,4 +1,5 @@
 import { api, apiClient } from "../../client";
+import * as Sentry from "@sentry/react-native";
 import type {
   UserStatusResponse,
   ProfileResponse,
@@ -11,7 +12,11 @@ import type {
   UsernameFromAddressResponse,
   ValidateInviteCodeResponse,
   GetInviteCodesResponse,
+  NodeConfigResponse,
 } from "../../types";
+import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
+import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
+import type { MirageWallet } from "@/src/wallet";
 
 // ============================================
 // User Status & Profile
@@ -51,13 +56,84 @@ export interface GetUserFollowedParams {
   address: string;
 }
 
+interface MergeUserFollowedOptions {
+  source: "bootstrap" | "get_user_followed" | "node_config_fallback";
+  nodeConfigAutoEnabledAgents?: string[];
+}
+
+export function mergeUserFollowedEnabledAgents(
+  response: UserFollowedResponse,
+  options: MergeUserFollowedOptions,
+): UserFollowedResponse {
+  const enabledAgents = Array.from(new Set([
+    ...(response.enabled_agents ?? []),
+    ...(response.auto_enabled_agents ?? []),
+    ...(options.nodeConfigAutoEnabledAgents ?? []),
+  ]));
+
+  if (__DEV__) {
+    console.log("[auto-enabled-agents] merge", {
+      source: options.source,
+      user_followed_enabled_agents: response.enabled_agents ?? [],
+      user_followed_auto_enabled_agents: response.auto_enabled_agents ?? [],
+      node_config_auto_enabled_agents: options.nodeConfigAutoEnabledAgents ?? [],
+      merged_enabled_agents: enabledAgents,
+    });
+  }
+
+  Sentry.addBreadcrumb({
+    category: "auto-enabled-agents",
+    message: "Enabled agents merged",
+    level: options.nodeConfigAutoEnabledAgents ? "info" : "warning",
+    data: {
+      source: options.source,
+      userFollowedEnabledAgentsCount: response.enabled_agents?.length ?? 0,
+      userFollowedAutoEnabledAgentsCount: response.auto_enabled_agents?.length ?? 0,
+      nodeConfigAutoEnabledAgentsCount: options.nodeConfigAutoEnabledAgents?.length ?? 0,
+      mergedEnabledAgentsCount: enabledAgents.length,
+      usedNodeConfig: Boolean(options.nodeConfigAutoEnabledAgents),
+    },
+  });
+
+  return {
+    ...response,
+    enabled_agents: enabledAgents,
+  };
+}
+
 /**
- * Get user's followed users, topics, and moderators
+ * Get user's followed users, topics, and enabled agents
  */
 export async function getUserFollowed(
-  params: GetUserFollowedParams
+  params: GetUserFollowedParams,
+  options?: { nodeConfig?: NodeConfigResponse | null },
 ): Promise<UserFollowedResponse> {
-  return api.get<UserFollowedResponse>("/get_user_followed", params);
+  const nodeConfigPromise = options && "nodeConfig" in options
+    ? Promise.resolve(options.nodeConfig)
+    : getNodeConfig().catch((error) => {
+      if (__DEV__) {
+        console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
+      }
+      Sentry.addBreadcrumb({
+        category: "auto-enabled-agents",
+        message: "Node config unavailable during user_followed merge",
+        level: "warning",
+        data: {
+          source: "get_user_followed",
+          ...getSafeApiErrorContext(error),
+        },
+      });
+      return null;
+    });
+  const [response, nodeConfig] = await Promise.all([
+    api.get<UserFollowedResponse>("/get_user_followed", params),
+    nodeConfigPromise,
+  ]);
+
+  return mergeUserFollowedEnabledAgents(response, {
+    source: "get_user_followed",
+    nodeConfigAutoEnabledAgents: nodeConfig?.auto_enabled_agents,
+  });
 }
 
 export interface GetUserBlockedParams {
@@ -155,13 +231,18 @@ export async function bulkGetAddressFromUsername(
   );
 }
 
+export interface BulkUsernameMapResponse {
+  map: Record<string, string>;
+}
+
 /**
  * Bulk resolve addresses to usernames
+ * Returns { map: { address: username } }
  */
 export async function bulkGetUsernameFromAddress(
   addresses: string[]
-): Promise<UsernameFromAddressResponse[]> {
-  return api.post<UsernameFromAddressResponse[]>(
+): Promise<BulkUsernameMapResponse> {
+  return api.post<BulkUsernameMapResponse>(
     "/get_username_from_address",
     { addresses }
   );
@@ -190,14 +271,18 @@ export async function getUsers(
 // Invite Code Validation
 // ============================================
 
-export interface GetInviteCodesParams {
- address: string;
-}
-
 export async function getInviteCodes(
- params: GetInviteCodesParams
+ wallet: MirageWallet,
 ): Promise<GetInviteCodesResponse> {
-  return api.get<GetInviteCodesResponse>("/get_invite_codes", params);
+  const address = wallet.address.toLowerCase();
+  const signed = buildSimpleSignedPayload(
+    wallet,
+    `get_invite_codes:${address}:{timestamp}:{nonce}`,
+  );
+  return api.get<GetInviteCodesResponse>("/get_invite_codes", {
+    address,
+    ...signed,
+  });
 }
 
 export interface ValidateInviteCodeParams {
@@ -209,18 +294,16 @@ export async function validateInviteCode(
 ): Promise<ValidateInviteCodeResponse> {
   const trimmed = params.code.trim();
   const isValidFormat = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(trimmed);
-  console.log("[validateInviteCode] code:", JSON.stringify(trimmed), "isValidFormat:", isValidFormat);
   if (!isValidFormat) {
     return { valid: false, code: trimmed, error: "invalid_code" };
   }
 
   try {
-    const response = await apiClient.getInstance().post<ValidateInviteCodeResponse>("/api/validate_invite_code", { code: trimmed });
-    console.log("[validateInviteCode] server response:", JSON.stringify(response.data));
-    return response.data;
+    const response = await apiClient.post<ValidateInviteCodeResponse>("/validate_invite_code", { code: trimmed });
+    return response;
   } catch (error: any) {
     const status = error?.response?.status;
-    console.log("[validateInviteCode] error status:", status, "message:", error?.message);
+    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status }, level: "warning" });
     if (status === 404 || status === 405) {
       return { valid: true, code: trimmed };
     }

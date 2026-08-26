@@ -1,6 +1,7 @@
 export { useAuthGuard } from "./use-auth-guard";
 export {
   useBlockHandler,
+  getBlockConfirmationMessage,
   type BlockTarget,
   type BlockType,
   type UseBlockHandlerOptions,
@@ -54,15 +55,24 @@ export {
   type UseWalletResult,
 } from "./use-wallet";
 export {
+  useIsConnected,
   useNetworkState,
+  useNetworkType,
   shouldAutoplayVideo,
   type NetworkType,
 } from "./use-network-state";
 export {
+  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAppState,
   type AppStateInfo,
 } from "./use-app-state";
 export { useEasUpdate } from "./use-eas-update";
+export { useForceUpdate, type ForceUpdateReason } from "./use-force-update";
 export { useTabSwipeGesture } from "./use-tab-swipe-gesture";
 export { useServerList } from "./use-server-list";
 export { useNewPostsChecker } from "./use-new-posts-checker";
+export {
+  usePostDataRefresher,
+} from "./use-post-data-refresher";
+export { useMentionSearch } from "./use-mention-search";
+export { useLatestRef } from "./use-latest-ref";

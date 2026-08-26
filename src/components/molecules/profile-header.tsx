@@ -1,33 +1,34 @@
-const PROFILE_GRADIENT_COLORS: readonly string[] = [
-  "rgb(102, 126, 234)",
-  "rgb(118, 75, 162)",
-  "#000000",
-];
 import { Ionicons } from "@expo/vector-icons";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   Animated as RNAnimated,
   View,
 } from "react-native";
 import Animated, {
   interpolate,
-  interpolateColor,
   SharedValue,
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
 
-import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { getTierName } from "@/src/utils/tiers";
+import { getTierName, getTierColor } from "@/src/utils/tiers";
+import { StyleSheet } from "react-native-unistyles";
+
+const PROFILE_GRADIENT_COLORS: readonly string[] = [
+  "rgb(102, 126, 234)",
+  "rgb(118, 75, 162)",
+  "#000000",
+];
 
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
@@ -129,24 +130,27 @@ export const ProfileHeaderBar = ({
   const insets = useSafeAreaInsets();
 
   const headerBgStyle = useAnimatedStyle(() => {
-    if (!scrollY) return { backgroundColor: "rgba(0,0,0,0)" };
+    if (!scrollY) return { opacity: 0 };
 
-    const backgroundColor = interpolateColor(
+    const opacity = interpolate(
       scrollY.value,
-      [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "#000000", "#000000"],
+      [SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7],
+      [0, 1],
+      'clamp',
     );
 
-    return { backgroundColor };
+    return { opacity };
   });
 
   return (
-    <Animated.View
-      style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}
+    <View
+      style={[styles.headerBar, { paddingTop: insets.top }]}
     >
+      <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000000' }, headerBgStyle]} />
       <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
         <Box direction="row" center gap="xs">
           <IconButton
+            accessibilityLabel="Go back"
             name="arrow-back"
             size="md"
             color="#FFFFFF"
@@ -192,24 +196,20 @@ export const ProfileHeaderBar = ({
             </View>
           )}
           {isOwnProfile && (
-            <AnimatedPressable
-              scaleAmount={0.9}
-              onPress={() => {
-                triggerHaptic("selection");
-                onSubscriptionPress?.();
-              }}
+            <Pressable
+              onPress={Platform.OS !== "ios" ? onSubscriptionPress : undefined}
               style={styles.tierHeaderBadge}
             >
               <Icon
                 icon={Ionicons}
                 name="shield-checkmark"
                 size={16}
-                color="#FFFFFF"
+                color={getTierColor(userLevel)}
               />
-              <Text size="md" weight="semibold" style={styles.whiteText}>
+              <Text size="md" weight="semibold" style={{ color: getTierColor(userLevel) }}>
                 {getTierName(userLevel)}
               </Text>
-            </AnimatedPressable>
+            </Pressable>
           )}
           {!isOwnProfile && (
             <AnimatedPressable
@@ -242,6 +242,7 @@ export const ProfileHeaderBar = ({
           )}
           {!isOwnProfile && (
             <IconButton
+              accessibilityLabel="Open profile menu"
               name="ellipsis-horizontal"
               size="md"
               color="#FFFFFF"
@@ -251,7 +252,7 @@ export const ProfileHeaderBar = ({
           )}
         </Box>
       </Box>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -291,7 +292,7 @@ export const ProfileContent = ({
       setCopied(true);
       triggerHaptic("success");
     } catch (error) {
-      console.error("Failed to copy address:", error);
+      Sentry.addBreadcrumb({ category: "profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
     }
   }, [walletAddress]);
 
@@ -339,8 +340,8 @@ export const ProfileContent = ({
             size={80}
             seed={avatarSeed || username}
             source={avatarUrl ? { uri: avatarUrl } : undefined}
-            rounded="full"
-            bordered
+            rounded="sm"
+            paddingRatio={0}
           />
 
           <Box mt="sm">
@@ -368,9 +369,9 @@ export const ProfileContent = ({
                   icon={Ionicons}
                   name="shield-checkmark"
                   size={12}
-                  color="#FFFFFF"
+                  color={getTierColor(userLevel)}
                 />
-                <Text size="xs" weight="medium" style={styles.whiteText}>
+                <Text size="xs" weight="medium" style={{ color: getTierColor(userLevel) }}>
                   {getTierName(userLevel)} Tier
                 </Text>
               </Box>
@@ -522,9 +523,15 @@ export const ProfileHeader = ({
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     width: "100%",
+  },
+  profileAvatar: {
+    backgroundColor:
+      rt.themeName === "light" ? "#FFFFFF" : theme.colors.background.subtle,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
   },
   headerBar: {
     position: "absolute",

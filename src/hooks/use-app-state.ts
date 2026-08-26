@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
+
+export const APP_FOREGROUND_REFRESH_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
 export type AppStateInfo = {
   currentState: AppStateStatus;
@@ -18,61 +20,65 @@ type UseAppStateOptions = {
 
 export function useAppState(options: UseAppStateOptions = {}): AppStateInfo {
   const { onForeground, onBackground, staleThreshold = 0 } = options;
-  
+
   const [appState, setAppState] = useState<AppStateStatus>(
     AppState.currentState
   );
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const previousStateRef = useRef<AppStateStatus | null>(null);
   const lastActiveTimeRef = useRef<number | null>(Date.now());
   const lastBackgroundTimeRef = useRef<number | null>(null);
   const backgroundDurationRef = useRef<number | null>(null);
   const isReturningRef = useRef(false);
 
-  const handleAppStateChange = useCallback(
-    (nextState: AppStateStatus) => {
-      const prevState = appState;
-      previousStateRef.current = prevState;
-
-      if (prevState === "active" && nextState.match(/inactive|background/)) {
-        lastBackgroundTimeRef.current = Date.now();
-        onBackground?.();
-      }
-
-      if (
-        prevState.match(/inactive|background/) &&
-        nextState === "active"
-      ) {
-        const now = Date.now();
-        lastActiveTimeRef.current = now;
-
-        if (lastBackgroundTimeRef.current) {
-          const duration = now - lastBackgroundTimeRef.current;
-          backgroundDurationRef.current = duration;
-
-          if (duration >= staleThreshold) {
-            isReturningRef.current = true;
-            onForeground?.({ backgroundDuration: duration });
-          }
-        }
-      } else {
-        isReturningRef.current = false;
-      }
-
-      setAppState(nextState);
-    },
-    [appState, onForeground, onBackground, staleThreshold]
-  );
+  const onForegroundRef = useRef(onForeground);
+  onForegroundRef.current = onForeground;
+  const onBackgroundRef = useRef(onBackground);
+  onBackgroundRef.current = onBackground;
+  const staleThresholdRef = useRef(staleThreshold);
+  staleThresholdRef.current = staleThreshold;
 
   useEffect(() => {
     const subscription = AppState.addEventListener(
       "change",
-      handleAppStateChange
+      (nextState: AppStateStatus) => {
+        const prevState = appStateRef.current;
+        previousStateRef.current = prevState;
+
+        if (prevState === "active" && nextState.match(/inactive|background/)) {
+          lastBackgroundTimeRef.current = Date.now();
+          onBackgroundRef.current?.();
+        }
+
+        if (
+          prevState.match(/inactive|background/) &&
+          nextState === "active"
+        ) {
+          const now = Date.now();
+          lastActiveTimeRef.current = now;
+
+          if (lastBackgroundTimeRef.current) {
+            const duration = now - lastBackgroundTimeRef.current;
+            backgroundDurationRef.current = duration;
+
+            if (duration >= staleThresholdRef.current) {
+              isReturningRef.current = true;
+              onForegroundRef.current?.({ backgroundDuration: duration });
+            }
+          }
+        } else {
+          isReturningRef.current = false;
+        }
+
+        appStateRef.current = nextState;
+        setAppState(nextState);
+      }
     );
 
     return () => {
       subscription.remove();
     };
-  }, [handleAppStateChange]);
+  }, []);
 
   return {
     currentState: appState,

@@ -1,7 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
-import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/react-native";
+import { BlurView } from "expo-blur";
+import { useLocalSearchParams } from "expo-router";
+import { VideoView } from "expo-video";
+import { router } from "@/src/navigation/guarded-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,28 +23,34 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { processVideo } from "@/src/utils/video-processing";
+import { MAX_VIDEO_DURATION_MS, processVideo } from "@/src/utils/video-processing";
+import { setPendingVideoResult } from "@/src/stores/video-editor-result-store";
+import { useVideoEditorPlayer } from "./use-video-editor-player";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
 const TIMELINE_WIDTH = SCREEN_WIDTH - TIMELINE_PADDING * 2;
 const MIN_TRIM_DURATION = 1000; // 1 second minimum
+const MAX_TRIM_DURATION = MAX_VIDEO_DURATION_MS; // 30 minutes maximum
 
 export function VideoEditorScreen() {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string }>();
+  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string; returnTo?: string }>();
   
   const videoUri = params.uri;
-  const videoWidth = params.width ? parseInt(params.width) : 1920;
-  const videoHeight = params.height ? parseInt(params.height) : 1080;
-  
-  const videoRef = useRef<Video>(null);
+  const initialVideoWidth = params.width ? parseInt(params.width) : 1920;
+  const initialVideoHeight = params.height ? parseInt(params.height) : 1080;
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [resolvedVideoSize, setResolvedVideoSize] = useState({
+    width: initialVideoWidth,
+    height: initialVideoHeight,
+  });
   
   const initialTrimStartMs = params.initialTrimStart ? parseInt(params.initialTrimStart) : 0;
   const initialTrimEndMs = params.initialTrimEnd ? parseInt(params.initialTrimEnd) : 0;
@@ -49,80 +58,79 @@ export function VideoEditorScreen() {
   // Trim state (in milliseconds)
   const [trimStart, setTrimStart] = useState(initialTrimStartMs);
   const [trimEnd, setTrimEnd] = useState(initialTrimEndMs);
+  const videoPlayer = useVideoEditorPlayer({
+    uri: videoUri,
+    isPlaying,
+    trimStartMs: trimStart,
+    trimEndMs: trimEnd,
+    setCurrentPosition,
+    setDuration,
+    setIsPlaying,
+    setResolvedVideoSize,
+    setTrimEnd,
+  });
   
   // Shared values for trim handles
   const leftTrimPosition = useSharedValue(0);
   const rightTrimPosition = useSharedValue(TIMELINE_WIDTH);
   
-  const aspectRatio = videoWidth / videoHeight;
+  const aspectRatio =
+    resolvedVideoSize.width > 0 && resolvedVideoSize.height > 0
+      ? resolvedVideoSize.width / resolvedVideoSize.height
+      : 16 / 9;
   const videoDisplayHeight = Math.min(SCREEN_WIDTH / aspectRatio, 400);
 
   useEffect(() => {
     if (duration > 0 && trimEnd === 0) {
-      setTrimEnd(duration);
-      rightTrimPosition.value = TIMELINE_WIDTH;
+      const maxEnd = Math.min(duration, MAX_TRIM_DURATION);
+      setTrimEnd(maxEnd);
+      rightTrimPosition.value = (maxEnd / duration) * TIMELINE_WIDTH;
     }
     if (duration > 0 && initialTrimStartMs > 0) {
       leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(initialTrimStartMs).catch(() => {});
+      videoPlayer.currentTime = initialTrimStartMs / 1000;
     }
     if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
-      rightTrimPosition.value = (initialTrimEndMs / duration) * TIMELINE_WIDTH;
+      const clampedEnd = Math.min(initialTrimEndMs, initialTrimStartMs + MAX_TRIM_DURATION);
+      setTrimEnd(clampedEnd);
+      rightTrimPosition.value = (clampedEnd / duration) * TIMELINE_WIDTH;
     }
-  }, [duration]);
-
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    
-    if (status.durationMillis && duration === 0) {
-      setDuration(status.durationMillis);
-      setTrimEnd(status.durationMillis);
-    }
-    
-    setCurrentPosition(status.positionMillis);
-    setIsPlaying(status.isPlaying);
-    
-    // Loop within trim region
-    if (status.positionMillis >= trimEnd && trimEnd > 0) {
-      videoRef.current?.setPositionAsync(trimStart).catch(() => {});
-    }
-  }, [duration, trimStart, trimEnd]);
+  }, [duration, initialTrimEndMs, initialTrimStartMs, leftTrimPosition, rightTrimPosition, trimEnd, videoPlayer]);
 
   const handlePlayPause = useCallback(async () => {
-    if (!videoRef.current) return;
     triggerHaptic("light");
-    
-    const status = await videoRef.current.getStatusAsync();
-    if (!status.isLoaded) return;
-    
-    if (status.isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      // If at end of trim, restart from trim start
-      if (status.positionMillis >= trimEnd) {
-        await videoRef.current.setPositionAsync(trimStart);
-      }
-      await videoRef.current.playAsync();
+
+    if (!isPlaying && currentPosition >= trimEnd) {
+      videoPlayer.currentTime = trimStart / 1000;
     }
-  }, [trimStart, trimEnd]);
+    setIsPlaying((playing) => !playing);
+  }, [currentPosition, isPlaying, trimEnd, trimStart, videoPlayer]);
+
+  const stopEditorPlayback = useCallback(async () => {
+    videoPlayer.pause();
+    videoPlayer.currentTime = trimStart / 1000;
+    setIsPlaying(false);
+  }, [trimStart, videoPlayer]);
 
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
     
     if (isLeft) {
       const maxStart = trimEnd - MIN_TRIM_DURATION;
-      const clampedTime = Math.max(0, Math.min(newTime, maxStart));
+      const minStart = trimEnd - MAX_TRIM_DURATION;
+      const clampedTime = Math.max(Math.max(0, minStart), Math.min(newTime, maxStart));
       setTrimStart(clampedTime);
       leftTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      videoPlayer.currentTime = clampedTime / 1000;
     } else {
       const minEnd = trimStart + MIN_TRIM_DURATION;
-      const clampedTime = Math.max(minEnd, Math.min(newTime, duration));
+      const maxEnd = Math.min(duration, trimStart + MAX_TRIM_DURATION);
+      const clampedTime = Math.max(minEnd, Math.min(newTime, maxEnd));
       setTrimEnd(clampedTime);
       rightTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      videoPlayer.currentTime = clampedTime / 1000;
     }
-  }, [duration, trimStart, trimEnd]);
+  }, [duration, leftTrimPosition, rightTrimPosition, trimStart, trimEnd, videoPlayer]);
 
   const leftPanGesture = Gesture.Pan()
     .onUpdate((event) => {
@@ -163,58 +171,73 @@ export function VideoEditorScreen() {
     return { transform: [{ translateX: position }] };
   });
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     triggerHaptic("selection");
+    await stopEditorPlayback();
     router.back();
-  }, []);
+  }, [stopEditorPlayback]);
 
   const handleNext = useCallback(async () => {
     if (!videoUri) return;
     
     triggerHaptic("medium");
+    await stopEditorPlayback();
     
     let processedUri = videoUri;
     
-    // Check if we need to process the video (trim or mute)
+    // Always process selected videos so Android/iOS uploads are compressed for
+    // faster stream provider processing. The helper trims only when needed.
     const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
     
-    if (needsTrim) {
-      setIsProcessing(true);
-      try {
-        console.log("[VideoEditor] Processing video:", {
-          trimStart,
-          trimEnd,
-          duration,
-          needsTrim,
-        });
-        
-        const result = await processVideo(videoUri, {
-          trimStartMs: trimStart,
-          trimEndMs: trimEnd,
-          totalDurationMs: duration,
-        });
-        processedUri = result.uri;
-      } catch (error) {
-        console.error("[VideoEditor] Failed to process video:", error);
-        // Continue with original video if processing fails
-      }
+    setIsProcessing(true);
+    try {
+      console.log("[VideoEditor] Processing video:", {
+        trimStart,
+        trimEnd,
+        duration,
+        needsTrim,
+      });
+      
+      const result = await processVideo(videoUri, {
+        trimStartMs: trimStart,
+        trimEndMs: trimEnd,
+        totalDurationMs: duration,
+        sourceWidth: resolvedVideoSize.width,
+        sourceHeight: resolvedVideoSize.height,
+      });
+      processedUri = result.uri;
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
+    } finally {
       setIsProcessing(false);
     }
     
-    // Navigate back to create screen with video data
-    router.replace({
-      pathname: "/(tabs)/create",
-      params: {
+    if (params.returnTo) {
+      setPendingVideoResult({
         videoUri: processedUri,
         originalVideoUri: videoUri,
-        videoWidth: videoWidth.toString(),
-        videoHeight: videoHeight.toString(),
-        trimStart: trimStart.toString(),
-        trimEnd: trimEnd.toString(),
+        videoWidth: resolvedVideoSize.width,
+        videoHeight: resolvedVideoSize.height,
+        trimStart,
+        trimEnd,
         replacingUri: params.replacingUri ?? "",
-      },
-    });
-  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd]);
+      });
+      router.back();
+    } else {
+      router.replace({
+        pathname: "/create",
+        params: {
+          videoUri: processedUri,
+          originalVideoUri: videoUri,
+          videoWidth: resolvedVideoSize.width.toString(),
+          videoHeight: resolvedVideoSize.height.toString(),
+          trimStart: trimStart.toString(),
+          trimEnd: trimEnd.toString(),
+          replacingUri: params.replacingUri ?? "",
+        },
+      });
+    }
+  }, [videoUri, duration, resolvedVideoSize.height, resolvedVideoSize.width, trimStart, trimEnd, params.returnTo, params.replacingUri, stopEditorPlayback]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -268,17 +291,19 @@ export function VideoEditorScreen() {
           </Button>
         </View>
 
+        <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.default }]} />
+
         {/* Video Preview */}
-        <View style={styles.videoContainer}>
+        <View style={[styles.videoContainer, { backgroundColor: theme.colors.background.base }]}>
           <Pressable onPress={handlePlayPause} style={styles.videoWrapper}>
-            <Video
-              ref={videoRef}
-              source={{ uri: videoUri }}
+            <VideoView
+              player={videoPlayer}
               style={[styles.video, { height: videoDisplayHeight }]}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              isLooping={false}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+              contentFit="contain"
+              nativeControls={false}
+              fullscreenOptions={{ enable: false }}
+              allowsPictureInPicture={false}
+              surfaceType={Platform.OS === "android" ? "textureView" : undefined}
             />
             
             {/* Play/Pause overlay */}
@@ -301,6 +326,11 @@ export function VideoEditorScreen() {
             <Text size="sm" mode="subtle">
               Selected: {formatTime(trimDuration)} / {formatTime(duration)}
             </Text>
+          {trimDuration > MAX_TRIM_DURATION && (
+            <Text size="xs" style={{ color: theme.colors.error[500], marginTop: 2 }}>
+              Video exceeds 30 minute limit
+            </Text>
+          )}
           </View>
 
           {/* Timeline */}
@@ -320,7 +350,7 @@ export function VideoEditorScreen() {
               
               {/* Playhead */}
               <Animated.View style={[styles.playhead, playheadStyle]}>
-                <View style={[styles.playheadLine, { backgroundColor: theme.colors.text.default }]} />
+                <View style={[styles.playheadLine, { backgroundColor: theme.colors.brand[500] }]} />
               </Animated.View>
               
               {/* Left trim handle */}
@@ -350,26 +380,41 @@ export function VideoEditorScreen() {
           </View>
 
           {/* Instructions */}
-          <Text size="xs" mode="subtle" style={styles.instructions}>
-            Drag the handles to trim your video
+          <Text size="sm" mode="subtle" style={styles.instructions}>
+            Maximum duration: 30 minutes
           </Text>
         </View>
 
-        {/* Processing overlay */}
-        {isProcessing && (
-          <View style={styles.processingOverlay}>
-            <View style={styles.processingContent}>
-              <ActivityIndicator size="large" color={theme.colors.brand[500]} />
-              <Text size="md" weight="medium" style={{ marginTop: 16 }}>
-                Processing video...
-              </Text>
-              <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-                Trimming video
-              </Text>
-            </View>
-          </View>
-        )}
       </Box>
+
+      {/* Processing overlay */}
+      {isProcessing && (
+        <View style={styles.processingOverlay}>
+          <BlurView
+            intensity={50}
+            tint={isDark ? "dark" : "light"}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <View
+            style={[
+              styles.processingContent,
+              {
+                backgroundColor: isDark
+                  ? "rgba(25, 25, 25, 0.98)"
+                  : "rgba(255, 255, 255, 0.98)",
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color={isDark ? "#fff" : theme.colors.brand[500]} />
+            <Text size="lg" weight="bold" style={styles.processingTitle}>
+              Processing Video
+            </Text>
+            <Text size="sm" style={styles.processingText}>
+              This may take a moment...
+            </Text>
+          </View>
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }
@@ -388,11 +433,14 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+  },
   videoContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000",
   },
   videoWrapper: {
     width: "100%",
@@ -498,12 +546,32 @@ const styles = StyleSheet.create((theme) => ({
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    zIndex: 100,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     alignItems: "center",
     justifyContent: "center",
+    padding: theme.spacing.lg,
   },
   processingContent: {
-    alignItems: "center",
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: theme.radius.xl,
     padding: theme.spacing.xl,
+    paddingTop: theme.spacing.xxl,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  processingTitle: {
+    textAlign: "center" as const,
+    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
+  processingText: {
+    textAlign: "center" as const,
+    paddingHorizontal: theme.spacing.md,
   },
 }));

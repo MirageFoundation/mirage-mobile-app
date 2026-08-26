@@ -1,25 +1,22 @@
+import * as Sentry from "@sentry/react-native";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
+import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
+import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
+export type FeedDensity = "card" | "compact";
 export type ThemeMode = "light" | "dark" | "system";
 export type ShareServer = string;
 export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
-export type ContentType =
-  | "sensitive"
-  | "porn"
-  | "violence"
-  | "gore"
-  | "death"
-  | "none"
-  | "all";
+export type ContentType = ContentWarningId | "none" | "all";
 
-const CONTENT_TAGS = ["sensitive", "porn", "violence", "gore", "death"] as const;
-const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
+const CONTENT_TAGS = CONTENT_WARNING_IDS;
+const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
-type ContentTag = (typeof CONTENT_TAGS)[number];
+type AdultContentTag = (typeof ADULT_CONTENT_TAGS)[number];
 
 const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
   if (!types || types.length === 0) return [];
@@ -33,13 +30,20 @@ const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
 };
 
 export const getAllowedTagsFromContentTypes = (
-  types: ContentType[]
+  types: ContentType[],
+  adultToggleEnabled?: boolean
 ): string => {
  const normalized = normalizeContentTypes(types);
- if (normalized.includes("all")) return CONTENT_TAGS.join(",");
+ if (normalized.includes("all")) {
+   if (adultToggleEnabled === false) {
+     return CONTENT_TAGS.filter((tag) => tag !== "adult").join(",");
+   }
+   return CONTENT_TAGS.join(",");
+ }
   if (normalized.length === 0) return "";
 
  const selected = new Set(normalized);
+  if (!adultToggleEnabled) selected.delete("adult" as any);
   return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
 };
 
@@ -47,7 +51,7 @@ export const isAdultContentEnabled = (types: ContentType[]): boolean => {
   if (!types || types.length === 0) return false;
   if (types.includes("all")) return true;
   return types.some((type) =>
-    ADULT_CONTENT_TAGS.includes(type as ContentTag)
+    ADULT_CONTENT_TAGS.includes(type as AdultContentTag)
   );
 };
 
@@ -63,6 +67,7 @@ type PreferencesState = {
   // Feed
   feedType: FeedType;
   followingFeedType: FeedType;
+  feedDensity: FeedDensity;
 
   // Theme
   theme: ThemeMode;
@@ -70,9 +75,17 @@ type PreferencesState = {
   // Content
   adultContentEnabled: boolean;
   hasSeenAdultPrompt: boolean;
+  adultPromptDismissedAt: number;
+  moderationReminderUnderstoodByUser: Record<string, boolean>;
+  moderationReminderSnoozedUntilByUser: Record<string, number>;
   selectedContentTypes: ContentType[];
   blurSensitiveMedia: boolean;
+  ageVerified: boolean;
   hideDownvotedPosts: boolean;
+
+  // Analytics (opt-in; EU consent requirement)
+  analyticsConsent: boolean;
+  analyticsConsentAsked: boolean;
 
   // Comments
   autoCollapseThreshold: number | null; // -10, -5, -3, -1, 0, or null (never)
@@ -99,13 +112,19 @@ type PreferencesState = {
 // Actions
  setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
+  setFeedDensity: (density: FeedDensity) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
+  setAdultPromptDismissedAt: (timestamp: number) => void;
+  dismissModerationReminder: (userId: string) => void;
+  snoozeModerationReminder: (userId: string, until: number) => void;
   setSelectedContentTypes: (types: ContentType[]) => void;
   toggleContentType: (type: ContentType) => void;
   setBlurSensitiveMedia: (blur: boolean) => void;
+  setAgeVerified: (verified: boolean) => void;
   setHideDownvotedPosts: (hide: boolean) => void;
+  setAnalyticsConsent: (granted: boolean) => void;
   setAutoCollapseThreshold: (threshold: number | null) => void;
   setTopicsBeforeShowMore: (count: number) => void;
   setPeopleBeforeShowMore: (count: number) => void;
@@ -124,16 +143,25 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Feed
       feedType: "home",
       followingFeedType: "home",
+      feedDensity: "card",
 
       // Theme
       theme: "system",
 
       // Content
       adultContentEnabled: false,
-      hasSeenAdultPrompt: false,
+      hasSeenAdultPrompt: true,
+      adultPromptDismissedAt: 0,
+      moderationReminderUnderstoodByUser: {},
+      moderationReminderSnoozedUntilByUser: {},
       selectedContentTypes: ["sensitive"],
-      blurSensitiveMedia: true,
+      blurSensitiveMedia: false,
+      ageVerified: false,
       hideDownvotedPosts: false,
+
+      // Analytics
+      analyticsConsent: false,
+      analyticsConsentAsked: false,
 
       // Comments
       autoCollapseThreshold: -5,
@@ -160,106 +188,89 @@ export const usePreferencesStore = create<PreferencesState>()(
     // Actions
      setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
+      setFeedDensity: (density) => set({ feedDensity: density }),
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) =>
         set((state) => {
           if (enabled) {
-            if (state.selectedContentTypes.includes("all")) {
-              return { adultContentEnabled: true };
-            }
-
-            const baseTypes = state.selectedContentTypes.filter(
-              (type) => type !== "none" && type !== "all"
-            );
-            const nextSet = new Set<ContentType>(baseTypes);
-
-            for (const tag of ADULT_CONTENT_TAGS) {
-              nextSet.add(tag);
-            }
-
-            if (baseTypes.length === 0) {
-              nextSet.add("sensitive");
-            }
-
-            const nextTypes = Array.from(nextSet);
             return {
               adultContentEnabled: true,
-              selectedContentTypes: nextTypes.length ? nextTypes : ["porn"],
+              selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
             };
           }
 
-          if (state.selectedContentTypes.includes("all")) {
-            return {
-              adultContentEnabled: false,
-              selectedContentTypes: ["sensitive"],
-            };
-          }
-
-          const baseTypes = state.selectedContentTypes.filter(
-            (type) => type !== "none" && type !== "all"
-          );
-          const filteredTypes = baseTypes.filter(
-            (type) => !ADULT_CONTENT_TAGS.includes(type as ContentTag)
+          const kept = state.selectedContentTypes.filter(
+            (type) => type !== "adult" && type !== "all" && type !== "none"
           );
 
           return {
             adultContentEnabled: false,
-            selectedContentTypes: filteredTypes.length
-              ? filteredTypes
-              : ["sensitive"],
+            selectedContentTypes: kept.length ? kept : kept,
           };
         }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
+      setAdultPromptDismissedAt: (timestamp) =>
+        set({ adultPromptDismissedAt: timestamp }),
+      // User keys are lowercased so the dismiss/snooze state survives any
+      // address-casing differences across sessions (BUG-016).
+      dismissModerationReminder: (userId) =>
+        set((state) => ({
+          moderationReminderUnderstoodByUser: {
+            ...state.moderationReminderUnderstoodByUser,
+            [userId.toLowerCase()]: true,
+          },
+          moderationReminderSnoozedUntilByUser: {
+            ...state.moderationReminderSnoozedUntilByUser,
+            [userId.toLowerCase()]: 0,
+          },
+        })),
+      snoozeModerationReminder: (userId, until) =>
+        set((state) => ({
+          moderationReminderSnoozedUntilByUser: {
+            ...state.moderationReminderSnoozedUntilByUser,
+            [userId.toLowerCase()]: until,
+          },
+        })),
       setSelectedContentTypes: (types) => {
         const normalized = normalizeContentTypes(types);
         set({
           selectedContentTypes: normalized,
-          adultContentEnabled: isAdultContentEnabled(normalized),
         });
       },
      toggleContentType: (type) =>
        set((state) => {
          if (type === "all") {
            return {
-             selectedContentTypes: ["all"],
-             adultContentEnabled: true,
+             selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
            };
          }
         if (type === "none") {
           return {
              selectedContentTypes: [],
-            adultContentEnabled: false,
           };
         }
 
           let newTypes: ContentType[];
-          if (state.selectedContentTypes.includes("all")) {
-            newTypes = [...CONTENT_TAGS].filter((t) => t !== type);
+          newTypes = state.selectedContentTypes.filter(
+            (t) => t !== "all" && t !== "none"
+          );
+          if (newTypes.includes(type)) {
+            newTypes = newTypes.filter((t) => t !== type);
           } else {
-            newTypes = state.selectedContentTypes.filter(
-              (t) => t !== "all" && t !== "none"
-            );
-            if (newTypes.includes(type)) {
-              newTypes = newTypes.filter((t) => t !== type);
-            } else {
-              newTypes = [...newTypes, type];
-            }
-          }
-
-        if (newTypes.length === 0) {
-          return {
-             selectedContentTypes: [],
-             adultContentEnabled: false,
-           };
+            newTypes = [...newTypes, type];
           }
 
           return {
             selectedContentTypes: newTypes,
-            adultContentEnabled: isAdultContentEnabled(newTypes),
           };
         }),
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
+      setAgeVerified: (verified) => set({ ageVerified: verified }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
+      setAnalyticsConsent: (granted) => {
+        void setAnalyticsTrackingEnabled(granted);
+        set({ analyticsConsent: granted, analyticsConsentAsked: true });
+      },
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
@@ -275,7 +286,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 2,
+      version: 8,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -292,16 +303,71 @@ export const usePreferencesStore = create<PreferencesState>()(
           }
         }
 
-        if (Array.isArray(state.selectedContentTypes)) {
-          const normalized = normalizeContentTypes(
-            state.selectedContentTypes as ContentType[]
-          );
-          state.selectedContentTypes = normalized;
-          state.adultContentEnabled = isAdultContentEnabled(normalized);
+        if (version < 3) {
+          state.selectedContentTypes = ["sensitive"];
+          state.adultContentEnabled = false;
+          state.blurSensitiveMedia = false;
+          state.hasSeenAdultPrompt = true;
+          state.adultPromptDismissedAt = 0;
         }
-        
+
+        if (version < 4) {
+          if (state.selectedContentTypes) {
+            state.selectedContentTypes = state.selectedContentTypes.map(
+              (t) => (t === ("porn" as ContentType) ? "adult" : t)
+            );
+          }
+        }
+
+        if (version < 5) {
+          state.adultPromptDismissedAt = state.adultPromptDismissedAt ?? 0;
+          state.moderationReminderUnderstoodByUser =
+            state.moderationReminderUnderstoodByUser ?? {};
+          state.moderationReminderSnoozedUntilByUser =
+            state.moderationReminderSnoozedUntilByUser ?? {};
+        }
+
+        if (version < 6) {
+          state.analyticsConsent = false;
+          state.analyticsConsentAsked = false;
+        }
+
+        if (version < 7) {
+          state.feedDensity = state.feedDensity ?? "card";
+          Sentry.addBreadcrumb({
+            category: "preferences",
+            message: "Migrated preferences to v7 (feedDensity)",
+            level: "info",
+            data: { from: version, to: 7 },
+          });
+        }
+
+        if (version < 8) {
+          // Lowercase moderation-reminder user keys so lookups are
+          // case-insensitive across sessions (BUG-016).
+          const lowerKeys = <T,>(map?: Record<string, T>): Record<string, T> => {
+            const out: Record<string, T> = {};
+            for (const [key, value] of Object.entries(map ?? {})) {
+              out[key.toLowerCase()] = value;
+            }
+            return out;
+          };
+          state.moderationReminderUnderstoodByUser = lowerKeys(
+            state.moderationReminderUnderstoodByUser,
+          );
+          state.moderationReminderSnoozedUntilByUser = lowerKeys(
+            state.moderationReminderSnoozedUntilByUser,
+          );
+        }
+
         return state as PreferencesState;
       },
     }
   )
 );
+
+export const useFeedDensity = (): [FeedDensity, (density: FeedDensity) => void] => {
+  const density = usePreferencesStore((s) => s.feedDensity);
+  const setDensity = usePreferencesStore((s) => s.setFeedDensity);
+  return [density, setDensity];
+};

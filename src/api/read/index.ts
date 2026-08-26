@@ -10,5 +10,5 @@ export * from "./endpoints";
 // Utilities
 export * from "./utils";
 
-// Re-export utility functions
-export { calculateDisplayPoints } from "./endpoints/posts";
+// Single-call thread shape (get_comments `ancestors`)
+export { readThreadAncestors, type ThreadAncestors } from "./thread-ancestors";
