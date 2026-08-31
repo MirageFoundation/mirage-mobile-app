@@ -2,6 +2,12 @@ import { Dimensions } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
+import {
+  computeGalleryFrameHeight,
+  resolveGalleryItemAspectRatio,
+} from "./media-gallery-sizing";
+
+export { GALLERY_MEDIA_MAX_HEIGHT } from "./media-gallery-sizing";
 
 /**
  * Shared sizing, caches, and styles for the gallery container and its item
@@ -11,7 +17,6 @@ import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_HORIZONTAL_PADDING = 32;
 export const GALLERY_WIDTH = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
-export const GALLERY_MEDIA_MAX_HEIGHT = 450;
 
 export const GALLERY_ASPECT_RATIO_CACHE = new BoundedLruMap<string, number>(256);
 export const GALLERY_LOADED_CACHE = new BoundedLruSet<string>(512);
@@ -19,13 +24,11 @@ export const GALLERY_LOADED_CACHE = new BoundedLruSet<string>(512);
 export function getGalleryItemAspectRatio(item: ResolvedMedia): number {
   const cached = GALLERY_ASPECT_RATIO_CACHE.get(item.uri);
   if (cached) return cached;
-  if (item.aspectRatio && item.aspectRatio !== 16 / 9) return item.aspectRatio;
-  if (item.width && item.height) return item.width / item.height;
-  return 16 / 9;
+  return resolveGalleryItemAspectRatio(item);
 }
 
 export function computeGalleryHeight(aspectRatio: number): number {
-  return Math.min(GALLERY_WIDTH / aspectRatio, GALLERY_MEDIA_MAX_HEIGHT);
+  return computeGalleryFrameHeight(aspectRatio, GALLERY_WIDTH);
 }
 
 export const galleryStyles = StyleSheet.create((theme) => ({
@@ -147,14 +150,6 @@ export const galleryStyles = StyleSheet.create((theme) => ({
   revealTextContainer: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
     gap: 8,
   },
 }));

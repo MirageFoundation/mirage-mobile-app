@@ -32,6 +32,8 @@ export interface ProcessVideoOptions {
   sourceWidth?: number;
   /** Source video height in pixels */
   sourceHeight?: number;
+  /** Reports preprocessing progress from 0 to 100. */
+  onProgress?: (progress: number) => void;
 }
 
 export interface ProcessVideoResult {
@@ -101,6 +103,7 @@ async function compressVideoForUpload(
       stripAudio: options.removeAudio === true,
     },
     (progress) => {
+      options.onProgress?.(Math.round(progress * 100));
       if (progress === 0 || progress === 1 || Math.round(progress * 100) % 25 === 0) {
         console.log("[VideoProcessing] Compression progress:", Math.round(progress * 100));
       }
@@ -160,6 +163,7 @@ export async function processVideo(
   const shouldTrim = needsTrimming(options);
   const shouldRemoveAudio = options.removeAudio === true;
   const shouldCompress = options.compressForUpload !== false;
+  options.onProgress?.(0);
 
   console.log("[VideoProcessing] Starting video processing...");
   console.log("[VideoProcessing] Options:", options);
@@ -186,6 +190,7 @@ export async function processVideo(
   const validationStartedAt = Date.now();
   try {
     const validationResult = await isValidFile(inputUri);
+    options.onProgress?.(10);
     console.log("[VideoTiming] validation complete", {
       durationMs: Date.now() - validationStartedAt,
     });
@@ -200,6 +205,7 @@ export async function processVideo(
       return { uri: inputUri, wasProcessed: false };
     }
   } catch {
+    options.onProgress?.(10);
     console.log("[VideoTiming] validation failed", {
       durationMs: Date.now() - validationStartedAt,
     });
@@ -244,7 +250,9 @@ export async function processVideo(
         currentUri = outputUri;
         wasProcessed = true;
       }
+      options.onProgress?.(25);
     } catch {
+      options.onProgress?.(25);
       console.warn("[VideoProcessing] Trim failed, using original file");
       Sentry.captureException(sanitizedTelemetryError('media-upload', {
         error_class: 'unexpected',
@@ -264,6 +272,7 @@ export async function processVideo(
   }
 
   if (!shouldCompress) {
+    options.onProgress?.(100);
     const totalDurationMs = Date.now() - processingStartedAt;
     console.log("[VideoTiming] processing complete", {
       totalDurationMs,
@@ -285,6 +294,7 @@ export async function processVideo(
 
   try {
     const compressed = await compressVideoForUpload(currentUri, options);
+    options.onProgress?.(100);
     const totalDurationMs = Date.now() - processingStartedAt;
     console.log("[VideoTiming] processing complete", {
       totalDurationMs,

@@ -70,6 +70,33 @@ describe("transient post success", () => {
     expect(result.posts[0].optimistic_status).toBeUndefined();
   });
 
+  test("keeps refreshed media when an indexed processing post is available", () => {
+    const serverPost = {
+      ...post("created"),
+      media: ["https://video.example.com/created/playlist.m3u8"],
+      thumbnail: "https://video.example.com/created/thumbnail.jpg",
+    };
+    const processing = {
+      ...post("created"),
+      media: ["file:///local-preview.mp4"],
+      optimistic_draft: { attachmentType: "video" },
+      optimistic_video_preview_until: Date.now() + 45_000,
+    };
+    const result = mergeRefreshedPostPreservingOrder(
+      response([serverPost]),
+      processing,
+      false,
+      true,
+    );
+
+    expect(result.posts[0].media).toEqual(serverPost.media);
+    expect(result.posts[0].thumbnail).toBe(serverPost.thumbnail);
+    expect(result.posts[0].optimistic_draft).toEqual(processing.optimistic_draft);
+    expect(result.posts[0].optimistic_video_preview_until).toBe(
+      processing.optimistic_video_preview_until,
+    );
+  });
+
   test("clears success without changing processing metadata", () => {
     const processing = post("created", "success");
     processing.optimistic_video_preview_until = 123;

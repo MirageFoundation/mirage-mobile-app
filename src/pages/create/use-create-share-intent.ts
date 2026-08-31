@@ -226,7 +226,7 @@ export function useCreateShareIntent({
       setPendingShareIntent(null);
       setIsProcessingShareLink(false);
       resetShareIntent();
-      router.replace("/(tabs)");
+      router.replace("/");
       showAuthSheet();
       return;
     }

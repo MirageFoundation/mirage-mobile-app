@@ -172,8 +172,7 @@ export const buildOptimisticPost = (
   const videoPreviewMediaUrls = getVideoPreviewMediaUrls(input);
   const shouldUsePreviewMedia =
     !!input.optimisticPreviewMediaUrls?.length &&
-    (status === "pending" ||
-      (status === "success" && !!videoPreviewMediaUrls?.length));
+    status === "pending";
   const media = shouldUsePreviewMedia
     ? input.optimisticPreviewMediaUrls
     : input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []);
@@ -619,54 +618,6 @@ const replaceOrUpdateOptimisticPost = (
 
 };
 
-const preserveLocalPreviewMedia = (
-  queryClient: QueryClient,
-  postId: string,
-  previewMediaUrls: string[],
-) => {
-  if (!previewMediaUrls.length) return;
-  const pendingPost = usePendingPostsStore.getState().getPost(postId);
-  if (!isPostVideoProcessing(pendingPost)) return;
-  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
-    if (!data) return { nextData: data, didUpdate: false };
-    const preserve = (post: ApiPost) =>
-      post.post_id === postId
-        ? {
-            ...post,
-            thumbnail: previewMediaUrls[0] ?? post.thumbnail,
-            media: previewMediaUrls,
-            optimistic_status: post.optimistic_status,
-            optimistic_error: post.optimistic_error,
-            optimistic_draft: post.optimistic_draft,
-            optimistic_video_preview_until: Math.max(
-              post.optimistic_video_preview_until ?? 0,
-              Date.now() + 45000,
-            ),
-          }
-        : post;
-    if (isInfinitePostsData(data)) {
-      let didUpdate = false;
-      const pages = data.pages.map((page) => {
-        const posts = page.posts.map((post) => {
-          if (post.post_id !== postId) return post;
-          didUpdate = true;
-          return preserve(post);
-        });
-        return didUpdate ? { ...page, posts } : page;
-      });
-      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
-    }
-    const singleData = data as PostsResponse;
-    let didUpdate = false;
-    const posts = singleData.posts.map((post) => {
-      if (post.post_id !== postId) return post;
-      didUpdate = true;
-      return preserve(post);
-    });
-    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
-  });
-};
-
 const isInfinitePostsData = (
   data: unknown,
 ): data is { pages: PostsResponse[]; pageParams: unknown[] } => {
@@ -1063,10 +1014,6 @@ export function usePost(options: UsePostOptions = {}) {
         });
         const postAfterNetworkConfirmation = {
           ...confirmedPost,
-          thumbnail: videoPreviewMediaUrls?.[0] ?? confirmedPost.thumbnail,
-          media: videoPreviewMediaUrls?.length
-            ? videoPreviewMediaUrls
-            : confirmedPost.media,
           optimistic_status: "success" as const,
           optimistic_error: undefined,
           optimistic_draft: input.optimisticDraft,
@@ -1096,18 +1043,13 @@ export function usePost(options: UsePostOptions = {}) {
         if (videoPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
-            message: "Preserving local media preview after post success",
+            message: "Switched confirmed video post to hosted media",
             level: "info",
             data: {
               postId: confirmedPost.post_id,
               previewCount: videoPreviewMediaUrls.length,
+              hostedMediaCount: confirmedPost.media?.length ?? 0,
             },
-          });
-          preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, videoPreviewMediaUrls);
-          [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
-            setTimeout(() => {
-              preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, videoPreviewMediaUrls ?? []);
-            }, delay);
           });
         }
       } else {
@@ -1525,7 +1467,6 @@ export function useDelete(options: UsePostOptions = {}) {
         queryKeys.postsRoot(),
         queryKeys.userPostsRoot(),
         queryKeys.commentsRoot(),
-        queryKeys.commentContextRoot(),
       ].forEach((queryKey) => {
         queryClient.setQueriesData({ queryKey }, (data) =>
           removePostAliasesFromData(data, input.postId, optimisticActionId),

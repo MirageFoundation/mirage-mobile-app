@@ -169,6 +169,7 @@ export function PostDetailSections({
           onRefreshComments={refetchComments}
           onReplyToComment={controller.thread.replyToComment}
           onScroll={controller.scroll.handleScroll}
+          onScrollBeginDrag={controller.scroll.handleUserScrollBeginDrag}
         />
         <PostDetailCommentComposer
           ref={controller.refs.commentComposerRef}
@@ -177,14 +178,12 @@ export function PostDetailSections({
           baseCommentCount={displayPost?.comments ?? 0}
           currentUser={currentUser}
           decrementCommentCount={controller.composer.decrementCommentCount}
-          focusedCommentId={focusedThread.focusedCommentId}
           id={id}
           implicitReplyRoot={effectiveCommentsData?.root}
           incrementCommentCount={controller.composer.incrementCommentCount}
           isLoggedIn={isLoggedIn}
           isViewingComment={isViewingComment}
           onAuthRequired={showAuthSheet}
-          onClearFocusedThread={controller.composer.clearFocusedThread}
           onCommentCountDelta={controller.composer.handleCommentCountDelta}
           onConfirmedCommentId={controller.composer.handleConfirmedCommentId}
           onHighlightComment={controller.scroll.handleComposerHighlight}
@@ -196,7 +195,6 @@ export function PostDetailSections({
           replaceOptimisticCommentId={controller.composer.replaceOptimisticCommentId}
           requireAuth={requireAuth}
           rootPostCommentCount={post?.comments ?? 0}
-          showFocusedThread={focusedThread.showFocusedThread}
         />
         <PostDetailActionSheets
           ref={controller.refs.actionSheetsRef}

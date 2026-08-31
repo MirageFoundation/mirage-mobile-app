@@ -17,6 +17,7 @@ import {
   type Post,
 } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
+import { buildFollowedTopicSet } from "@/src/domain/topics";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage ,
   useAuthStore,
@@ -74,9 +75,12 @@ export function FollowingScreen() {
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);
-    await tabbedFeedRef.current?.handleNewPostsPress();
-    setIsBannerLoading(false);
-    setHasNewPosts(false);
+    try {
+      await tabbedFeedRef.current?.handleNewPostsPress();
+      setHasNewPosts(false);
+    } finally {
+      setIsBannerLoading(false);
+    }
   }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
@@ -278,7 +282,10 @@ export function FollowingScreen() {
   }, []);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
-  const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
+  const followedTopicsSet = useMemo(
+    () => buildFollowedTopicSet(followedTopics),
+    [followedTopics],
+  );
   const allowAutoplay = useMemo(
     () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
     [autoPlayVideos, networkType, videoAutoplayNetwork],
@@ -370,7 +377,7 @@ export function FollowingScreen() {
       />
 
       <NewPostsButton
-        visible={hasNewPosts}
+        visible={hasNewPosts && isFocused}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 44}
         avatars={newPostAvatars}

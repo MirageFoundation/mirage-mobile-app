@@ -1,6 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent, RefreshControl } from "react-native";
-import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Comment, CommentThread } from "@/src/components/molecules";
@@ -36,7 +35,7 @@ type PostDetailCommentsSectionProps = {
   isRefetchingComments: boolean;
   listHeader: React.ReactElement | null;
   onAuthorPress: (authorId: string) => void;
-  onContentSizeChange: () => void;
+  onContentSizeChange: (contentHeight?: number) => void;
   onDislikeComment: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   onFollowCommentAuthor: (authorId: string, isCurrentlyFollowing: boolean) => void;
   onHighlightedLayout: (event: Parameters<NonNullable<React.ComponentProps<typeof CommentThread>["onHighlightedLayout"]>>[0]) => void;
@@ -45,6 +44,7 @@ type PostDetailCommentsSectionProps = {
   onRefreshComments: () => void;
   onReplyToComment: (comment: Comment) => void;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onScrollBeginDrag?: () => void;
 };
 
 export const PostDetailCommentsSection = forwardRef<
@@ -79,6 +79,7 @@ export const PostDetailCommentsSection = forwardRef<
       onRefreshComments,
       onReplyToComment,
       onScroll,
+      onScrollBeginDrag,
     },
     ref,
   ) => {
@@ -111,28 +112,23 @@ export const PostDetailCommentsSection = forwardRef<
 
     const renderComment = useCallback(
       ({ item }: { item: Comment }) => (
-        <Animated.View
-          entering={FadeInUp.duration(250).delay(100)}
-          layout={LinearTransition.duration(250)}
-        >
-          <CommentThread
-            comment={item}
-            depth={item.depth ?? 0}
-            currentUserId={currentUserId}
-            highlightedCommentId={highlightedCommentId}
-            onAuthorPress={onAuthorPress}
-            onLikePress={onLikeComment}
-            onDislikePress={onDislikeComment}
-            onReplyPress={onReplyToComment}
-            onMorePress={onMoreOptions}
-            followedUsers={followedUsers}
-            followLoadingUsers={followLoadingUsers}
-            onFollowPress={onFollowCommentAuthor}
-            onHighlightedLayout={onHighlightedLayout}
-            showDivider={true}
-            focusedContextMode={focusedContextMode}
-          />
-        </Animated.View>
+        <CommentThread
+          comment={item}
+          depth={item.depth ?? 0}
+          currentUserId={currentUserId}
+          highlightedCommentId={highlightedCommentId}
+          onAuthorPress={onAuthorPress}
+          onLikePress={onLikeComment}
+          onDislikePress={onDislikeComment}
+          onReplyPress={onReplyToComment}
+          onMorePress={onMoreOptions}
+          followedUsers={followedUsers}
+          followLoadingUsers={followLoadingUsers}
+          onFollowPress={onFollowCommentAuthor}
+          onHighlightedLayout={onHighlightedLayout}
+          showDivider={true}
+          focusedContextMode={focusedContextMode}
+        />
       ),
       [
         currentUserId,
@@ -182,8 +178,9 @@ export const PostDetailCommentsSection = forwardRef<
         }}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
         scrollEventThrottle={16}
-        onContentSizeChange={onContentSizeChange}
+        onContentSizeChange={(_width, height) => onContentSizeChange(height)}
         refreshControl={
           <RefreshControl
             refreshing={isManualRefreshing}
@@ -192,19 +189,26 @@ export const PostDetailCommentsSection = forwardRef<
           />
         }
         onScrollToIndexFailed={(info) => {
+          if (info.index < 0 || info.index >= commentsLengthRef.current) return;
+          // averageItemLength x index is wildly wrong for variable-height
+          // media comments, so only use it as a rough jump to force the
+          // target into the render window, then retry the precise scroll.
+          flatListRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: false,
+          });
           setTimeout(() => {
             if (info.index < 0 || info.index >= commentsLengthRef.current) return;
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
+            flatListRef.current?.scrollToIndex({
+              index: info.index,
               animated: true,
+              viewPosition: 0.1,
             });
-          }, 100);
+          }, 250);
         }}
-        // Disabled on all platforms: nested CommentThread rows with Reanimated
-        // `entering` (FadeInUp) + `layout` animations get incorrectly clipped on
-        // Android, hiding the focused reply when opening a post from the inbox
-        // (parent renders, but the deeper highlighted child stays clipped until
-        // the FlatList is remounted). See REACT-NATIVE-BZ.
+        // Disabled on all platforms: nested CommentThread rows get incorrectly
+        // clipped on Android, hiding the focused reply when opening a post
+        // from the inbox. See REACT-NATIVE-BZ.
         removeClippedSubviews={false}
         maxToRenderPerBatch={10}
         windowSize={10}

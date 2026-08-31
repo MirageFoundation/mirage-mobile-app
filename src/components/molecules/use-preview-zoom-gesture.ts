@@ -6,12 +6,28 @@ import {
   withTiming,
 } from "react-native-reanimated";
 
+function clampTranslation(value: number, extent: number, scale: number): number {
+  "worklet";
+  // With a centered transform origin, a container scaled by `s` can shift at
+  // most (extent * (s - 1)) / 2 in each direction before its edge crosses the
+  // matching viewport edge.
+  const max = Math.max(0, (extent * (scale - 1)) / 2);
+  return Math.min(max, Math.max(-max, value));
+}
+
 /**
  * Pinch/pan/double-tap zoom for the fullscreen image preview: pinch scales
- * (clamped 1–4x), pan moves the zoomed image, double-tap toggles 1x/2x, and
- * shrinking below 1x snaps everything back.
+ * (clamped 1–4x), pan moves the zoomed image within bounds, double-tap
+ * toggles 1x/2x, and shrinking below 1x snaps everything back.
+ *
+ * Pan is clamped so the scaled container can never be dragged fully
+ * off-screen (BUG-007: infinite pan into a blank screen; BUG-008: vertical
+ * drag flinging the image away entirely).
  */
-export function usePreviewZoomGesture() {
+export function usePreviewZoomGesture(
+  containerWidth: number,
+  containerHeight: number,
+) {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -40,19 +56,38 @@ export function usePreviewZoomGesture() {
         translateY.value = withTiming(0);
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
-      } else if (scale.value > 4) {
+        return;
+      }
+      if (scale.value > 4) {
         scale.value = withTiming(4);
         savedScale.value = 4;
       } else {
         savedScale.value = scale.value;
       }
+      // Zooming out can leave the previous translation outside the new
+      // pannable range; settle back into bounds.
+      const settledScale = savedScale.value;
+      const clampedX = clampTranslation(translateX.value, containerWidth, settledScale);
+      const clampedY = clampTranslation(translateY.value, containerHeight, settledScale);
+      if (clampedX !== translateX.value) translateX.value = withTiming(clampedX);
+      if (clampedY !== translateY.value) translateY.value = withTiming(clampedY);
+      savedTranslateX.value = clampedX;
+      savedTranslateY.value = clampedY;
     });
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (savedScale.value > 1) {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
+        translateX.value = clampTranslation(
+          savedTranslateX.value + e.translationX,
+          containerWidth,
+          savedScale.value,
+        );
+        translateY.value = clampTranslation(
+          savedTranslateY.value + e.translationY,
+          containerHeight,
+          savedScale.value,
+        );
       }
     })
     .onEnd(() => {

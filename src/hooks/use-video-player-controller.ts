@@ -102,8 +102,8 @@ function getSourceKey(source: VideoSource): string | null {
  * media in and out with serialized `replaceAsync` calls.
  *
  * In expo-video 3.x, `useVideoPlayer` destroys and recreates the native
- * player whenever its source argument changes. In feed lists (where FlashList
- * recycles card components and the warm-window gate flips sources between
+ * player whenever its source argument changes. In feed lists (where the list
+ * recycles or remounts card components and the warm-window gate flips sources between
  * `null` and a uri) that recreation happens constantly during scroll and is a
  * major source of jank. Passing a stable `null` source here means the player
  * is created exactly once per component instance; source changes become cheap

@@ -105,7 +105,11 @@ export async function buildSignedEnvelope<
   let difficulty = needsPoW ? (userCanSkipPoW ? 0 : params?.pow_difficulty ?? 0) : 0;
 
   const envelopeNonce = generateEnvelopeNonce();
-  let timestampMs = Math.max(0, Date.now() - 15000);
+  // v1.32.3: the chain accepts envelope timestamps at most 60s old and 30s in
+  // the future. Never backdate; stamp as late as possible. For PoW users the
+  // timestamp is part of the PoW preimage, so it is re-stamped at the start of
+  // each PoW challenge (each challenge is capped at ~20s of compute).
+  let timestampMs = Date.now();
   let effectiveBlockHash = needsPoW || requireBlockHash || forcePoW ? params?.last_block_hash ?? "" : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
@@ -139,7 +143,9 @@ export async function buildSignedEnvelope<
 
     for (let challenge = 0; challenge < MAX_POW_CHALLENGES; challenge++) {
       difficulty = userCanSkipPoW ? 0 : currentParams.pow_difficulty;
-      timestampMs = challenge === 0 ? timestampMs : Date.now();
+      // Fresh timestamp per challenge so the envelope stays inside the 60s
+      // window even when earlier challenges consumed compute time.
+      timestampMs = Date.now();
       effectiveBlockHash = currentParams.last_block_hash;
       base = baseBuilder({
         pubkey33: wallet.publicKey,
@@ -318,7 +324,8 @@ export async function buildEnvelopeWithParams<
   }
 
   const envelopeNonce = generateEnvelopeNonce();
-  const timestampMs = Math.max(0, Date.now() - 15000);
+  // See buildSignedEnvelope: never backdate the envelope timestamp (60s/30s window).
+  const timestampMs = Date.now();
   const effectiveBlockHash = needsPoW ? lastBlockHash : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 

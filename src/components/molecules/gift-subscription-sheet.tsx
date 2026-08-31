@@ -7,7 +7,7 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -17,8 +17,14 @@ import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useChainConfig } from "@/src/api/read/hooks/use-parameters";
 import { useGiftSubscription } from "@/src/api/write/hooks/use-gift-subscription";
 import { useToast } from "@/src/providers/toast-provider";
+import {
+  generateActionId,
+  getActionLabel,
+  usePowQueueStore,
+} from "@/src/services/pow-queue";
 import { formatCompactNumber } from "@/src/utils/format-number";
-import { isAxiosError } from "axios";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 
 type GiftSubscriptionSheetProps = {
   recipientAddress: string;
@@ -42,12 +48,19 @@ export const GiftSubscriptionSheet = forwardRef<
   const toast = useToast();
   const [isPresented, setIsPresented] = useState(false);
 
-  const { data: userStatus } = useUserStatus({ enabled: isPresented });
+  const { data: userStatus, isPending: isBalanceLoading } = useUserStatus({
+    enabled: isPresented,
+  });
   const { data: chainConfig } = useChainConfig({ enabled: isPresented });
   const giftSubMutation = useGiftSubscription();
+  const giftAsyncRef = useRef(giftSubMutation.mutateAsync);
+  const sendGuardRef = useRef(createDuplicateActionGuard());
+  useEffect(() => {
+    giftAsyncRef.current = giftSubMutation.mutateAsync;
+  }, [giftSubMutation.mutateAsync]);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
-  const [isSending, setIsSending] = useState(false);
-
+  const balanceKnown = userStatus != null;
   const balance = userStatus?.balance ?? 0;
   const balanceMirage = balance / 1_000_000;
 
@@ -58,8 +71,10 @@ export const GiftSubscriptionSheet = forwardRef<
   }, [chainConfig]);
 
   const periodFeeMirage = periodFee / 1_000_000;
-  const insufficientBalance = periodFee > 0 && balance < periodFee;
-  const canSend = periodFee > 0 && !insufficientBalance && !isSending;
+  // Only flag insufficient balance once the balance is actually known;
+  // an unresolved status query must not surface a false "Insufficient Balance".
+  const insufficientBalance = balanceKnown && periodFee > 0 && balance < periodFee;
+  const canSend = periodFee > 0 && !insufficientBalance;
 
   const expiryDate = useMemo(() => {
     const periodSeconds = chainConfig?.subscription_period ?? 0;
@@ -74,10 +89,8 @@ export const GiftSubscriptionSheet = forwardRef<
 
   const present = useCallback(() => {
     setIsPresented(true);
-    setIsSending(false);
-    giftSubMutation.reset();
     bottomSheetRef.current?.present();
-  }, [giftSubMutation]);
+  }, []);
 
   const dismiss = useCallback(() => {
     bottomSheetRef.current?.dismiss();
@@ -102,44 +115,48 @@ export const GiftSubscriptionSheet = forwardRef<
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.5}
-        pressBehavior={isSending ? "none" : "close"}
+        pressBehavior="close"
       />
     ),
-    [isSending],
+    [],
   );
 
-  const handleConfirm = useCallback(async () => {
-    if (!canSend || !recipientAddress) return;
-    setIsSending(true);
+  // C-3: gifts go through the shared PoW queue like votes/comments — the
+  // sheet dismisses immediately and the queue toast owns progress and the
+  // success/failure overlay. No blocking modal transaction.
+  const handleConfirm = useCallback(() => {
+    if (!canSend || !recipientAddress || !sendGuardRef.current.tryAcquire()) return;
     triggerHaptic("medium");
+    dismiss();
 
-    try {
-      await giftSubMutation.mutateAsync({
-        recipient: recipientAddress,
-        level: 1,
-      });
-      triggerHaptic("success");
-      toast.success(`Subscription gifted to @${recipientUsername}!`);
-      dismiss();
-      onSuccess?.();
-    } catch (err) {
-      triggerHaptic("error");
-      Sentry.captureException(err, { tags: { feature: "gift-subscription" } });
-      let errorMessage = err instanceof Error ? err.message : "Unknown error";
-      if (isAxiosError(err)) {
-        const data = err.response?.data;
-        if (typeof data === "string" && data.trim()) {
-          errorMessage = data;
-        } else if (data && typeof data === "object") {
-          const msg = (data as any).error ?? (data as any).message;
-          if (msg) errorMessage = String(msg);
-        }
-      }
-      toast.error(errorMessage);
-    } finally {
-      setIsSending(false);
-    }
-  }, [canSend, recipientAddress, recipientUsername, giftSubMutation, toast, dismiss, onSuccess]);
+    enqueue({
+      id: generateActionId(),
+      type: "gift_subscription",
+      label: getActionLabel("gift_subscription"),
+      execute: () =>
+        giftAsyncRef.current({
+          recipient: recipientAddress,
+          level: 1,
+        }),
+      onSuccess: () => {
+        sendGuardRef.current.release();
+        triggerHaptic("success");
+        onSuccess?.();
+      },
+      onError: (err) => {
+        sendGuardRef.current.release();
+        triggerHaptic("error");
+        Sentry.captureException(err, { tags: { feature: "gift-subscription" } });
+        toast.error(
+          `Subscription wasn't gifted to @${recipientUsername}`,
+          getApiErrorMessage(err),
+        );
+      },
+      onRollback: () => {
+        sendGuardRef.current.release();
+      },
+    });
+  }, [canSend, recipientAddress, recipientUsername, enqueue, toast, dismiss, onSuccess]);
 
   const footerHeight = Platform.OS === "ios" ? insets.bottom : insets.bottom + 30;
 
@@ -147,9 +164,7 @@ export const GiftSubscriptionSheet = forwardRef<
     <BottomSheetModal
       ref={bottomSheetRef}
       enableDynamicSizing
-      enablePanDownToClose={!isSending}
-      enableHandlePanningGesture={!isSending}
-      enableContentPanningGesture={!isSending}
+      enablePanDownToClose
       onChange={handleSheetChanges}
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: theme.colors.background.default }}
@@ -160,20 +175,24 @@ export const GiftSubscriptionSheet = forwardRef<
           <Text size="lg" weight="bold">
             Gift Subscription
           </Text>
-          <Pressable
-            onPress={dismiss}
-            disabled={isSending}
-            style={[styles.closeButton, isSending && { opacity: 0.5 }]}
-          >
+          <Pressable onPress={dismiss} style={styles.closeButton}>
             <EvilIcons name="close" size={24} color={theme.colors.text.default} />
           </Pressable>
         </View>
 
         <View style={styles.balanceRow}>
           <Text size="md" mode="subtle">Balance: </Text>
-          <Text size="md" weight="bold">
-            {formatCompactNumber(balanceMirage)} MIRAGE
-          </Text>
+          {balanceKnown ? (
+            <Text size="md" weight="bold">
+              {formatCompactNumber(balanceMirage)} MIRAGE
+            </Text>
+          ) : isBalanceLoading ? (
+            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+          ) : (
+            <Text size="md" weight="bold" mode="subtle">
+              — MIRAGE
+            </Text>
+          )}
         </View>
 
         <View
@@ -215,17 +234,13 @@ export const GiftSubscriptionSheet = forwardRef<
             !canSend && { opacity: 0.5 },
           ]}
         >
-          {isSending ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text
-              size="md"
-              weight="bold"
-              style={{ color: canSend ? "#fff" : theme.colors.text.subtle }}
-            >
-              {insufficientBalance ? "Insufficient Balance" : "Confirm Gift"}
-            </Text>
-          )}
+          <Text
+            size="md"
+            weight="bold"
+            style={{ color: canSend ? "#fff" : theme.colors.text.subtle }}
+          >
+            {insufficientBalance ? "Insufficient Balance" : "Confirm Gift"}
+          </Text>
         </Pressable>
 
         <View style={{ height: footerHeight }} />

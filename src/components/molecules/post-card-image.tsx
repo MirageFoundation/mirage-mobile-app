@@ -26,7 +26,7 @@ import {
   useMediaLoadedState,
   useMediaPressTransition,
 } from "./post-card-media-shared";
-import { getMediaImagePolicy } from "./media-image-policy";
+import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
 
 type PostCardImageProps = {
   media: ResolvedMedia;
@@ -39,6 +39,7 @@ type PostCardImageProps = {
   onMediaPress?: () => void;
   isPostDetail?: boolean;
   postId?: string;
+  isVisible?: boolean;
 };
 
 /**
@@ -56,6 +57,7 @@ export const PostCardImage = memo(function PostCardImage({
   onMediaPress,
   isPostDetail = false,
   postId,
+  isVisible = true,
 }: PostCardImageProps) {
   const resolvedMediaUri = media.uri;
   const [imageError, setImageError] = useState(false);
@@ -116,6 +118,9 @@ export const PostCardImage = memo(function PostCardImage({
     surface: isPostDetail ? "detail" : "feed",
     mediaType: media.type === "gif" ? "gif" : "image",
     displayWidth: containerWidth,
+    intrinsicWidth: media.width,
+    intrinsicHeight: media.height,
+    visible: isVisible,
   });
 
   return (
@@ -123,13 +128,14 @@ export const PostCardImage = memo(function PostCardImage({
       <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
         <Pressable onPress={handleMediaPress} style={styles.media}>
           <Image
-            source={{ uri: imagePolicy.uri }}
+            source={getMediaImageSource(imagePolicy)}
             style={styles.media}
             contentFit={imagePolicy.contentFit}
             cachePolicy={imagePolicy.cachePolicy}
             recyclingKey={imagePolicy.recyclingKey}
             allowDownscaling={imagePolicy.allowDownscaling}
             enforceEarlyResizing={imagePolicy.enforceEarlyResizing}
+            priority={imagePolicy.priority}
             onLoad={({ source }) => {
               updateMediaAspectRatioFromSize(source?.width, source?.height);
               setMediaLoaded(true);

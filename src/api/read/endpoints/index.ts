@@ -33,7 +33,6 @@ export type {
   GetUsernameFromAddressParams,
   GetUsersParams,
   ValidateInviteCodeParams,
-  GetInviteCodesParams,
 } from "./users";
 
 // Posts
@@ -41,16 +40,12 @@ export {
   getPosts,
   getUserPosts,
   getComments,
-  getRootPostId,
-  getCommentContext,
   calculateDisplayPoints,
 } from "./posts";
 export type {
   GetPostsParams,
   GetUserPostsParams,
   GetCommentsParams,
-  GetRootPostIdParams,
-  GetCommentContextParams,
 } from "./posts";
 
 // Inbox
@@ -85,17 +80,11 @@ export type {
 
 // Media Upload
 export {
- getUploadUrl,
- getImageUploadUrl,
- getVideoUploadUrl,
- uploadToSignedUrl,
  uploadImage,
- getImageUrl,
  getContentTypeFromUri,
 } from "./media";
 export type {
  MediaType,
- GetUploadUrlParams,
  UploadImageResult,
 } from "./media";
 

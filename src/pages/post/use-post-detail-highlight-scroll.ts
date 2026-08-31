@@ -9,6 +9,11 @@ import type { Comment } from "@/src/components/molecules";
 
 import { findCommentInTree } from "./post-detail-comment-utils";
 import type { PostDetailCommentsSectionRef } from "./post-detail-comments-section";
+import {
+  transferCommentRevealId,
+  type PostedCommentReveal,
+} from "./post-detail-comment-reveal";
+import { usePostedCommentRevealScroll } from "./use-posted-comment-reveal-scroll";
 
 type RefetchComments = (silent?: boolean) => void;
 
@@ -44,23 +49,35 @@ export function usePostDetailHighlightScroll({
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
     highlight || null,
   );
+  const [revealEpoch, setRevealEpoch] = useState(0);
   const allCommentsLengthRef = useRef(0);
+  const composerHighlightIdRef = useRef<string | null>(null);
   const currentScrollYRef = useRef(0);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightRetryCount = useRef(0);
   const missingHighlightReportedRef = useRef<string | null>(null);
-  const pendingScrollToEnd = useRef(false);
+  const pendingPostedRevealRef = useRef<PostedCommentReveal | null>(null);
+  const scrolledPostedCommentIdRef = useRef<string | null>(null);
   const preciseScrollTargetRef = useRef<string | null>(null);
   const suppressedHighlightScrollRef = useRef<string | null>(null);
 
   allCommentsLengthRef.current = allComments.length;
 
   useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightRetryCount.current = 0;
+    composerHighlightIdRef.current = null;
     preciseScrollTargetRef.current = null;
     missingHighlightReportedRef.current = null;
     suppressedHighlightScrollRef.current = null;
+    pendingPostedRevealRef.current = null;
+    scrolledPostedCommentIdRef.current = null;
     if (highlight) {
       Sentry.addBreadcrumb({
         category: "post-detail",
@@ -92,6 +109,10 @@ export function usePostDetailHighlightScroll({
     if (focusedCommentId && contextDepth > 0 && isLoadingContext) return;
     if (!highlightedCommentId || allComments.length === 0 || !commentsSectionRef.current) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+    // Composer-created highlights are positioned by the target comment's own
+    // layout callback (handleHighlightedCommentLayout); a second timer-based
+    // branch scroll here would race the keyboard-dismiss animation.
+    if (composerHighlightIdRef.current === highlightedCommentId) return;
 
     let index = allComments.findIndex((comment) => comment.id === highlightedCommentId);
 
@@ -131,10 +152,9 @@ export function usePostDetailHighlightScroll({
       }
     }, 600);
 
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => {
-      setHighlightedCommentId(null);
-    }, 6000);
+    // The highlight persists until the user interacts with the list (see
+    // handleUserScrollBeginDrag); a fixed expiry used to clear it before the
+    // auto-scroll settled on slow devices.
   }, [
     allComments,
     commentsSectionRef,
@@ -206,6 +226,11 @@ export function usePostDetailHighlightScroll({
       const target = (event.nativeEvent as { target?: number }).target;
       if (!target) return;
       const targetKey = `${highlightedCommentId}:${target}`;
+      // Composer highlights have no competing 600ms branch scroll, so we only
+      // need to outlast the keyboard-dismiss animation. Route highlights keep
+      // the longer settle window for the initial index scroll.
+      const measureDelay =
+        composerHighlightIdRef.current === highlightedCommentId ? 350 : 900;
 
       setTimeout(() => {
         UIManager.measureInWindow(target, (_x, y, _width, height) => {
@@ -244,30 +269,50 @@ export function usePostDetailHighlightScroll({
             animated: true,
           });
         });
-      }, 900);
+      }, measureDelay);
     },
     [commentsSectionRef, highlightedCommentId, id, insetsTop],
   );
 
-  const scrollToEnd = useCallback(() => {
-    commentsSectionRef.current?.scrollToEnd({ animated: true });
+  const scrollPostedCommentIntoView = useCallback((index: number) => {
+    commentsSectionRef.current?.scrollToIndex({
+      index,
+      animated: false,
+      viewPosition: 0.1,
+    });
   }, [commentsSectionRef]);
 
-  const scheduleScrollToEnd = useCallback(() => {
-    requestAnimationFrame(scrollToEnd);
-    setTimeout(scrollToEnd, 100);
-    setTimeout(scrollToEnd, 350);
-  }, [scrollToEnd]);
+  const scrollPostedCommentToEnd = useCallback((contentHeight?: number) => {
+    commentsSectionRef.current?.scrollToOffset({
+      offset: contentHeight && contentHeight > 0 ? contentHeight : 100000,
+      animated: false,
+    });
+  }, [commentsSectionRef]);
 
-  const handleContentSizeChange = useCallback(() => {
-    if (pendingScrollToEnd.current) {
-      pendingScrollToEnd.current = false;
-      scheduleScrollToEnd();
-    }
-  }, [scheduleScrollToEnd]);
+  const tryRevealPostedComment = usePostedCommentRevealScroll({
+    alreadyScrolledIdRef: scrolledPostedCommentIdRef,
+    comments: allComments,
+    epoch: revealEpoch,
+    feature: "post-detail",
+    pendingRef: pendingPostedRevealRef,
+    postId: id,
+    scrollToEnd: scrollPostedCommentToEnd,
+    scrollToIndex: scrollPostedCommentIntoView,
+  });
 
-  const handleComposerHighlight = useCallback((commentId: string, suppressScroll = false) => {
-    suppressedHighlightScrollRef.current = suppressScroll ? commentId : null;
+  const handleContentSizeChange = useCallback((contentHeight?: number) => {
+    tryRevealPostedComment(contentHeight);
+  }, [tryRevealPostedComment]);
+
+  const handleComposerHighlight = useCallback((commentId: string, _suppressScroll = false) => {
+    composerHighlightIdRef.current = commentId;
+    // Composer owns a single post-layout scroll. Skip the 600ms branch
+    // scroll and the later measure-and-correct pass so they cannot race it.
+    suppressedHighlightScrollRef.current = commentId;
+    pendingPostedRevealRef.current = { id: commentId, createdAt: Date.now() };
+    scrolledPostedCommentIdRef.current = null;
+    console.log("[CommentReveal] legacy reveal armed", { commentId });
+    setRevealEpoch((current) => current + 1);
     setHighlightedCommentId(commentId);
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
@@ -275,6 +320,20 @@ export function usePostDetailHighlightScroll({
 
   const handleComposerConfirmedCommentId = useCallback(
     (optimisticCommentId: string, confirmedCommentId: string) => {
+      if (composerHighlightIdRef.current === optimisticCommentId) {
+        composerHighlightIdRef.current = confirmedCommentId;
+      }
+      if (pendingPostedRevealRef.current?.id === optimisticCommentId) {
+        pendingPostedRevealRef.current = {
+          ...pendingPostedRevealRef.current,
+          id: confirmedCommentId,
+        };
+      }
+      scrolledPostedCommentIdRef.current = transferCommentRevealId(
+        scrolledPostedCommentIdRef.current,
+        optimisticCommentId,
+        confirmedCommentId,
+      );
       suppressedHighlightScrollRef.current = confirmedCommentId;
       setHighlightedCommentId((prev) =>
         prev === optimisticCommentId ? confirmedCommentId : prev,
@@ -286,9 +345,20 @@ export function usePostDetailHighlightScroll({
   );
 
   const handleComposerScrollToEnd = useCallback(() => {
-    pendingScrollToEnd.current = true;
-    scheduleScrollToEnd();
-  }, [scheduleScrollToEnd]);
+    tryRevealPostedComment();
+  }, [tryRevealPostedComment]);
+
+  const handleUserScrollBeginDrag = useCallback(() => {
+    if (!highlightedCommentId) return;
+    // The user took control of the scroll position: stop any pending
+    // auto-scroll adjustments and fade the highlight out shortly after.
+    suppressedHighlightScrollRef.current = highlightedCommentId;
+    preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedCommentId(null);
+    }, 3000);
+  }, [highlightedCommentId]);
 
   const suppressHighlightAutoScroll = useCallback(() => {
     const current = highlightedCommentId;
@@ -317,6 +387,7 @@ export function usePostDetailHighlightScroll({
     handleComposerScrollToEnd,
     handleContentSizeChange,
     handleHighlightedCommentLayout,
+    handleUserScrollBeginDrag,
     highlightedCommentId,
     suppressHighlightAutoScroll,
   };

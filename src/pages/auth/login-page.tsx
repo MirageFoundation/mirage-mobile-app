@@ -12,6 +12,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { exitAuthModal } from "@/src/navigation/auth-navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -140,8 +141,7 @@ export default function LoginScreen() {
 
       triggerHaptic("success");
 
-      // Navigate to home
-      router.dismissAll();
+      exitAuthModal();
     } catch (error) {
       console.error("[Login] Failed to import wallet:", error);
       triggerHaptic("error");
@@ -165,7 +165,6 @@ export default function LoginScreen() {
     words,
     validatePhrase,
     importWallet,
-    router,
   ]);
 
   return (
@@ -396,7 +395,7 @@ export default function LoginScreen() {
                   setShowRegPopup(false);
                   toast.success(`Switched to ${target}`);
                   if (config.registration_enabled) {
-                    router.replace("/(auth)/username");
+                    router.replace("/username");
                   }
                 } catch {
                   apiClient.setBaseUrl(`https://${activeServer}`);
@@ -451,7 +450,7 @@ export default function LoginScreen() {
               setShowRegPopup(true);
               return;
             }
-            router.replace("/(auth)/username");
+            router.replace("/username");
           }}
           style={styles.createAccountButton}
         >

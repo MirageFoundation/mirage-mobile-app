@@ -116,7 +116,7 @@ export const HomeTabbedFeed = forwardRef<
     () => (
       <HomeFeedListEmpty
         feedType={feedType}
-        isLoading={controller.query.isPending}
+        isLoading={controller.query.isPending && controller.posts.length === 0}
         isError={controller.query.isError}
         errorMessage={controller.query.error?.message}
       />
@@ -125,6 +125,7 @@ export const HomeTabbedFeed = forwardRef<
       controller.query.error?.message,
       controller.query.isError,
       controller.query.isPending,
+      controller.posts.length,
       feedType,
     ],
   );

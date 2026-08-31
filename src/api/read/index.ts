@@ -9,3 +9,6 @@ export * from "./endpoints";
 
 // Utilities
 export * from "./utils";
+
+// Single-call thread shape (get_comments `ancestors`)
+export { readThreadAncestors, type ThreadAncestors } from "./thread-ancestors";

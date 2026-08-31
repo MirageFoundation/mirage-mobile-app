@@ -3,9 +3,9 @@ import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
-import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -24,12 +24,14 @@ import {
   useInfinitePosts,
   useUserFollowed,
 } from "@/src/api";
+import { refreshTopicFeed } from "./topic-feed-refresh";
 import {
   NewPostsButton,
   type Post,
   PostCardSkeletonList,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { buildFollowedTopicSet, isTopicFollowed } from "@/src/domain/topics";
 import {
   useAuthGuard,
   useNetworkType,
@@ -38,6 +40,7 @@ import {
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomePostList } from "../home/home-post-list";
+import { scrollFeedListToTop, type FeedListRef } from "../home/feed-list-scroll";
 import { FeedPostCardRuntimeProvider } from "../home/feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
@@ -50,6 +53,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
+import { collectPostIdsFromPages } from "@/src/hooks/new-posts-check";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import { PostActionOverlays } from "../post/post-action-overlays";
 import { usePostActionController } from "../post/use-post-action-controller";
@@ -63,7 +67,7 @@ export function TopicFeedScreen() {
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
-  const flatListRef = useRef<FlashListRef<Post>>(null);
+  const flatListRef = useRef<FeedListRef>(null);
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -88,7 +92,7 @@ export function TopicFeedScreen() {
     setContextScrolling(newFeedContext, false);
     setSortBy(value);
     requestAnimationFrame(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      void scrollFeedListToTop(flatListRef.current);
     });
   }, [setContextScrolling, sortBy, topicName]);
 
@@ -111,6 +115,7 @@ export function TopicFeedScreen() {
   );
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const currentUser = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
 
   const networkType = useNetworkType();
 
@@ -152,8 +157,8 @@ export function TopicFeedScreen() {
     boolean | null
   >(null);
 
-  const isTopicFollowed =
-    optimisticFollowedTopic ?? followedTopics.includes(topicName ?? "");
+  const isCurrentTopicFollowed =
+    optimisticFollowedTopic ?? isTopicFollowed(followedTopics, topicName);
 
   useEffect(() => {
     setOptimisticFollowedTopic(null);
@@ -169,7 +174,6 @@ export function TopicFeedScreen() {
     isLoading,
     isError,
     error,
-    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -243,12 +247,24 @@ export function TopicFeedScreen() {
     return maxTs > 0 ? maxTs : null;
   }, [data?.pages]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline } = useNewPostsChecker({
+  const knownPostIds = useMemo(
+    () => collectPostIdsFromPages(data?.pages),
+    [data?.pages],
+  );
+  const {
+    hasNewPosts,
+    newPostAvatars,
+    newPostCount,
+    dismiss: dismissNewPosts,
+    resetBaseline,
+    getPrefetchedNewPostsResponse,
+  } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
     latestPostTimestamp,
+    knownPostIds,
   });
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   dismissNewPostsRef.current = dismissNewPosts;
@@ -335,8 +351,8 @@ export function TopicFeedScreen() {
 
   const handleHeaderFollowTopic = useCallback(() => {
     if (!topicName) return;
-    handleFollowTopicFromCard(topicName, isTopicFollowed);
-  }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
+    handleFollowTopicFromCard(topicName, isCurrentTopicFollowed);
+  }, [topicName, isCurrentTopicFollowed, handleFollowTopicFromCard]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const topicFeedSyncContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
@@ -415,7 +431,13 @@ export function TopicFeedScreen() {
     });
     setIsManualRefreshing(true);
     try {
-      await refetch();
+      await refreshTopicFeed({
+        queryClient,
+        topicName,
+        sortBy,
+        allowedTags: allowedTags || undefined,
+        address: currentUser?.walletAddress,
+      });
     } catch (error) {
       Sentry.addBreadcrumb({ category: "topic-feed", message: "Refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
@@ -423,24 +445,41 @@ export function TopicFeedScreen() {
       dismissNewPostsRef.current?.();
       useTimeTickStore.getState().bump();
     }
-  }, [refetch, topicName]);
+  }, [allowedTags, currentUser?.walletAddress, queryClient, sortBy, topicName]);
+
+  const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
+    const shouldScrollToTop = options?.scrollToTop !== false;
+    await refreshTopicFeed({
+      queryClient,
+      topicName,
+      sortBy,
+      allowedTags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      fetchAllNew: true,
+      firstPage: getPrefetchedNewPostsResponse(),
+    });
+    if (shouldScrollToTop) {
+      await scrollFeedListToTop(flatListRef.current);
+    }
+    resetBaseline(null);
+  }, [
+    allowedTags,
+    currentUser?.walletAddress,
+    getPrefetchedNewPostsResponse,
+    queryClient,
+    resetBaseline,
+    sortBy,
+    topicName,
+  ]);
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);
     try {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    } catch {}
-
-    await handleRefresh();
-
-    requestAnimationFrame(() => {
-      try {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      } catch {}
-    });
-    resetBaseline(null);
-    setIsBannerLoading(false);
-  }, [handleRefresh, resetBaseline]);
+      await applyNewPosts({ scrollToTop: true });
+    } finally {
+      setIsBannerLoading(false);
+    }
+  }, [applyNewPosts]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;
@@ -549,7 +588,7 @@ export function TopicFeedScreen() {
     [followedUsers],
   );
   const followedTopicsSet = useMemo(
-    () => new Set(followedTopics),
+    () => buildFollowedTopicSet(followedTopics),
     [followedTopics],
   );
 
@@ -630,7 +669,7 @@ export function TopicFeedScreen() {
     <Box flex background="base">
       <TopicFeedHeader
         insetsTop={insets.top}
-        isTopicFollowed={isTopicFollowed}
+        isTopicFollowed={isCurrentTopicFollowed}
         onBack={router.back}
         onFollowTopic={handleHeaderFollowTopic}
         onSortChange={handleSortChange}
@@ -665,7 +704,7 @@ export function TopicFeedScreen() {
       />
 
       <NewPostsButton
-        visible={hasNewPosts}
+        visible={hasNewPosts && isFocused}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 52}
         avatars={newPostAvatars}

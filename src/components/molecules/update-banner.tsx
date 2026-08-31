@@ -29,9 +29,9 @@ export const UpdateBanner = ({
 }: UpdateBannerProps) => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const translateY = useRef(new Animated.Value(-50)).current;
+  const translateY = useRef(new Animated.Value(-24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.95)).current;
+  const scale = useRef(new Animated.Value(0.98)).current;
 
   const visible = status !== "idle";
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, visible);
@@ -45,8 +45,10 @@ export const UpdateBanner = ({
         Animated.spring(translateY, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 100,
-          friction: 12,
+          damping: 28,
+          stiffness: 240,
+          mass: 1,
+          overshootClamping: true,
         }),
         Animated.timing(opacity, {
           toValue: 1,
@@ -56,14 +58,16 @@ export const UpdateBanner = ({
         Animated.spring(scale, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
-          friction: 12,
+          damping: 28,
+          stiffness: 240,
+          mass: 1,
+          overshootClamping: true,
         }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: -50,
+          toValue: -24,
           duration: 150,
           useNativeDriver: true,
         }),
@@ -73,7 +77,7 @@ export const UpdateBanner = ({
           useNativeDriver: true,
         }),
         Animated.timing(scale, {
-          toValue: 0.95,
+          toValue: 0.98,
           duration: 150,
           useNativeDriver: true,
         }),

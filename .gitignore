@@ -57,3 +57,7 @@ reference
 .env.local
 mirage-talk-*.json
 google-services.json
+
+# Mirage MCP local secrets
+/tools/mcp/.env*
+!/tools/mcp/.env.example

@@ -272,16 +272,17 @@ export interface PostWithChildren extends Post {
 export interface CommentsResponse {
   root: PostWithChildren;
   children: PostWithChildren[];
-}
-
-export interface RootPostIdResponse {
-  root_post_id: string;
-  comment_id: string;
-}
-
-export interface CommentContextResponse {
-  context: Post[]; // Array of parent posts
-  comment_id: string;
+  /**
+   * Ancestor chain for `root`, ordered ROOT POST FIRST and ending at the
+   * immediate parent. `[]` when `root` is itself a root post.
+   *
+   * `undefined` is reserved for the synthetic inbox placeholder written before
+   * the network response arrives. Real server responses must include this key,
+   * matching the web client's hard requirement.
+   */
+  ancestors?: PostWithChildren[];
+  /** Visible ancestors elided between the root post and the nearest few. */
+  ancestors_omitted?: number;
 }
 
 // ============================================

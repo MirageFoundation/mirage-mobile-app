@@ -19,17 +19,23 @@ import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { apiClient } from "@/src/api/client";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
-import { useAuthStore } from "@/src/stores/auth-store";
+import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
+import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
 import { isRetryable } from "@/src/utils/error-messages";
 import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 
 const PUSH_TOKEN_KEY = "push-token";
+const PUSH_REGISTERED_ADDRESS_KEY = "push-registered-address";
+const PUSH_REGISTERED_SERVER_KEY = "push-registered-server";
+const PUSH_REGISTERED_AT_KEY = "push-registered-at";
 const PUSH_ENABLED_KEY = "push-enabled";
 const PENDING_UNREGISTER_KEY = "push-pending-unregisters";
 const TOKEN_FETCH_MAX_RETRIES = 3;
 const TOKEN_FETCH_BASE_DELAY_MS = 1_000;
 const UNREGISTER_MAX_RETRIES = 3;
 const UNREGISTER_BASE_DELAY_MS = 2_000;
+const PUSH_REGISTRATION_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 let pushReceivedSubscription: Notifications.Subscription | null = null;
 let appStateSubscription: { remove(): void } | null = null;
@@ -91,10 +97,6 @@ function isOfflineRegistrationError(error: unknown): boolean {
   return false;
 }
 
-function isTokenOwnershipConflict(error: unknown): boolean {
-  return (error as any)?.response?.status === 409;
-}
-
 function isRetryablePushError(error: unknown): boolean {
   const status = (error as any)?.response?.status;
   const errorCode = (error as any)?.response?.data?.error_code;
@@ -136,6 +138,9 @@ function storePushToken(token: string): void {
 
 function clearStoredPushToken(): void {
   storage.remove(PUSH_TOKEN_KEY);
+  storage.remove(PUSH_REGISTERED_ADDRESS_KEY);
+  storage.remove(PUSH_REGISTERED_SERVER_KEY);
+  storage.remove(PUSH_REGISTERED_AT_KEY);
 }
 
 function isPushEnabled(): boolean {
@@ -297,6 +302,23 @@ async function getExpoPushToken(): Promise<string | null> {
     return null;
   }
 
+  const auth = useAuthStore.getState();
+  if (
+    !canRequestOsPermissions({
+      sessionStatus: selectAuthSessionStatus(auth),
+      isInitializing: auth.isInitializing,
+      isPowBusy: isPowQueueBusy(usePowQueueStore.getState()),
+    })
+  ) {
+    console.log("[PushNotifications] Skipping permission request until after onboarding");
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Skipped permission request until after onboarding",
+      level: "info",
+    });
+    return null;
+  }
+
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== "granted") {
@@ -437,12 +459,34 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       setPushEnabled(false);
       return;
     }
+
+    // Keep registration cheap without treating local state as permanent
+    // server truth. The node may lose its push-token row after recovery, and
+    // current registration is intentionally last-writer-wins so an active
+    // wallet can reclaim a device token after an offline logout.
+    const alreadyRegistered =
+      isPushEnabled() &&
+      getStoredToken() === token &&
+      storage.getString(PUSH_REGISTERED_ADDRESS_KEY)?.toLowerCase() ===
+        wallet.address.toLowerCase() &&
+      storage.getString(PUSH_REGISTERED_SERVER_KEY) === apiClient.getCurrentBaseUrl() &&
+      Date.now() - Number(storage.getString(PUSH_REGISTERED_AT_KEY) ?? 0) <
+        PUSH_REGISTRATION_REFRESH_MS;
+    if (alreadyRegistered) {
+      needsNetworkRetry = false;
+      console.log("[PushNotifications] Push token unchanged, skipping re-register");
+      return;
+    }
+
     storePushToken(token);
     console.log("[PushNotifications] Stored push token locally");
 
     const platform = Platform.OS as "ios" | "android";
     await registerPushToken(wallet, token, platform);
 
+    storage.set(PUSH_REGISTERED_ADDRESS_KEY, wallet.address);
+    storage.set(PUSH_REGISTERED_SERVER_KEY, apiClient.getCurrentBaseUrl());
+    storage.set(PUSH_REGISTERED_AT_KEY, Date.now().toString());
     setPushEnabled(true);
     needsNetworkRetry = false;
     console.log("[PushNotifications] Push token registered successfully");
@@ -462,13 +506,6 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       Sentry.addBreadcrumb({
         category: "push-notifications",
         message: "Push registration skipped: network unavailable",
-        level: "warning",
-      });
-    } else if (isTokenOwnershipConflict(error)) {
-      console.warn("[PushNotifications] Push token belongs to another account, falling back to polling");
-      Sentry.addBreadcrumb({
-        category: "push-notifications",
-        message: "Push registration skipped: token belongs to another account",
         level: "warning",
       });
     } else {

@@ -13,7 +13,7 @@ import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useSearchStore, type RecentSearch } from "@/src/stores";
+import { useContentModerationStore, useSearchStore, type RecentSearch } from "@/src/stores";
 import {
   buildSearchDiscoverySections,
   getSearchTabCounts,
@@ -36,6 +36,7 @@ export function useSearchController() {
   const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
   const animatedTabIndex = useSharedValue(searchTabToIndex(activeTab));
 
+  const hiddenPostIds = useContentModerationStore((state) => state.hiddenPostIds);
   const recentSearches = useSearchStore((state) => state.recentSearches);
   const addRecentSearch = useSearchStore((state) => state.addRecentSearch);
   const removeRecentSearch = useSearchStore((state) => state.removeRecentSearch);
@@ -54,14 +55,27 @@ export function useSearchController() {
     () => selectTrendingTopics(topicsQuery.data?.topics),
     [topicsQuery.data?.topics],
   );
-  const topicPosts = topicPostsQuery.data?.posts ?? [];
+  const topicPosts = useMemo(
+    () =>
+      (topicPostsQuery.data?.posts ?? []).filter(
+        (post) => !hiddenPostIds.has(post.post_id),
+      ),
+    [hiddenPostIds, topicPostsQuery.data?.posts],
+  );
+  const searchResults = useMemo(() => {
+    if (!search.data) return search.data;
+    return {
+      ...search.data,
+      posts: search.data.posts.filter((post) => !hiddenPostIds.has(post.post_id)),
+    };
+  }, [hiddenPostIds, search.data]);
   const showResults = shouldShowSearchResults(
     searchQuery,
     search.debouncedQuery,
   );
   const hasSearchQuery = normalizeSearchQuery(searchQuery).length > 0;
   const tabCounts = getSearchTabCounts({
-    postCount: search.data?.posts.length ?? 0,
+    postCount: searchResults?.posts.length ?? 0,
     topicCount: search.data?.topics.length ?? 0,
     topicPostCount: topicPosts.length,
     userCount: search.data?.users.length ?? 0,
@@ -222,7 +236,7 @@ export function useSearchController() {
     setIsFocused,
     activeTab,
     selectedTopic,
-    searchResults: search.data,
+    searchResults,
     isSearching: search.isSearching,
     hasSearchQuery,
     showResults,

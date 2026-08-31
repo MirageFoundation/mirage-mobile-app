@@ -37,9 +37,9 @@ const SAFE_MUTATION_OPERATIONS = new Set([
 ]);
 
 const SAFE_QUERY_OPERATIONS = new Set([
-  "agents", "batchUsernames", "commentContext", "comments", "config", "inbox",
+  "agents", "batchUsernames", "comments", "config", "inbox",
   "inviteCode", "inviteCodes", "leaderboard", "nodeConfig", "parameters", "peers",
-  "posts", "referral", "resolve", "rewards", "rootPostId", "search", "stats",
+  "posts", "referral", "resolve", "rewards", "search", "stats",
   "topics", "tx", "user", "users",
 ]);
 

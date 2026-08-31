@@ -8,7 +8,7 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-// Android FlashList throttles `onScroll` (scrollEventThrottle=32), so the
+// Android feed lists throttle `onScroll` (scrollEventThrottle=32), so the
 // shared `scrollY` can lag the real list position by a frame or two when the
 // user flicks back to the top and immediately tries to pull. A generous
 // tolerance avoids rejecting those legitimate pulls.

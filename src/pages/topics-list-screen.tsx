@@ -26,6 +26,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTopics, useDebouncedSearchTopics, useUserFollowed } from "@/src/api/read";
 import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { buildFollowedTopicSet, isTopicFollowed } from "@/src/domain/topics";
 import {
   ContentWarningBadge,
   type ContentWarningType,
@@ -272,7 +273,7 @@ export function TopicsListScreen() {
   );
 
   const followedTopics = useMemo(
-    () => new Set(followedData?.followed_topics ?? []),
+    () => buildFollowedTopicSet(followedData?.followed_topics),
     [followedData],
   );
 
@@ -335,17 +336,19 @@ export function TopicsListScreen() {
   }, [refetch]);
 
   const renderItem = useCallback(
-    ({ item }: { item: TopicInfo }) => (
-      <TopicRow
-        topic={item}
-        isFollowing={followedTopics.has(item.topic)}
-        isLoading={false}
-        onPress={() => handleTopicPress(item.topic)}
-        onFollowToggle={() =>
-          handleFollowToggle(item.topic, followedTopics.has(item.topic))
-        }
-      />
-    ),
+    ({ item }: { item: TopicInfo }) => {
+      // Topic names are display-cased here but stored lowercase server-side.
+      const following = isTopicFollowed(followedTopics, item.topic);
+      return (
+        <TopicRow
+          topic={item}
+          isFollowing={following}
+          isLoading={false}
+          onPress={() => handleTopicPress(item.topic)}
+          onFollowToggle={() => handleFollowToggle(item.topic, following)}
+        />
+      );
+    },
     [followedTopics, handleTopicPress, handleFollowToggle],
   );
 

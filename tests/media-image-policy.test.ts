@@ -1,22 +1,48 @@
 // @ts-nocheck -- Bun's test types are runtime-provided and not a project dependency.
 import { describe, expect, test } from "bun:test";
 
-import { getMediaImagePolicy } from "../src/components/molecules/media-image-policy";
+import {
+  getMediaImagePolicy,
+  getMediaImageSource,
+} from "../src/components/molecules/media-image-policy";
 
 describe("media image policy", () => {
-  test("keeps feed images on disk and requests container-sized decoding", () => {
+  test("keeps feed images in memory-disk and skips iOS-only early resize", () => {
     const policy = getMediaImagePolicy({
       uri: "https://images.example/photo.jpg",
       surface: "feed",
       mediaType: "image",
       displayWidth: 390,
+      intrinsicWidth: 1600,
+      intrinsicHeight: 900,
+      visible: true,
     });
 
     expect(policy.uri).toBe("https://images.example/photo.jpg");
-    expect(policy.cachePolicy).toBe("disk");
+    expect(policy.cachePolicy).toBe("memory-disk");
     expect(policy.contentFit).toBe("cover");
     expect(policy.allowDownscaling).toBe(true);
-    expect(policy.enforceEarlyResizing).toBe(true);
+    expect(policy.enforceEarlyResizing).toBe(false);
+    expect(policy.priority).toBe("high");
+    expect(getMediaImageSource(policy)).toEqual({
+      uri: "https://images.example/photo.jpg",
+      width: 1600,
+      height: 900,
+    });
+  });
+
+  test("lowers priority for off-screen feed images and omits unknown sizes", () => {
+    const policy = getMediaImagePolicy({
+      uri: "https://images.example/photo.jpg",
+      surface: "feed",
+      mediaType: "image",
+      visible: false,
+    });
+
+    expect(policy.priority).toBe("normal");
+    expect(getMediaImageSource(policy)).toEqual({
+      uri: "https://images.example/photo.jpg",
+    });
   });
 
   test("keeps detail originals and memory-disk revisit behavior", () => {
@@ -33,6 +59,7 @@ describe("media image policy", () => {
     expect(policy.cachePolicy).toBe("memory-disk");
     expect(policy.contentFit).toBe("contain");
     expect(policy.enforceEarlyResizing).toBe(false);
+    expect(policy.priority).toBe("high");
   });
 
   test("never rewrites poster URLs (no server-side resizing on the CDN)", () => {
@@ -52,7 +79,8 @@ describe("media image policy", () => {
 
     expect(feed.uri).toBe(uri);
     expect(feed.recyclingKey).toBe(uri);
-    expect(feed.enforceEarlyResizing).toBe(true);
+    expect(feed.cachePolicy).toBe("memory-disk");
+    expect(feed.enforceEarlyResizing).toBe(false);
     expect(detail.uri).toBe(uri);
   });
 
@@ -67,7 +95,7 @@ describe("media image policy", () => {
       mediaType: "gif",
     })).toMatchObject({
       uri: gif,
-      cachePolicy: "disk",
+      cachePolicy: "memory-disk",
       enforceEarlyResizing: false,
     });
     expect(getMediaImagePolicy({

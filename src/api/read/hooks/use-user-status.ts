@@ -13,7 +13,6 @@ import { useAuthStore } from "@/src/stores";
 export function useUserStatus(options?: { enabled?: boolean }) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-  const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
@@ -23,7 +22,6 @@ export function useUserStatus(options?: { enabled?: boolean }) {
     enabled:
       !!walletAddress &&
       isLoggedIn &&
-      hasOnboarded &&
       !isInitializing &&
       !isBootstrapping &&
       (options?.enabled ?? true),

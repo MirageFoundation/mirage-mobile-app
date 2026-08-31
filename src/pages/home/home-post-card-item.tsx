@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/src/components/molecules";
 import { PostCard, PostCardCompact } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
+import { isTopicFollowed as isTopicFollowedByViewer } from "@/src/domain/topics";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
 import { getShareBaseUrl, useFeedDensity } from "@/src/stores";
@@ -60,8 +61,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const isFollowing = useFeedPostCardSelector((state) =>
    state.followUserOverrides[post.author.id] ?? state.followedUsers.has(post.author.id),
  );
+ // `followedTopics` is normalized (lowercase); post topics keep display casing.
  const isTopicFollowed = useFeedPostCardSelector((state) =>
-   post.topic ? state.followedTopics.has(post.topic) : false,
+   isTopicFollowedByViewer(state.followedTopics, post.topic),
  );
  const contentRevealed = useFeedPostCardSelector((state) => state.revealedPosts.has(post.id));
  const voteOverride = useVoteOverride(post.id);
@@ -259,7 +261,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       useCreateComposeState.getState().setSelectedStickers(p.optimisticDraft.stickerUrls ?? []);
     }
     removeOptimisticPostFromCache(queryClient, p.id);
-    router.replace("/(tabs)/create");
+    router.replace("/create");
   }, [queryClient]);
 
   const displayPost = useMemo(() => {

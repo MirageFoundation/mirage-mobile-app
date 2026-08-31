@@ -63,8 +63,8 @@ function guard<T extends (...args: any[]) => any>(
 
     // Only suppress when the SAME navigation target is repeated within the
     // guard window. Different targets must never suppress each other, e.g. a
-    // notification's `navigate("/(tabs)/inbox")` should never be dropped just
-    // because a share-intent `replace("/(tabs)/create")` just fired.
+    // notification's `navigate("/inbox")` should never be dropped just
+    // because a share-intent `replace("/create")` just fired.
     if (
       navigationDeduplicator.shouldSuppress(
         action,

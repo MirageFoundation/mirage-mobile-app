@@ -508,13 +508,17 @@ export function usePostCardVideoPlayback({
     }
   }, [screenActive, videoPositionKey, getPosition, saveVideoPositionFresh, videoReadyForDisplay, videoPlayer]);
 
-  // Returning from background can leave the video surface blank even though
-  // the player reports playing. A seek-in-place forces the native layer to
-  // repaint the current frame.
+  // Returning from background/lock can leave the video frozen (the OS pauses
+  // the native player and blocks play() while locked) or blank (surface needs
+  // a repaint). A seek-in-place + play on foreground recovers both.
+  //
+  // Important: iOS screen lock often only reports `inactive` (never
+  // `background`) for quick locks, so both states must arm the recovery —
+  // arming on `background` alone left videos frozen after unlock (BUG-009).
   const wasBackgroundedRef = useRef(false);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "background") {
+      if (nextState.match(/inactive|background/)) {
         wasBackgroundedRef.current = true;
         return;
       }

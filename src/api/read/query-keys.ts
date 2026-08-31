@@ -76,15 +76,12 @@ export const queryKeys = {
     const { address, ...publicFilters } = filters;
     return serverKey("posts", ...viewerKey(address), publicFilters);
   },
+  // One key per thread. `get_comments` accepts a post OR comment id and returns
+  // the whole thread (ancestors + focused node + reply subtree), so there are no
+  // separate root-post-id or comment-context key families any more.
   comments: (postId: string, address?: string) =>
     serverKey("comments", ...viewerKey(address), postId),
-  rootPostId: (commentId: string) => serverKey("rootPostId", commentId),
-  commentContextRoot: () => serverKey("commentContext"),
-  commentContext: (
-    commentId: string,
-    maxDepth: number | undefined,
-    viewerAddress: string | null | undefined,
-  ) => serverKey("commentContext", ...viewerKey(viewerAddress), commentId, maxDepth),
+  redgifsMedia: (id: string) => serverKey("media", "redgifs", id.toLowerCase()),
   batchUsernamesRoot: () => serverKey("batchUsernames"),
   batchUsernames: (stableKey: string) => serverKey("batchUsernames", stableKey),
 

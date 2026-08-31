@@ -119,6 +119,7 @@ describe("post-card memoization contract", () => {
       onBlockPost: callback,
       onBlockTopic: callback,
       onReport: callback,
+      onHidePost: callback,
       onMediaPress: callback,
       onOptimisticRetryPress: callback,
       onLayout: callback,

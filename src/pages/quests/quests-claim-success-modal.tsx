@@ -5,7 +5,6 @@ import { Modal, Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSequence,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -28,19 +27,21 @@ export function ClaimSuccessModal({
   onClose: () => void;
 }) {
   const { theme } = useUnistyles();
-  const scaleAnim = useSharedValue(0);
+  const scaleAnim = useSharedValue(0.96);
   const opacityAnim = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      opacityAnim.value = withTiming(1, { duration: 300 });
-      scaleAnim.value = withSequence(
-        withSpring(1.03, { damping: 15, stiffness: 300 }),
-        withSpring(1, { damping: 15 }),
-      );
+      opacityAnim.value = withTiming(1, { duration: 180 });
+      scaleAnim.value = withSpring(1, {
+        damping: 28,
+        stiffness: 240,
+        mass: 1,
+        overshootClamping: true,
+      });
     } else {
-      opacityAnim.value = withTiming(0, { duration: 200 });
-      scaleAnim.value = withTiming(0, { duration: 200 });
+      opacityAnim.value = withTiming(0, { duration: 160 });
+      scaleAnim.value = withTiming(0.98, { duration: 160 });
     }
   }, [opacityAnim, scaleAnim, visible]);
 

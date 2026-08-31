@@ -132,7 +132,6 @@ describe("stale query recovery selection", () => {
     const keys = [
       [...root, "posts", ...viewer, {}],
       [...root, "comments", ...viewer, "post-1"],
-      [...root, "commentContext", ...viewer, "comment-1", 10],
       [...root, "inbox", VIEWER, "infinite", {}],
       [...root, "user", "status", VIEWER],
       [...root, "user", "profile", VIEWER],

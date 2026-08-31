@@ -29,11 +29,9 @@ export function buildSimpleSignedPayload(
 ): SimpleSignedPayload {
   const timestamp = Date.now();
   const nonce = generateNonce();
-
   const fullMessage = message
     .replace("{timestamp}", timestamp.toString())
     .replace("{nonce}", nonce.toString());
-
   const messageBytes = new TextEncoder().encode(fullMessage);
   const signature = signCanonical(wallet.privateKey, messageBytes);
 

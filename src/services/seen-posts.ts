@@ -2,7 +2,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import { api } from "@/src/api/client";
 import { walletService } from "@/src/services/wallet-service";
-import { buildSimpleSignedPayload } from "@/src/api/write/signing/simple-sign";
+import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
 
 export type SeenReason = "dwell" | "glance" | "open" | "vote" | "reply";
 
@@ -17,7 +17,10 @@ type SeenPostsResponse = {
   ingested: number;
 };
 
-const FLUSH_INTERVAL_MS = 3_000;
+// The endpoint accepts up to 100 post IDs per call — batch aggressively
+// instead of sending near-per-post requests. Entries also flush immediately
+// when the buffer fills and whenever the app goes to background.
+const FLUSH_INTERVAL_MS = 30_000;
 const MAX_BATCH_SIZE = 100;
 const MAX_RETRIES = 2;
 
@@ -53,6 +56,12 @@ export function markSeen(postId: string, reason: SeenReason, title?: string): vo
 
   buffer.push({ id: normalized, reason, title: normalizedTitle });
 
+  if (buffer.length >= MAX_BATCH_SIZE) {
+    // Full batch ready — flush now instead of waiting for the timer.
+    flushSeenBuffer();
+    return;
+  }
+
   if (!flushTimer) {
     startFlushTimer();
   }
@@ -70,20 +79,21 @@ export async function flushSeenBuffer(): Promise<void> {
   const address = wallet.address.toLowerCase();
   const batch = buffer.splice(0, MAX_BATCH_SIZE);
 
-  const signed = buildSimpleSignedPayload(
-    wallet,
-    `seen_posts:${address}:{timestamp}:{nonce}`,
-  );
-
-  const payload = {
-    address,
-    posts: batch.map((entry) => ({ id: entry.id, reason: entry.reason })),
-    ...signed,
-  };
-
   let retries = 0;
   while (retries <= MAX_RETRIES) {
     try {
+      // Every retry needs a fresh nonce. A previous request may have reached
+      // the node even when its response was lost; replaying that body produces
+      // the production `nonce_replayed` failures tracked in Sentry.
+      const signed = buildSimpleSignedPayload(
+        wallet,
+        `seen_posts:${address}:{timestamp}:{nonce}`,
+      );
+      const payload = {
+        address,
+        posts: batch.map((entry) => ({ id: entry.id, reason: entry.reason })),
+        ...signed,
+      };
       const response = await api.post<SeenPostsResponse>("/seen_posts", payload);
       Sentry.addBreadcrumb({
         category: "seen-posts",
@@ -98,7 +108,10 @@ export async function flushSeenBuffer(): Promise<void> {
       return;
     } catch (error: any) {
       retries++;
-      if (retries > MAX_RETRIES) {
+      const status = error?.response?.status;
+      const retryable =
+        !error?.response || status === 408 || status === 429 || status >= 500;
+      if (!retryable || retries > MAX_RETRIES) {
         Sentry.addBreadcrumb({
           category: "seen-posts",
           message: `Flush failed after ${MAX_RETRIES} retries, dropping ${batch.length} entries`,
@@ -107,7 +120,7 @@ export async function flushSeenBuffer(): Promise<void> {
         });
         Sentry.captureException(error, {
           tags: { feature: "seen-posts", operation: "flush" },
-          extra: { batchSize: batch.length, retries: MAX_RETRIES },
+          extra: { batchSize: batch.length, retries: retries - 1, status },
         });
         return;
       }
@@ -118,6 +131,10 @@ export async function flushSeenBuffer(): Promise<void> {
 function startFlushTimer(): void {
   if (flushTimer) return;
   flushTimer = setInterval(() => {
+    if (buffer.length === 0) {
+      stopFlushTimer();
+      return;
+    }
     flushSeenBuffer();
   }, FLUSH_INTERVAL_MS);
 }

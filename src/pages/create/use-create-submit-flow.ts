@@ -187,7 +187,12 @@ export function useCreateSubmitFlow({
               content: editInput.content,
               topic,
               tag: selectedContentWarning || undefined,
-              media: mediaUrls.length > 0 ? mediaUrls : undefined,
+              // Always store the media list — an empty array means "all media
+              // removed". Storing undefined here made every consumer's
+              // `override.media ?? post.media` fall back to the stale server
+              // media, so a removed photo kept rendering until the override
+              // expired (~2 min) whenever a refetch raced the node's indexer.
+              media: mediaUrls,
               editedAt: Math.floor(Date.now() / 1000),
             });
             setTimeout(() => {

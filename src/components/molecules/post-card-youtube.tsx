@@ -48,7 +48,7 @@ import {
   useMediaLoadedState,
   useMediaPressTransition,
 } from "./post-card-media-shared";
-import { getMediaImagePolicy } from "./media-image-policy";
+import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
 
 export type PostCardYouTubeRef = {
   pauseVideo: () => void;
@@ -360,6 +360,9 @@ export const PostCardYouTube = memo(
       surface: isPostDetail ? "detail" : "feed",
       mediaType: "poster",
       displayWidth: containerWidth,
+      intrinsicWidth: media.width,
+      intrinsicHeight: media.height,
+      visible: isVisible,
     });
 
     return (
@@ -368,13 +371,14 @@ export const PostCardYouTube = memo(
           {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (
             <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
               <Image
-                source={{ uri: youtubeThumbnailPolicy.uri }}
+                source={getMediaImageSource(youtubeThumbnailPolicy)}
                 style={styles.media}
                 contentFit={youtubeThumbnailPolicy.contentFit}
                 cachePolicy={youtubeThumbnailPolicy.cachePolicy}
                 recyclingKey={youtubeThumbnailPolicy.recyclingKey}
                 allowDownscaling={youtubeThumbnailPolicy.allowDownscaling}
                 enforceEarlyResizing={youtubeThumbnailPolicy.enforceEarlyResizing}
+                priority={youtubeThumbnailPolicy.priority}
               />
               <View style={styles.playOverlay} pointerEvents="none">
                 <View style={styles.playButton}>

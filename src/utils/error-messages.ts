@@ -14,6 +14,8 @@ const ERROR_MESSAGES: Record<string, string> = {
  username_invalid_format: "Usernames can only contain letters, numbers, and hyphens.",
 
  referral_requires_invite_codes: "Referral links require invite codes to be enabled.",
+ invalid_week_format: "Invalid week format (use YYYY-Www).",
+ referral_data_incomplete: "Referral data is incomplete.",
  referrer_not_found: "Referrer not found.",
  referrer_not_opted_in: "This referrer has not enabled referral links.",
  referrer_no_codes: "This referrer has no invite codes left.",
@@ -30,6 +32,7 @@ const ERROR_MESSAGES: Record<string, string> = {
  timestamp_required: "Timestamp is required.",
  timestamp_must_be_millis: "Timestamp must be in milliseconds.",
  timestamp_outside_window: "Timestamp is outside the allowed window. Check device clock.",
+ envelope_expired: "The request expired before reaching the chain. Please try again.",
  invalid_nonce: "Invalid envelope nonce.",
  nonce_required: "Envelope nonce is required.",
  nonce_must_be_positive: "Envelope nonce must be positive.",
@@ -39,9 +42,12 @@ const ERROR_MESSAGES: Record<string, string> = {
  invalid_owner: "Invalid owner.",
  address_mismatch: "Address does not match the provided key.",
  address_required: "Address is required.",
+ visitor_id_required: "Visitor ID is required.",
  control_characters: "Fields contain invalid control characters.",
  forbidden: "You do not have permission to perform this action.",
  unauthorized: "Unauthorized.",
+ signature_required: "A signature is required.",
+ not_found: "The requested item was not found.",
  enabled_must_be_boolean: "Enabled must be a boolean value.",
  owner_required: "Owner is required.",
 
@@ -83,6 +89,7 @@ const ERROR_MESSAGES: Record<string, string> = {
  invalid_hash: "Invalid or missing hash.",
 
  media_not_list: "Media must be provided as a list.",
+ posts_not_list: "Posts must be provided as a list.",
  media_limit_exceeded: "Too many media attachments.",
  media_item_too_long: "A media URL is too long.",
  media_must_use_https: "Media URLs must use HTTPS.",
@@ -90,11 +97,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 
  biography_too_long: "Your biography exceeds the maximum length.",
 
+ cannot_block_self: "You cannot block yourself.",
+ cannot_follow_self: "You cannot follow yourself.",
  post_already_blocked: "You already blocked this post.",
  user_already_blocked: "You already blocked this user.",
  topic_already_blocked: "You already blocked this topic.",
  user_already_followed: "You already follow this user.",
  topic_already_followed: "You already follow this topic.",
+ user_must_be_mirage1: "User must be a valid mirage1 address.",
 
  invalid_agent_address: "Invalid agent address.",
  duplicate_agent: "Duplicate agent in the list.",
@@ -115,6 +125,8 @@ const ERROR_MESSAGES: Record<string, string> = {
  admin_insufficient_balance: "Your account balance is too low to cover the transaction fee.",
  insufficient_funds: "Node does not have enough gas for this transaction.",
  auto_renew_required: "Auto-renewal setting is required.",
+ gift_rejected_higher_tier: "The recipient already has a higher subscription tier.",
+ gift_invalid_target: "Gift recipient must be a valid mirage1 address.",
 
  cannot_award_own_post: "You cannot award your own post.",
  already_awarded: "You already awarded this post.",
@@ -125,7 +137,6 @@ const ERROR_MESSAGES: Record<string, string> = {
  push_invalid_token: "Invalid push notification token format.",
  push_token_length: "Invalid push notification token length.",
  push_invalid_platform: "Push platform must be ios or android.",
- push_token_other_account: "This push token is registered to another account.",
 
  reason_too_long: "Report reason is too long (max 200 characters).",
  admin_required: "Admin address is required.",
@@ -181,6 +192,17 @@ const ERROR_MESSAGES: Record<string, string> = {
  video_duration_too_long: "This video is too long to upload. Please choose a shorter video.",
  video_type_only: "Only video uploads are supported.",
  invalid_video_uid: "Invalid video UID.",
+ media_invalid_kind: "Media kind must be image or video.",
+ media_file_required: "Choose a file to upload.",
+ media_too_large: "This file is too large to upload.",
+ media_invalid_type: "This file type is not supported.",
+ media_metadata_required: "Video duration and height are required.",
+ video_too_long: "This video is too long to upload.",
+ video_resolution_too_high: "This video's resolution is too high for its duration.",
+ media_provider_not_configured: "Media upload service is not configured.",
+ media_store_failed: "Media upload service failed. Please try again.",
+ media_unknown_provider: "The configured media provider is not supported.",
+ media_edge_unauthorized: "Media upload authorization failed.",
 
  transaction_rejected: "Transaction was rejected by the chain.",
  out_of_gas: "Transaction ran out of gas.",
@@ -190,6 +212,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const RETRYABLE_CODES = new Set([
  "node_catching_up",
+ "envelope_expired",
  "backend_not_initialized",
  "indexer_unavailable",
  "pool_not_configured",

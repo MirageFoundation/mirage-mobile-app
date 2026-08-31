@@ -1,4 +1,5 @@
 import type { Post } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 
 export type PostActionSelection = { selectedPost: Post | null };
 
@@ -31,9 +32,7 @@ export function getSelectedPostFollowState(
     isFollowingUser: selectedPost
       ? followedUsers.includes(selectedPost.author.id)
       : false,
-    isTopicFollowed: selectedPost?.topic
-      ? followedTopics.includes(selectedPost.topic)
-      : false,
+    isTopicFollowed: isTopicFollowed(followedTopics, selectedPost?.topic),
   };
 }
 

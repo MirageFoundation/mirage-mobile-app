@@ -1,6 +1,10 @@
 import * as Sentry from "@sentry/react-native";
 
 import { extractRedditEmbedMeta, getRedditEmbedUrl } from "./reddit-embed-meta";
+import {
+  selectHighestQualityMp4Variant,
+  selectRedditPreviewVideoUrl,
+} from "./link-meta-video-selection";
 
 export type LinkMeta = {
   title: string | null;
@@ -77,7 +81,13 @@ function applyTweetMedia(
   for (const item of media) {
     const url = item?.url ?? item?.media_url_https ?? item?.media_url ?? item?.image_url ?? null;
     const thumbnail = item?.thumbnail_url ?? item?.thumb ?? item?.preview_image_url ?? null;
-    const videoUrl = item?.url ?? item?.video_url ?? item?.variants?.find?.((v: any) => v?.type === "video/mp4")?.url ?? null;
+    const itemUrl = typeof item?.url === "string" && /\.mp4(?:\?|$)/i.test(item.url)
+      ? item.url
+      : null;
+    const videoUrl =
+      selectHighestQualityMp4Variant(item?.variants) ??
+      item?.video_url ??
+      itemUrl;
     if ((item?.type === "video" || item?.type === "animated_gif" || item?.type === "gif") && videoUrl) {
       state.videos.push(videoUrl);
       if (!state.video) state.video = videoUrl;
@@ -393,11 +403,13 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     }
 
     if (!videoUrl && post.preview?.reddit_video_preview) {
-      videoUrl = post.preview.reddit_video_preview.fallback_url ?? null;
+      videoUrl = selectRedditPreviewVideoUrl(post.preview.reddit_video_preview);
     }
 
     if (!videoUrl && post.preview?.images?.[0]?.variants?.mp4?.source?.url) {
-      videoUrl = post.preview.images[0].variants.mp4.source.url.replace(/&amp;/g, "&");
+      videoUrl = selectRedditPreviewVideoUrl(
+        post.preview.images[0].variants.mp4.source,
+      );
     }
 
     if (!videoUrl && post.url && /\.gif(\?|$)/i.test(post.url)) {

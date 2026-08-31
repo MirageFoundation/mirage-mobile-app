@@ -39,11 +39,7 @@ export {
 } from "./use-posts";
 
 // Comments
-export {
-  useComments,
-  useRootPostId,
-  useCommentContext,
-} from "./use-comments";
+export { useComments } from "./use-comments";
 
 // Inbox
 export { useInbox, useInfiniteInbox } from "./use-inbox";

@@ -167,7 +167,7 @@ const handleApiServerChange = useCallback(
         await switchServer(server);
         setShareServer(server);
         toast.success(`Switched to ${server}`);
-        router.replace("/(tabs)");
+        router.replace("/");
         setTimeout(() => {
           useHomePostCardStore.getState().setSideMenuOpen(false);
           Sentry.addBreadcrumb({

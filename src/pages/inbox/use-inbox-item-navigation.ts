@@ -6,14 +6,13 @@ import { Platform } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { seedFocusedCommentFromInbox } from "@/src/api/cache";
-import { getRootPostId } from "@/src/api/read/endpoints/posts";
-import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxReply } from "@/src/api/types";
 import { useRouter } from "@/src/navigation/guarded-router";
 
 type RootPostResolution = {
+  /** Thread entry point: the root post when known, else the reply itself. */
   rootPostId: string;
-  source: "inbox-payload" | "root-post-id-query";
+  source: "inbox-payload" | "reply-id-fallback";
   elapsedMs: number;
 };
 
@@ -73,10 +72,31 @@ export function useInboxItemNavigation({
         };
       }
 
+      // No root post id in the payload. Previously this cost a blocking
+      // `get_root_post_id` round trip before we could navigate. The thread
+      // endpoint accepts a comment id directly and returns the ancestor chain,
+      // so we open the reply itself and let the detail screen derive the root
+      // from `ancestors[0]` — navigation stays instant.
+      if (!isValidPostId(reply.reply_id)) {
+        Sentry.captureMessage("Inbox item could not resolve a thread entry point", {
+          level: "warning",
+          tags: { feature: "inbox", operation: "open-reply" },
+          extra: {
+            replyId: reply.reply_id,
+            rootPostId: reply.root_post_id,
+            parentId: reply.parent_id,
+            type: reply.type ?? "reply",
+            platform: Platform.OS,
+            hadNotificationContext: !!fromNotificationRef.current,
+          },
+        });
+        return null;
+      }
+
       Sentry.addBreadcrumb({
         category: "inbox",
-        message: "Inbox item missing root post id; resolving from reply id",
-        level: "warning",
+        message: "Inbox item missing root post id; opening the reply directly",
+        level: "info",
         data: {
           replyId: reply.reply_id,
           rootPostId: reply.root_post_id,
@@ -86,81 +106,13 @@ export function useInboxItemNavigation({
         },
       });
 
-      try {
-        const res = await queryClient.fetchQuery({
-          queryKey: queryKeys.rootPostId(reply.reply_id),
-          queryFn: () => getRootPostId({ comment_id: reply.reply_id }),
-          staleTime: 1000 * 60 * 60,
-        });
-        if (isValidPostId(res.root_post_id)) {
-          const elapsedMs = Date.now() - startedAt;
-          Sentry.addBreadcrumb({
-            category: "inbox",
-            message: "Inbox item root post id resolved from reply id",
-            level: "info",
-            data: {
-              replyId: reply.reply_id,
-              resolvedRootPostId: res.root_post_id,
-              parentId: reply.parent_id,
-              type: reply.type ?? "reply",
-              elapsedMs,
-              hadNotificationContext: !!fromNotificationRef.current,
-            },
-          });
-          return {
-            rootPostId: res.root_post_id.trim(),
-            source: "root-post-id-query",
-            elapsedMs,
-          };
-        }
-        Sentry.captureMessage("Inbox root post id query returned invalid id", {
-          level: "warning",
-          tags: {
-            feature: "inbox",
-            operation: "resolve-root-post-id",
-            platform: Platform.OS,
-            outcome: "invalid-response",
-          },
-          extra: {
-            replyId: reply.reply_id,
-            rootPostId: reply.root_post_id,
-            resolvedRootPostId: res.root_post_id,
-            parentId: reply.parent_id,
-            type: reply.type ?? "reply",
-            elapsedMs: Date.now() - startedAt,
-            hadNotificationContext: !!fromNotificationRef.current,
-          },
-        });
-      } catch (error) {
-        Sentry.captureException(error, {
-          tags: { feature: "inbox", operation: "resolve-root-post-id" },
-          extra: {
-            replyId: reply.reply_id,
-            rootPostId: reply.root_post_id,
-            parentId: reply.parent_id,
-            platform: Platform.OS,
-            elapsedMs: Date.now() - startedAt,
-            hadNotificationContext: !!fromNotificationRef.current,
-          },
-        });
-      }
-
-      Sentry.captureMessage("Inbox item could not resolve root post", {
-        level: "warning",
-        tags: { feature: "inbox", operation: "open-reply" },
-        extra: {
-          replyId: reply.reply_id,
-          rootPostId: reply.root_post_id,
-          parentId: reply.parent_id,
-          type: reply.type ?? "reply",
-          platform: Platform.OS,
-          elapsedMs: Date.now() - startedAt,
-          hadNotificationContext: !!fromNotificationRef.current,
-        },
-      });
-      return null;
+      return {
+        rootPostId: reply.reply_id.trim(),
+        source: "reply-id-fallback",
+        elapsedMs: Date.now() - startedAt,
+      };
     },
-    [fromNotificationRef, queryClient],
+    [fromNotificationRef],
   );
 
   const handleItemPress = useCallback(
@@ -185,7 +137,7 @@ export function useInboxItemNavigation({
       });
 
       if (reply.type === "donation") {
-        routerRef.current.navigate("/(tabs)/profile");
+        routerRef.current.navigate("/profile");
         return;
       }
 
@@ -200,7 +152,7 @@ export function useInboxItemNavigation({
           return;
         }
 
-        routerRef.current.navigate("/(tabs)/profile");
+        routerRef.current.navigate("/profile");
         return;
       }
 

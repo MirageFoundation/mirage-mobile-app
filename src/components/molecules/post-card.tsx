@@ -35,6 +35,7 @@ import type { Post } from "./post-card-types";
 import {
   isSuccessfulOptimisticPost,
   resolvePostContent,
+  resolveOptimisticVideoPreviewMedia,
   shouldBlurMatureMedia,
 } from "./post-card-utils";
 import { Ionicons } from "@expo/vector-icons";
@@ -70,6 +71,7 @@ type PostCardProps = {
   onBlockPost?: () => void;
   onBlockTopic?: () => void;
   onReport?: () => void;
+  onHidePost?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
   onOptimisticRetryPress?: () => void;
@@ -122,6 +124,7 @@ const PostCardView = memo(function PostCardView({
   onBlockPost,
   onBlockTopic,
   onReport,
+  onHidePost,
   onRevealContent,
   onMediaPress: onMediaPressProp,
   onOptimisticRetryPress,
@@ -175,6 +178,9 @@ const PostCardView = memo(function PostCardView({
   const containerRef = useRef<View>(null);
 
   const handlePress = useCallback(() => {
+    // No haptic when the card has no press action (e.g. post detail):
+    // vibrating on inert body text reads as a broken tap (BUG-034).
+    if (!onPress) return;
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
     if (containerRef.current) {
@@ -231,10 +237,20 @@ const PostCardView = memo(function PostCardView({
     isOptimisticVideoProcessing;
   const showOptimisticVideoProcessing =
     isOptimisticVideoProcessing && !allowOptimisticMediaPreview;
-  const optimisticResolvedMedia =
+  const localOptimisticVideoPreviewUri = isOptimisticVideoProcessing
+    ? pendingPost?.optimistic_draft?.mediaUris?.[0] ??
+      post.optimisticDraft?.mediaUris?.[0]
+    : undefined;
+  const canonicalProcessingMediaUri = isOptimisticVideoProcessing
+    ? resolvedContent.resolvedMedia?.uri
+    : undefined;
+  const optimisticResolvedMedia = resolveOptimisticVideoPreviewMedia(
     isOptimisticVideoPost && resolvedContent.resolvedMedia
       ? { ...resolvedContent.resolvedMedia, type: "video" as const }
-      : resolvedContent.resolvedMedia;
+      : resolvedContent.resolvedMedia,
+    localOptimisticVideoPreviewUri,
+    isOptimisticVideoProcessing,
+  );
   const optimisticResolvedMediaList =
     isOptimisticVideoPost && resolvedContent.resolvedMediaList
       ? resolvedContent.resolvedMediaList.map((item) => ({ ...item, type: "video" as const }))
@@ -444,15 +460,20 @@ const PostCardView = memo(function PostCardView({
           hasMultipleMedia={resolvedContent.hasMultipleMedia}
           extraMediaCount={resolvedContent.extraMediaCount}
           allowAutoplay={allowAutoplay}
-          screenActive={screenActive && !showMediaPreview && !showOptimisticVideoProcessing}
+          screenActive={screenActive && !showMediaPreview}
           disabled={disableMediaInteractions}
           onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
           onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
           isPostDetail={isPostDetail}
           videoSyncScope={videoSyncScope}
           postId={post.id}
-          forceVideoProcessing={showOptimisticVideoProcessing}
-          onVideoProcessingComplete={handleVideoProcessingComplete}
+          forceVideoProcessing={isOptimisticVideoProcessing}
+          processingMediaUri={canonicalProcessingMediaUri}
+          onVideoProcessingComplete={
+            isOptimisticVideoProcessing
+              ? handleVideoProcessingComplete
+              : undefined
+          }
           onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
         />
       )}
@@ -503,6 +524,8 @@ const PostCardView = memo(function PostCardView({
         onBlockTopic={disablePostInteractions ? undefined : onBlockTopic}
         topic={post.topic}
         onReport={disablePostInteractions ? undefined : onReport}
+        postId={post.id}
+        onHidePost={disablePostInteractions ? undefined : onHidePost}
         hideCommentAction={hideCommentAction}
         style={styles.actions}
         disabled={disablePostInteractions}

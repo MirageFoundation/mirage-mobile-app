@@ -147,14 +147,16 @@ const SheetNavigator: React.FC<SheetNavigatorProps> = ({
       // Entrance animation - exactly like PopupSheet
       backdropOpacity.value = withTiming(1, { duration: 200 });
       translateY.value = withSpring(0, {
-        damping: 30,
-        stiffness: 400,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
       scale.value = withSpring(1, {
-        damping: 35,
-        stiffness: 500,
+        damping: 36,
+        stiffness: 280,
         mass: 1,
+        overshootClamping: true,
       });
     }
   }, [visible, backdropOpacity, translateY, scale]);

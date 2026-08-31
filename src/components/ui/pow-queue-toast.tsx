@@ -434,6 +434,10 @@ export const PowQueueToast = () => {
   const showStats =
     (isShowingProcessing && !isOfflineProcessing && phase === "solving" && elapsedMs > 0) ||
     (isShowingResult && resultElapsedMs > 0);
+  const displayedPhase =
+    isShowingPreparingAction && preparingAction?.phase === "submitting"
+      ? "submitting"
+      : phase;
 
   const renderToastContent = (wrapperProps: any) => {
     const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
@@ -481,7 +485,7 @@ export const PowQueueToast = () => {
                     : "PoW Failed"
                 : isOfflineProcessing
                   ? "Waiting for internet…"
-                  : PHASE_LABEL[phase]}
+                  : PHASE_LABEL[displayedPhase]}
             </Text>
           )}
 

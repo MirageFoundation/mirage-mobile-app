@@ -26,13 +26,13 @@ const SCROLL_THRESHOLD = 50;
 const HIDE_THRESHOLD = 10;
 const SHOW_THRESHOLD = 15;
 // Per-event diff cap: real flings rarely exceed ~150px per scroll event.
-// Larger jumps almost always come from list re-layout (FlashList recycling
-// adjusts the scroll offset when measured row heights differ from the
+// Larger jumps almost always come from list re-layout (virtualized lists
+// adjust the scroll offset when measured row heights differ from the
 // estimated item size) or tab/page switches. We ignore those for the
 // hide/show accounting so they don't toggle the bars unintentionally.
 const MAX_LEGIT_DIFF = 150;
 // Minimum time between bar visibility transitions. Stops the
-// header/tab-bar/new-posts-button from flickering when FlashList emits
+// header/tab-bar/new-posts-button from flickering when the feed list emits
 // rapid back-and-forth scroll events while a pagination footer / new
 // page is rendering.
 const TRANSITION_LOCKOUT_MS = 350;
@@ -79,6 +79,12 @@ export const ScrollAnimationProvider = ({
   // when this is false are layout-driven (footer/skeleton render, page
   // insert, recycling) and must not toggle the bars.
   const isUserScrolling = useSharedValue(false);
+  // 0 = idle, 1 = dragging, 2 = momentum. A decelerating momentum fling can
+  // never physically reverse direction, so any opposite-direction diff that
+  // arrives during phase 2 is a list re-layout correction — reacting to
+  // it is what made the bottom bars jitter mid-scroll on iOS (BUG-015).
+  const scrollPhase = useSharedValue(0);
+  const momentumDir = useSharedValue(0);
 
   const refreshTargetRegistryRef = useRef<RefreshTargetRegistry | null>(null);
   if (!refreshTargetRegistryRef.current) {
@@ -91,9 +97,12 @@ export const ScrollAnimationProvider = ({
   const scrollHandler = useAnimatedScrollHandler({
     onBeginDrag: () => {
       isUserScrolling.value = true;
+      scrollPhase.value = 1;
     },
     onMomentumBegin: () => {
       isUserScrolling.value = true;
+      scrollPhase.value = 2;
+      momentumDir.value = 0;
     },
     onEndDrag: (event) => {
       // If the touch ends without throwing a fling, momentum won't begin,
@@ -101,10 +110,12 @@ export const ScrollAnimationProvider = ({
       const v = event?.velocity?.y ?? 0;
       if (Math.abs(v) < 0.1) {
         isUserScrolling.value = false;
+        scrollPhase.value = 0;
       }
     },
     onMomentumEnd: () => {
       isUserScrolling.value = false;
+      scrollPhase.value = 0;
     },
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
@@ -140,6 +151,18 @@ export const ScrollAnimationProvider = ({
       const now = Date.now();
 
       const dir = diff > 0 ? 1 : -1;
+
+      // During momentum, lock onto the fling direction: a decelerating fling
+      // cannot reverse, so opposite-direction events are recycling/layout
+      // corrections and must not flip the bars (iOS bottom-bar jitter).
+      if (scrollPhase.value === 2) {
+        if (momentumDir.value === 0) {
+          momentumDir.value = dir;
+        } else if (dir !== momentumDir.value) {
+          return;
+        }
+      }
+
       if (dir !== lastDir.value) {
         accumulatedDist.value = 0;
         lastDir.value = dir;

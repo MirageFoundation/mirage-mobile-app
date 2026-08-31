@@ -1,5 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -9,8 +9,7 @@ import {
   useComments,
   useUserFollowed,
 } from "@/src/api/read";
-import { getCommentContext } from "@/src/api/read/endpoints/posts";
-import { queryKeys } from "@/src/api/read/query-keys";
+import { readThreadAncestors } from "@/src/api/read/thread-ancestors";
 import type { PostWithChildren } from "@/src/api/types";
 import { type Comment, type Post } from "@/src/components/molecules";
 import { useVoteHandler } from "@/src/hooks";
@@ -24,7 +23,6 @@ import {
 } from "@/src/stores/post-comment-optimistic-store";
 import { findPostInCachedData } from "./post-detail-media-routing";
 import {
-  appendSupplementalCommentsForMinimum,
   applyEditOverridesToComment,
   countCommentsInTree,
   findCommentById,
@@ -38,10 +36,6 @@ type CurrentUser = {
   id: string;
   username?: string | null;
   walletAddress?: string | null;
-};
-
-type ScrollableCommentsRef = {
-  scrollToEnd?: (options?: { animated?: boolean }) => void;
 };
 
 type CachedPostRecord = Post | PostWithChildren | Record<string, unknown>;
@@ -66,27 +60,21 @@ function isApiPost(post: CachedPostRecord): post is PostWithChildren {
 }
 
 type UseMediaPostDetailDataOptions = {
-  commentsListRef: RefObject<ScrollableCommentsRef | null>;
   currentUser: CurrentUser | null | undefined;
   displayCommentsLengthRef: RefObject<number>;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
-  highlightedCommentId: string | null;
   id: string | undefined;
   isFocused: boolean;
-  pendingScrollToEndRef: RefObject<boolean>;
 };
 
 export function useMediaPostDetailData({
-  commentsListRef,
   currentUser,
   displayCommentsLengthRef,
   focusedCommentId,
   focusedMode,
-  highlightedCommentId,
   id,
   isFocused,
-  pendingScrollToEndRef,
 }: UseMediaPostDetailDataOptions) {
   const queryClient = useQueryClient();
   const branchExpansionReportRef = useRef<string | null>(null);
@@ -132,7 +120,6 @@ export function useMediaPostDetailData({
   }, [commentsApiError?.errorCode, commentsApiError?.httpStatus, currentFetchPostNotFound, currentUser?.walletAddress, focusedCommentId, focusedMode, id]);
   const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
   const [focusedContextDepth, setFocusedContextDepth] = useState(5);
-  const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
     data: focusedCommentData,
     isLoading: isLoadingFocusedComment,
@@ -183,47 +170,12 @@ export function useMediaPostDetailData({
   const isFocusedCommentNotFound = !!focusedCommentId && (
     currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId
   );
-  const {
-    data: focusedContextData,
-    refetch: refetchFocusedContext,
-    isLoading: isLoadingFocusedContext,
-    isError: isFocusedContextError,
-    error: focusedContextError,
-  } = useQuery({
-    queryKey: queryKeys.commentContext(
-      focusedCommentId!,
-      focusedDepth,
-      currentUser?.walletAddress,
-    ),
-    queryFn: () =>
-      getCommentContext({
-        comment_id: focusedCommentId!,
-        address: currentUser?.walletAddress ?? undefined,
-        max_depth: focusedDepth,
-      }),
-    enabled: isFocused && !!focusedCommentId && focusedDepth > 0,
-    staleTime: 0,
-  });
-  const {
-    data: focusedContextCheckData,
-    isFetched: isFocusedContextCheckFetched,
-    isError: isFocusedContextCheckError,
-    error: focusedContextCheckError,
-  } = useQuery({
-    queryKey: queryKeys.commentContext(
-      focusedCommentId!,
-      5,
-      currentUser?.walletAddress,
-    ),
-    queryFn: () =>
-      getCommentContext({
-        comment_id: focusedCommentId!,
-        address: currentUser?.walletAddress ?? undefined,
-        max_depth: 5,
-      }),
-    enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
-    staleTime: 1000 * 60,
-  });
+  // B-2.6: the focused comment response already carries its ancestor chain
+  // (root post first), enriched with votes/awards/media by the node. There is
+  // no separate context request and nothing to page in.
+  const focusedThread = readThreadAncestors(focusedCommentData);
+  const isLoadingFocusedContext = !!focusedCommentId && !focusedThread.resolved;
+  const refetchFocusedContext = useCallback(() => {}, []);
 
   useEffect(() => {
     setFocusedContextDepth(5);
@@ -243,31 +195,14 @@ export function useMediaPostDetailData({
         extra: { postId: id, focusedCommentId, focusedMode },
       });
     }
-    if (isFocusedContextError) {
-      Sentry.captureException(focusedContextError, {
-        tags: { feature: "media-post-detail", operation: "load-focused-context" },
-        extra: { postId: id, focusedCommentId, focusedMode, focusedDepth },
-      });
-    }
-    if (isFocusedContextCheckError) {
-      Sentry.captureException(focusedContextCheckError, {
-        tags: { feature: "media-post-detail", operation: "load-focused-context-check" },
-        extra: { postId: id, focusedCommentId, focusedMode },
-      });
-    }
   }, [
     isCommentsError,
     commentsError,
     isFocusedCommentError,
     focusedCommentError,
-    isFocusedContextError,
-    focusedContextError,
-    isFocusedContextCheckError,
-    focusedContextCheckError,
     id,
     focusedCommentId,
     focusedMode,
-    focusedDepth,
   ]);
 
   const { data: followedData } = useUserFollowed();
@@ -449,58 +384,6 @@ export function useMediaPostDetailData({
     blockedUserIds,
   ]);
 
-  useEffect(() => {
-    if (!pendingScrollToEndRef.current) return;
-    if (focusedCommentId && focusedMode !== "full") return;
-    if (!highlightedCommentId) return;
-    const containsHighlighted = (comment: Comment): boolean => {
-      if (comment.id === highlightedCommentId) return true;
-      return comment.replies?.some(containsHighlighted) ?? false;
-    };
-    if (!allDisplayComments.some(containsHighlighted)) {
-      // Safety net: if the highlighted comment hasn't shown up within a
-      // few seconds we'll never scroll to it. Surface that so we can
-      // diagnose missed optimistic insertions / id swaps in Sentry.
-      const missingTimer = setTimeout(() => {
-        if (!pendingScrollToEndRef.current) return;
-        Sentry.captureMessage(
-          "Pending scroll-to-comment never resolved on media post detail",
-          {
-            level: "warning",
-            tags: { feature: "media-post-detail", operation: "scroll-after-post" },
-            extra: {
-              postId: id,
-              highlightedCommentId,
-              topLevelCount: allDisplayComments.length,
-              focusedCommentId,
-              focusedMode,
-            },
-          },
-        );
-        pendingScrollToEndRef.current = false;
-      }, 4000);
-      return () => clearTimeout(missingTimer);
-    }
-    pendingScrollToEndRef.current = false;
-    Sentry.addBreadcrumb({
-      category: "media-post-detail",
-      message: "Scrolling to newly posted comment",
-      level: "info",
-      data: {
-        postId: id,
-        highlightedCommentId,
-        topLevelCount: allDisplayComments.length,
-      },
-    });
-    requestAnimationFrame(() => {
-      commentsListRef.current?.scrollToEnd?.({ animated: true });
-    });
-    const timer = setTimeout(() => {
-      commentsListRef.current?.scrollToEnd?.({ animated: true });
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [allDisplayComments, commentsListRef, focusedCommentId, focusedMode, highlightedCommentId, id, pendingScrollToEndRef]);
-
   const focusedThreadState = useMemo(() => {
     const isVisible = (comment: Comment) =>
       !hiddenCommentIds.has(comment.id) && !blockedUserIds.has(comment.author.id);
@@ -546,12 +429,12 @@ export function useMediaPostDetailData({
 
     const rootId = id?.toLowerCase();
     const focusedId = focusedCommentId.toLowerCase();
-    const parentApiComments = (focusedContextData?.context ?? focusedContextCheckData?.context ?? [])
-      .filter((comment) => {
-        const contextPostId = comment.post_id.toLowerCase();
-        return contextPostId !== rootId && contextPostId !== focusedId;
-      })
-      .reverse();
+    // `parentChain` is already root-first and already excludes both the root
+    // post and the focused comment; only guard against the route id itself.
+    const parentApiComments = focusedThread.parentChain.filter((comment) => {
+      const contextPostId = comment.post_id.toLowerCase();
+      return contextPostId !== rootId && contextPostId !== focusedId;
+    });
     const parents = parentApiComments
       .map((comment, index) =>
         processFocused(
@@ -579,10 +462,9 @@ export function useMediaPostDetailData({
   }, [
     focusedCommentId,
     allDisplayComments,
-    focusedContextData,
-    focusedContextCheckData,
     focusedCommentData,
     focusedContextDepth,
+    focusedThread.parentChain,
     id,
     applyOptimisticReplies,
     applyVoteOverridesToComment,
@@ -598,20 +480,20 @@ export function useMediaPostDetailData({
 
   const displayComments = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return allDisplayComments;
-    if (isLoadingFocusedContextThread) return [];
+    // Render the focused comment as soon as it is available, even while
+    // ancestor context is still loading; loaded ancestors wrap around it once
+    // they arrive instead of blanking the list. Unrelated comments are never
+    // padded in — the "Full thread" affordance covers that.
     const focused = focusedThreadState.focused;
     if (!focused) return [];
     const expandedFocusedBranch = focusedMode === "context"
       ? findTopLevelBranchForComment(allDisplayComments, focusedCommentId)
       : null;
     if (expandedFocusedBranch && focusedMode === "context") {
-      return appendSupplementalCommentsForMinimum(
-        [expandedFocusedBranch],
-        allDisplayComments,
-      );
+      return [expandedFocusedBranch];
     }
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
-      return appendSupplementalCommentsForMinimum([focused], allDisplayComments);
+      return [focused];
     }
     let thread: Comment = focused;
     for (let index = focusedThreadState.parents.length - 1; index >= 0; index -= 1) {
@@ -626,11 +508,8 @@ export function useMediaPostDetailData({
         replyCount: Math.max(parent.replyCount ?? 0, optimisticParentReplies.length + 1),
       };
     }
-    return appendSupplementalCommentsForMinimum(
-      [{ ...thread, isFocusedContext: true }],
-      allDisplayComments,
-    );
-  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
+    return [{ ...thread, isFocusedContext: true }];
+  }, [focusedCommentId, focusedMode, allDisplayComments, focusedThreadState]);
 
   displayCommentsLengthRef.current = displayComments.length;
 
@@ -642,13 +521,9 @@ export function useMediaPostDetailData({
 
   const availableFocusedContextCount = useMemo(() => {
     if (!focusedCommentId) return 0;
-    const rootId = id?.toLowerCase();
-    const focusedId = focusedCommentId.toLowerCase();
-    return (focusedContextCheckData?.context ?? []).filter((comment) => {
-      const contextPostId = comment.post_id.toLowerCase();
-      return contextPostId !== rootId && contextPostId !== focusedId;
-    }).length;
-  }, [focusedCommentId, focusedContextCheckData, id]);
+    // What we hold, plus what the node told us it elided.
+    return focusedThread.parentChain.length + focusedThread.omitted;
+  }, [focusedCommentId, focusedThread.omitted, focusedThread.parentChain]);
 
   const hasFocusedBranchReplies = useMemo(
     () => hasMoreRepliesInBranch(displayComments, allDisplayComments, focusedCommentId),
@@ -689,19 +564,22 @@ export function useMediaPostDetailData({
     });
   }, [focusedCommentId, focusedMode, focusedContextDepth, allDisplayComments, id]);
 
+  // The ancestor picture is settled the moment the thread response lands.
+  const isFocusedContextSettled = focusedThread.resolved;
+
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
-    if (!isFocusedCommentFetched || !isFocusedContextCheckFetched) return false;
+    if (!isFocusedCommentFetched || !isFocusedContextSettled) return false;
     return hasFocusedBranchReplies ||
       (availableFocusedContextCount > 0 &&
         (focusedMode !== "context" || focusedContextDepth < availableFocusedContextCount));
-  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, hasFocusedBranchReplies, availableFocusedContextCount, focusedContextDepth]);
+  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextSettled, hasFocusedBranchReplies, availableFocusedContextCount, focusedContextDepth]);
 
   const recentContextDone =
     !hasFocusedBranchReplies &&
     focusedMode === "context" &&
     isFocusedCommentFetched &&
-    isFocusedContextCheckFetched &&
+    isFocusedContextSettled &&
     availableFocusedContextCount > 0 &&
     focusedContextDepth >= availableFocusedContextCount;
   const recentContextDisabled = !hasRecentContext || recentContextDone;

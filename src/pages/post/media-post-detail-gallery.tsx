@@ -245,17 +245,19 @@ export function MediaPostDetailGallery({
               {formatTime(activeStatus.duration)}
             </Text>
             <Box flex />
-            <Pressable
-              onPress={onMuteToggle}
-              hitSlop={8}
-              style={styles.compactBtn}
-            >
-              <Ionicons
-                name={globalMuted ? "volume-mute" : "volume-high"}
-                size={16}
-                color="#fff"
-              />
-            </Pressable>
+            {!isVideoProcessing ? (
+              <Pressable
+                onPress={onMuteToggle}
+                hitSlop={8}
+                style={styles.compactBtn}
+              >
+                <Ionicons
+                  name={globalMuted ? "volume-mute" : "volume-high"}
+                  size={16}
+                  color="#fff"
+                />
+              </Pressable>
+            ) : null}
           </Animated.View>
         )}
         <MediaProcessingOverlay

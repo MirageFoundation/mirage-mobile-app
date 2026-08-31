@@ -216,16 +216,17 @@ export const MediaItemView = memo(function MediaItemView({
         }
       }
     };
-    const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
-      currentVideoPositionRef.current = currentTime;
-      setPositionMs(currentTime * 1000);
-      if (videoPositionKey && currentTime > 0.5) {
-        setPosition(videoPositionKey, currentTime);
-      }
-    });
-    const statusSubscription = videoPlayer.addListener(
-      "statusChange",
-      ({ status, error }) => {
+    const registerListeners = () => {
+      const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+        currentVideoPositionRef.current = currentTime;
+        setPositionMs(currentTime * 1000);
+        if (videoPositionKey && currentTime > 0.5) {
+          setPosition(videoPositionKey, currentTime);
+        }
+      });
+      const statusSubscription = videoPlayer.addListener(
+        "statusChange",
+        ({ status, error }) => {
         if (status === "readyToPlay") {
           applySourceMetadata(videoPlayer.duration);
         }
@@ -240,31 +241,47 @@ export const MediaItemView = memo(function MediaItemView({
             extra: { uri: item.uri, error: error.message },
           });
         }
-      },
-    );
-    const sourceSubscription = videoPlayer.addListener(
-      "sourceLoad",
-      ({ duration }) => {
-        applySourceMetadata(duration);
-      },
-    );
-    const playingSubscription = videoPlayer.addListener(
-      "playingChange",
-      ({ isPlaying: playerIsPlaying }) => {
-        if (isActive && screenActive && playerIsPlaying) {
-          setIsPlaying(true);
-        }
-      },
-    );
-    if (videoPlayer.status === "readyToPlay") {
-      applySourceMetadata(videoPlayer.duration);
+        },
+      );
+      const sourceSubscription = videoPlayer.addListener(
+        "sourceLoad",
+        ({ duration }) => {
+          applySourceMetadata(duration);
+        },
+      );
+      const playingSubscription = videoPlayer.addListener(
+        "playingChange",
+        ({ isPlaying: playerIsPlaying }) => {
+          if (isActive && screenActive && playerIsPlaying) {
+            setIsPlaying(true);
+          }
+        },
+      );
+      return [timeSubscription, statusSubscription, sourceSubscription, playingSubscription];
+    };
+
+    let subscriptions: { remove(): void }[];
+    try {
+      subscriptions = registerListeners();
+      if (videoPlayer.status === "readyToPlay") {
+        applySourceMetadata(videoPlayer.duration);
+      }
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "video-player",
+        message: "Skipped detail listeners on released video player",
+        level: "warning",
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+      return;
     }
 
     return () => {
-      timeSubscription.remove();
-      statusSubscription.remove();
-      sourceSubscription.remove();
-      playingSubscription.remove();
+      try {
+        subscriptions.forEach((subscription) => subscription.remove());
+      } catch {
+        // The native shared player may already be released during teardown.
+      }
     };
   }, [getPosition, isActive, item.uri, screenActive, setPosition, videoPlayer, videoPositionKey]);
 

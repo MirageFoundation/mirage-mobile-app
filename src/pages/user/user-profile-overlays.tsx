@@ -1,5 +1,4 @@
 import {
-  AwardPickerSheet,
   ConfirmationPopup,
   GiftMirageSheet,
   GiftSubscriptionSheet,
@@ -16,7 +15,6 @@ type Props = {
 
 export function UserProfileOverlays({ controller }: Props) {
   const {
-    awardPickerSheetRef,
     displayUsername,
     giftMirageSheetRef,
     giftSubscriptionSheetRef,
@@ -26,7 +24,6 @@ export function UserProfileOverlays({ controller }: Props) {
     handleFollow,
     handleGiftMirageToUser,
     handleGiftSubscriptionToUser,
-    handleGiveAwardToUser,
     handleReportUser,
     handleReportUserSubmit,
     handleRequestBlockUser,
@@ -61,7 +58,6 @@ export function UserProfileOverlays({ controller }: Props) {
           onReport={handleReportUser}
           onCopyProfileLink={handleCopyProfileLink}
           onShare={handleShareProfile}
-          onGiveAward={handleGiveAwardToUser}
           onGiftMirage={handleGiftMirageToUser}
           onGiftSubscription={handleGiftSubscriptionToUser}
         />
@@ -69,12 +65,6 @@ export function UserProfileOverlays({ controller }: Props) {
 
       {!isOwnProfile && userAddress && (
         <>
-          <AwardPickerSheet
-            ref={awardPickerSheetRef}
-            targetId={userAddress}
-            targetType="user"
-            isOwnContent={false}
-          />
           <GiftMirageSheet
             ref={giftMirageSheetRef}
             recipientAddress={userAddress}

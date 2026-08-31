@@ -1,17 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Application from "expo-application";
 import { BlurView } from "expo-blur";
-import Constants from "expo-constants";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  InteractionManager,
   Linking,
   Modal,
   Platform,
   View,
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import * as Updates from "expo-updates";
 import * as Sentry from "@sentry/react-native";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
@@ -31,34 +28,18 @@ type ForceUpdatePopupProps = {
 export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpdatePopupProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
-  const [installing, setInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
-  const isNative = reason === "native";
-
-  const handlePress = useCallback(async () => {
+  const handlePress = useCallback(() => {
     triggerHaptic("medium");
-    if (isNative) {
-      const url = Platform.OS === "ios" ? APP_STORE_URL : PLAY_STORE_URL;
-      Linking.openURL(url).catch((err) => {
-        Sentry.captureException(err, { tags: { feature: "force-update", operation: "open-store" }, extra: { url } });
+    const url = Platform.OS === "ios" ? APP_STORE_URL : PLAY_STORE_URL;
+    Linking.openURL(url).catch((err) => {
+      Sentry.captureException(err, {
+        tags: { feature: "force-update", operation: "open-store" },
+        extra: { url },
       });
-    } else {
-      setInstalling(true);
-      try {
-        await Updates.fetchUpdateAsync();
-        await new Promise<void>((resolve) => {
-          InteractionManager.runAfterInteractions(() => {
-            setTimeout(resolve, 800);
-          });
-        });
-        await Updates.reloadAsync();
-      } catch (err) {
-        Sentry.captureException(err, { tags: { feature: "force-update", operation: "ota-install" } });
-        setInstalling(false);
-      }
-    }
-  }, [isNative]);
+    });
+  }, []);
 
   if (!reason || dismissed) return null;
 
@@ -88,7 +69,7 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
             ]}
           >
             <Ionicons
-              name={isNative ? "storefront-outline" : "cloud-download-outline"}
+              name="storefront-outline"
               size={32}
               color={theme.colors.primary[500]}
             />
@@ -99,9 +80,7 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
           </Text>
 
           <Text size="md" mode="subtle" weight="semibold" style={styles.message}>
-            {isNative
-              ? `Please update the app to v(${remoteVersion ?? "latest"}) to keep Mirage running smoothly and avoid any issues.`
-              : "A new update is available. Please install it to keep things running smoothly and prevent any issues."}
+            {`Please update the app to v(${remoteVersion ?? "latest"}) to keep Mirage running smoothly and avoid any issues.`}
           </Text>
 
           <Box gap="sm" style={styles.buttons}>
@@ -110,17 +89,9 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
               mode="brand"
               rounded="full"
               onPress={handlePress}
-              loading={installing}
-              disabled={installing}
               style={styles.button}
             >
-              {installing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Button.Text>
-                  {isNative ? "Update Now" : "Install & Restart"}
-                </Button.Text>
-              )}
+              <Button.Text>Update Now</Button.Text>
             </Button>
 
             {!isRequired && (
@@ -136,9 +107,11 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
             )}
           </Box>
 
-          <Text size="xs" mode="subtle" style={styles.versionText}>
-            Current version: v({Constants.expoConfig?.version ?? "0.0.0"})
-          </Text>
+          {Application.nativeApplicationVersion !== null && (
+            <Text size="xs" mode="subtle" style={styles.versionText}>
+              Current version: v({Application.nativeApplicationVersion})
+            </Text>
+          )}
         </View>
       </View>
     </Modal>

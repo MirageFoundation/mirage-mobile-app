@@ -1,18 +1,14 @@
-import type BottomSheet from "@gorhom/bottom-sheet";
-import type { BottomSheetFlatListMethods } from "@gorhom/bottom-sheet";
+import type { LegendListRef } from "@legendapp/list/react-native";
 import type { RefObject } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import type {
-  SharedValue,
-  WithSpringConfig,
-  WithTimingConfig,
-} from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 
 import type { Comment, Post } from "@/src/components/molecules";
+import { isTopicFollowed } from "@/src/domain/topics";
 
 export type MediaPostDetailFocusedMode = "single" | "context" | "full";
 
-export type MediaPostDetailCommentsListRef = BottomSheetFlatListMethods;
+export type MediaPostDetailCommentsListRef = LegendListRef;
 
 export type MediaPostDetailThreadState = {
   comments: Comment[];
@@ -52,6 +48,7 @@ export type MediaPostDetailPostActions = {
   blockPost: () => void;
   blockTopic: () => void;
   reportPost: () => void;
+  hidePost: () => void;
   expandSheet: () => void;
 };
 
@@ -65,6 +62,7 @@ type CommentVoteAction = (
 export type MediaPostDetailCommentActions = {
   scrollYChange: (y: number) => void;
   scrollToIndex: (index: number) => void;
+  contentSizeChange: (contentHeight?: number) => void;
   followAuthor: (authorId: string, isCurrentlyFollowing: boolean) => void;
   setFocusedMode: (mode: MediaPostDetailFocusedMode) => void;
   refetchFocusedContext: () => void;
@@ -86,27 +84,25 @@ export type MediaPostDetailVideoControls = {
   muteToggle: () => void;
 };
 
-export type MediaPostDetailSheetLayout = {
-  sheetRef: RefObject<BottomSheet | null>;
+export type MediaPostDetailListLayout = {
   commentsListRef: RefObject<MediaPostDetailCommentsListRef | null>;
+  collapseDistance: number;
   inputDockTotalH: number;
-  shouldOpenInitially: boolean;
-  snapPoints: (number | string)[];
-  animatedIndex: SharedValue<number>;
-  animatedPosition: SharedValue<number>;
-  animationConfigs: WithSpringConfig | WithTimingConfig;
+  isCollapsed: boolean;
+  listTopY: number;
   measuredPostSummaryH: number;
   postSummaryHeightChange: (height: number) => void;
-  close: () => void;
+  scrollOffset: SharedValue<number>;
+  shouldOpenInitially: boolean;
 };
 
-export type MediaPostDetailSheetController = {
+export type MediaPostDetailListController = {
   threadState: MediaPostDetailThreadState;
   postState: MediaPostDetailPostState;
   postActions: MediaPostDetailPostActions;
   commentActions: MediaPostDetailCommentActions;
   videoControls: MediaPostDetailVideoControls;
-  sheetLayout: MediaPostDetailSheetLayout;
+  listLayout: MediaPostDetailListLayout;
 };
 
 export type MediaPostDetailFooterContract = {
@@ -127,9 +123,9 @@ export type MediaPostDetailFooterContract = {
   shareUrl: string;
 };
 
-export function createMediaPostDetailSheetController(
-  controller: MediaPostDetailSheetController,
-): MediaPostDetailSheetController {
+export function createMediaPostDetailListController(
+  controller: MediaPostDetailListController,
+): MediaPostDetailListController {
   return controller;
 }
 
@@ -146,7 +142,7 @@ export function createMediaPostDetailFooterContract(
     presentation,
     followState: {
       isFollowing: post.isFollowing ?? followedUsers.includes(post.author.id),
-      isTopicFollowed: post.topic ? followedTopics.includes(post.topic) : false,
+      isTopicFollowed: isTopicFollowed(followedTopics, post.topic),
       topic: post.topic,
       isOwnAuthor: currentUserId === post.author.id,
     },
@@ -179,6 +175,7 @@ export function createMediaPostDetailMeasurementFooterContract(
       blockPost: noop,
       blockTopic: noop,
       reportPost: noop,
+      hidePost: noop,
       expandSheet: noop,
     },
     videoControls: {

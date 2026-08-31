@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.1.4",
+  "version": "1.1.7",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -23,12 +23,15 @@
     "check:accessibility": "bun tools/check-icon-button-accessibility.mjs",
     "check:navigation": "bun tools/check-navigation.mjs",
     "check:typecheck": "bun run typecheck",
-    "check:architecture": "bun tools/check-architecture.mjs"
+    "check:architecture": "bun tools/check-architecture.mjs",
+    "mcp": "bun run tools/mcp/server.ts",
+    "mcp:verify": "bun run tools/mcp/verify.ts"
   },
   "dependencies": {
     "@docren/react-native-markdown": "^0.8.5",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "5.2.14",
+    "@legendapp/list": "^3.3.6",
     "@noble/curves": "^2.0.1",
     "@react-native-community/datetimepicker": "9.1.0",
     "@react-native-community/netinfo": "12.0.1",
@@ -46,6 +49,7 @@
     "color": "^5.0.3",
     "drizzle-orm": "^0.45.1",
     "expo": "^56.0.0",
+    "expo-application": "~56.0.3",
     "expo-background-fetch": "~56.0.23",
     "expo-blur": "~56.0.4",
     "expo-build-properties": "~56.0.24",
@@ -119,13 +123,15 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^26.1.1",
     "@types/react": "~19.2.14",
     "babel-plugin-inline-import": "^3.0.0",
     "babel-plugin-transform-remove-console": "^6.9.4",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~56.0.4",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "zod": "3.25.76"
   },
   "private": true,
   "expo": {

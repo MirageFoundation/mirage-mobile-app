@@ -11,8 +11,25 @@ import {
   type ServerRequestContext,
   type ServerSwitchHooks,
 } from "@/src/api/server-runtime";
+import { getApiBaseUrl, usePreferencesStore } from "@/src/stores/preferences-store";
 
 const DEFAULT_NODE = "https://mirage.talk";
+
+/**
+ * Resolve the user's selected node at construction time. Preferences hydrate
+ * synchronously from MMKV, so this is safe at module eval. Without this,
+ * headless launches (background inbox fetch, boot-time task start) — where
+ * ApiServerProvider never mounts and therefore never calls setBaseUrl() —
+ * would silently talk to the default node instead of the selected one.
+ */
+function getInitialNode(): string {
+  try {
+    const server = usePreferencesStore.getState().apiServer;
+    return server ? getApiBaseUrl(server) : DEFAULT_NODE;
+  } catch {
+    return DEFAULT_NODE;
+  }
+}
 
 const MAX_CONCURRENT_REQUESTS = 6;
 const RATE_LIMIT_RETRY_DELAY = 1000;
@@ -37,7 +54,7 @@ class ApiClient {
   private requestQueue: (() => void)[];
 
   constructor() {
-    this.coordinator = new ServerRequestCoordinator(DEFAULT_NODE);
+    this.coordinator = new ServerRequestCoordinator(getInitialNode());
     this.activeRequests = 0;
     this.requestQueue = [];
 
@@ -61,11 +78,14 @@ class ApiClient {
         const data = response.data;
         if (data && typeof data === "object") {
           const currentAddress = this.getCurrentAddress();
-          const requestAddress = this.getRequestAddress(response.config?.params);
+          const requestAddress = this.getRequestAddress(
+            response.config?.params,
+            response.config?.data,
+          );
           const shouldSyncInbox =
             !!currentAddress &&
-            (!requestAddress ||
-              currentAddress.toLowerCase() === requestAddress.toLowerCase());
+            !!requestAddress &&
+            currentAddress.toLowerCase() === requestAddress.toLowerCase();
 
           if (shouldSyncInbox && "new_inbox_items" in data) {
             const unreadCount = Number((data as any).new_inbox_items);
@@ -182,9 +202,27 @@ class ApiClient {
     return walletService.getWalletMetadata()?.address ?? null;
   }
 
-  private getRequestAddress(params?: Record<string, unknown>): string | null {
-    if (!params) return null;
-    const address = params.address;
+  private getRequestAddress(
+    params?: Record<string, unknown>,
+    rawBody?: unknown,
+  ): string | null {
+    let body = rawBody;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = undefined;
+      }
+    }
+    const bodyRecord =
+      body && typeof body === "object"
+        ? (body as Record<string, unknown>)
+        : undefined;
+    const address =
+      params?.address ??
+      params?.owner ??
+      bodyRecord?.address ??
+      bodyRecord?.owner;
     if (!address) return null;
     return String(address).trim();
   }

@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Updates from "expo-updates";
+import { AppState } from "react-native";
 
 import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 import { storage } from "@/src/stores/mmkv-storage";
@@ -29,8 +30,6 @@ const ACTIONABLE_EXPO_LOG_CODES = new Set([
   "UpdateAssetsNotAvailable",
   "UpdateHasInvalidSignature",
   "UpdateCodeSigningError",
-  "UpdateFailedToLoad",
-  "AssetsFailedToLoad",
   "JSRuntimeError",
   "InitializationError",
 ]);
@@ -186,6 +185,15 @@ async function reportExpoUpdateDiagnostics(): Promise<void> {
 }
 
 function beginStartupDiagnostics(): void {
+  // Headless launches (background fetch, boot-time task start, silent push)
+  // execute this bundle without ever mounting the root layout. Writing a
+  // startup record here would clobber the previous foreground launch's
+  // record with one permanently stuck at "sentry_initialized", making every
+  // subsequent foreground launch report a false IncompleteStartupError.
+  // AppState is "background" only for headless launches — a foreground cold
+  // start reports "active" (Android) or "inactive" (iOS pre-activation).
+  if (AppState.currentState === "background") return;
+
   const previous = readStartupRecord();
   const now = Date.now();
   const appVersion = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "unknown";

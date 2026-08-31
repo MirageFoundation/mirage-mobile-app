@@ -31,6 +31,7 @@ export type PostCardVideoHealthOptions = {
   feedTappedToPlay: boolean;
   mediaWasCached: boolean;
   forceVideoProcessing: boolean;
+  processingMediaUri?: string;
   onVideoProcessingComplete?: () => void;
   postId?: string;
   videoPlayer: VideoPlayer;
@@ -55,6 +56,7 @@ export function usePostCardVideoHealth({
   feedTappedToPlay,
   mediaWasCached,
   forceVideoProcessing,
+  processingMediaUri,
   onVideoProcessingComplete,
   postId,
   videoPlayer,
@@ -80,7 +82,8 @@ export function usePostCardVideoHealth({
   const wasOfflineRef = useRef(false);
   const wasBackgroundedRef = useRef(false);
 
-  const isHostedStreamVideo = isHostedStreamVideoUrl(resolvedMediaUri);
+  const processingTargetUri = processingMediaUri ?? resolvedMediaUri;
+  const isHostedStreamVideo = isHostedStreamVideoUrl(processingTargetUri);
   const isRedgifsVideo = resolvedMediaUri?.includes("redgifs.com");
   const isRetryableVideo = isHostedStreamVideo || isRedgifsVideo;
   const showVideoProcessing =
@@ -93,7 +96,7 @@ export function usePostCardVideoHealth({
   }, [resolvedMediaUri]);
 
   const reportVideoProcessingComplete = useCallback(() => {
-    const completionKey = postId ?? resolvedMediaUri;
+    const completionKey = postId ?? processingTargetUri;
     if (
       processingCompletionReportedRef.current ||
       !completionKey ||
@@ -104,7 +107,7 @@ export function usePostCardVideoHealth({
     processingCompletionReportedRef.current = true;
     COMPLETED_PROCESSING_POST_IDS.add(completionKey);
     onVideoProcessingComplete?.();
-  }, [resolvedMediaUri, onVideoProcessingComplete, postId]);
+  }, [onVideoProcessingComplete, postId, processingTargetUri]);
 
   const getVideoDiagnostics = useCallback(() => ({
     postId,
@@ -130,9 +133,11 @@ export function usePostCardVideoHealth({
   // processing flow; anything else hides the card.
   const mediaSourceUri = resolvedMediaUri ?? "";
   useEffect(() => {
-    const subscription = videoPlayer.addListener(
-      "statusChange",
-      ({ status, error }) => {
+    let subscription: { remove(): void };
+    try {
+      subscription = videoPlayer.addListener(
+        "statusChange",
+        ({ status, error }) => {
         if (status !== "error" || !error) return;
         if (__DEV__) {
           console.log(
@@ -177,11 +182,24 @@ export function usePostCardVideoHealth({
           setVideoError(true);
         }
         setIsVideoLoading(false);
-      },
-    );
+        },
+      );
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "video-player",
+        message: "Skipped health listener on released video player",
+        level: "warning",
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+      return;
+    }
 
     return () => {
-      subscription.remove();
+      try {
+        subscription.remove();
+      } catch {
+        // The native shared player may already be released during recycling.
+      }
       if (videoErrorRetryRef.current) {
         clearTimeout(videoErrorRetryRef.current);
         videoErrorRetryRef.current = null;
@@ -216,10 +234,11 @@ export function usePostCardVideoHealth({
     }
   }, [videoError, isConnected, isVideoProcessing, clearLoadingFallback, setIsVideoLoading, setMediaRetryKey]);
 
-  // Returning from background with a stuck processing/error state: retry.
+  // Returning from background/lock with a stuck processing/error state:
+  // retry. iOS screen lock often only reports `inactive` (BUG-009).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "background") {
+      if (nextState.match(/inactive|background/)) {
         wasBackgroundedRef.current = true;
       } else if (nextState === "active" && wasBackgroundedRef.current) {
         wasBackgroundedRef.current = false;
@@ -279,7 +298,7 @@ export function usePostCardVideoHealth({
   // While the backend is still transcoding, poll the HLS manifest until it
   // becomes playable, then retry the source.
   useEffect(() => {
-    if (!showVideoProcessing || !isHostedStreamVideo || !resolvedMediaUri) {
+    if (!showVideoProcessing || !isHostedStreamVideo || !processingTargetUri) {
       videoProcessingStartedAtRef.current = null;
       if (videoProcessingPollTimeoutRef.current) {
         clearTimeout(videoProcessingPollTimeoutRef.current);
@@ -304,7 +323,7 @@ export function usePostCardVideoHealth({
 
     const poll = async () => {
       try {
-        const ready = await isHlsManifestReady(resolvedMediaUri, controller.signal);
+        const ready = await isHlsManifestReady(processingTargetUri, controller.signal);
         if (cancelled) return;
 
         console.log("[PostCardVideo] Hosted video manifest poll result", {
@@ -336,7 +355,7 @@ export function usePostCardVideoHealth({
           setMediaLoaded(false);
           setVideoReadyForDisplay(false);
           videoProcessingAttemptsRef.current = 0;
-          HOSTED_VIDEO_READY_CACHE.add(resolvedMediaUri);
+          HOSTED_VIDEO_READY_CACHE.add(processingTargetUri);
           reportVideoProcessingComplete();
           setMediaRetryKey((k) => k + 1);
           return;
@@ -385,7 +404,7 @@ export function usePostCardVideoHealth({
   }, [
     showVideoProcessing,
     isHostedStreamVideo,
-    resolvedMediaUri,
+    processingTargetUri,
     getVideoDiagnostics,
     reportVideoProcessingComplete,
     setIsVideoLoading,
@@ -396,13 +415,17 @@ export function usePostCardVideoHealth({
 
   // First-frame bookkeeping shared with the component's onFirstFrameRender.
   const handleFirstFrameHealth = useCallback(() => {
-    if (resolvedMediaUri && isHostedStreamVideo) {
-      HOSTED_VIDEO_READY_CACHE.add(resolvedMediaUri);
+    if (resolvedMediaUri && isHostedStreamVideo && resolvedMediaUri === processingTargetUri) {
+      HOSTED_VIDEO_READY_CACHE.add(processingTargetUri);
     }
     if (isVideoProcessing) {
       setIsVideoProcessing(false);
     }
-    if (forceVideoProcessing) {
+    if (
+      resolvedMediaUri === processingTargetUri &&
+      isHostedStreamVideo &&
+      onVideoProcessingComplete
+    ) {
       reportVideoProcessingComplete();
     }
     videoProcessingStartedAtRef.current = null;
@@ -417,9 +440,10 @@ export function usePostCardVideoHealth({
       videoErrorRetryRef.current = null;
     }
   }, [
-    forceVideoProcessing,
     isHostedStreamVideo,
     isVideoProcessing,
+    onVideoProcessingComplete,
+    processingTargetUri,
     reportVideoProcessingComplete,
     resolvedMediaUri,
   ]);

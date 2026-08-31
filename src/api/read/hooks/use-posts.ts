@@ -136,7 +136,10 @@ export function useInfinitePosts(
   options?: { enabled?: boolean; pageLimit?: number }
 ) {
   const isRestoring = useIsRestoring();
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  // Use the persisted wallet, not `user`. `user` is filled only after
+  // async wallet/bootstrap work, so a user-keyed query misses the
+  // synchronously hydrated launch cache and flashes a skeleton.
+  const walletAddress = useAuthStore((s) => s.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
 
   const baseParams = {

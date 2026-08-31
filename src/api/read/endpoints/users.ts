@@ -12,8 +12,11 @@ import type {
   UsernameFromAddressResponse,
   ValidateInviteCodeResponse,
   GetInviteCodesResponse,
+  NodeConfigResponse,
 } from "../../types";
 import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
+import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
+import type { MirageWallet } from "@/src/wallet";
 
 // ============================================
 // User Status & Profile
@@ -102,11 +105,12 @@ export function mergeUserFollowedEnabledAgents(
  * Get user's followed users, topics, and enabled agents
  */
 export async function getUserFollowed(
-  params: GetUserFollowedParams
+  params: GetUserFollowedParams,
+  options?: { nodeConfig?: NodeConfigResponse | null },
 ): Promise<UserFollowedResponse> {
-  const [response, nodeConfig] = await Promise.all([
-    api.get<UserFollowedResponse>("/get_user_followed", params),
-    getNodeConfig().catch((error) => {
+  const nodeConfigPromise = options && "nodeConfig" in options
+    ? Promise.resolve(options.nodeConfig)
+    : getNodeConfig().catch((error) => {
       if (__DEV__) {
         console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
       }
@@ -120,7 +124,10 @@ export async function getUserFollowed(
         },
       });
       return null;
-    }),
+    });
+  const [response, nodeConfig] = await Promise.all([
+    api.get<UserFollowedResponse>("/get_user_followed", params),
+    nodeConfigPromise,
   ]);
 
   return mergeUserFollowedEnabledAgents(response, {
@@ -264,14 +271,18 @@ export async function getUsers(
 // Invite Code Validation
 // ============================================
 
-export interface GetInviteCodesParams {
- address: string;
-}
-
 export async function getInviteCodes(
- params: GetInviteCodesParams
+ wallet: MirageWallet,
 ): Promise<GetInviteCodesResponse> {
-  return api.get<GetInviteCodesResponse>("/get_invite_codes", params);
+  const address = wallet.address.toLowerCase();
+  const signed = buildSimpleSignedPayload(
+    wallet,
+    `get_invite_codes:${address}:{timestamp}:{nonce}`,
+  );
+  return api.get<GetInviteCodesResponse>("/get_invite_codes", {
+    address,
+    ...signed,
+  });
 }
 
 export interface ValidateInviteCodeParams {

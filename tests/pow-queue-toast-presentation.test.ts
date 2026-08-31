@@ -55,6 +55,24 @@ describe("PoW queue toast presentation selector", () => {
     expect(processing.nextAction).toBeNull();
   });
 
+  test("updates when a preparing action begins submitting", () => {
+    const select = createPowQueueToastPresentationSelector();
+    const preparing = action("vote", { type: "upvote" });
+    const initial = select(
+      state({ preparingAction: preparing, totalCount: 1 }),
+    );
+    const submitting = select(
+      state({
+        preparingAction: { ...preparing, phase: "submitting" },
+        totalCount: 1,
+      }),
+    );
+
+    expect(submitting).not.toBe(initial);
+    expect(initial.preparingAction?.phase).toBeUndefined();
+    expect(submitting.preparingAction?.phase).toBe("submitting");
+  });
+
   test("updates aggregate counts and the first visible action on add or remove", () => {
     const select = createPowQueueToastPresentationSelector();
     const first = action("first");

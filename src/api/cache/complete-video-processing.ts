@@ -29,7 +29,6 @@ export function markOptimisticVideoProcessingComplete(
     queryKeys.postsRoot(),
     queryKeys.userPostsRoot(),
     queryKeys.commentsRoot(),
-    queryKeys.commentContextRoot(),
   ].forEach((queryKey) => {
     queryClient.setQueriesData({ queryKey }, (data) =>
       clearOptimisticVideoProcessingFromData(data, postId),

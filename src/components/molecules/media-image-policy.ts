@@ -1,5 +1,12 @@
 export type MediaImageSurface = "feed" | "detail";
 export type MediaImageType = "image" | "gif" | "poster" | "unknown";
+export type MediaImagePriority = "low" | "normal" | "high";
+
+export type MediaImageSource = {
+  uri: string;
+  width?: number;
+  height?: number;
+};
 
 export type MediaImagePolicy = {
   uri: string;
@@ -8,6 +15,9 @@ export type MediaImagePolicy = {
   allowDownscaling: boolean;
   enforceEarlyResizing: boolean;
   recyclingKey: string;
+  priority: MediaImagePriority;
+  sourceWidth?: number;
+  sourceHeight?: number;
 };
 
 type MediaImagePolicyInput = {
@@ -18,39 +28,50 @@ type MediaImagePolicyInput = {
   /**
    * Kept for call-site stability; server-side thumbnail resizing is not
    * available on the current CDN, so downscaling happens client-side via
-   * `enforceEarlyResizing`/`allowDownscaling`.
+   * `allowDownscaling` plus source width/height when we know them.
    */
   displayWidth?: number;
+  intrinsicWidth?: number;
+  intrinsicHeight?: number;
+  visible?: boolean;
 };
 
 function isLocalImageUri(uri: string): boolean {
   return /^(asset|blob|content|data|file):/i.test(uri);
 }
 
-function isAnimatedImage(uri: string, mediaType: MediaImageType): boolean {
-  if (mediaType === "gif") return true;
-  try {
-    return /\.(gif|gifv)$/i.test(new URL(uri).pathname);
-  } catch {
-    return false;
+export function getMediaImageSource(policy: MediaImagePolicy): MediaImageSource {
+  if (policy.sourceWidth && policy.sourceHeight) {
+    return {
+      uri: policy.uri,
+      width: policy.sourceWidth,
+      height: policy.sourceHeight,
+    };
   }
+  return { uri: policy.uri };
 }
 
 export function getMediaImagePolicy({
   uri,
   surface,
-  mediaType = "unknown",
   contentFit = "cover",
+  intrinsicWidth,
+  intrinsicHeight,
+  visible,
 }: MediaImagePolicyInput): MediaImagePolicy {
   const local = isLocalImageUri(uri);
-  const animated = isAnimatedImage(uri, mediaType);
 
   return {
     uri,
-    cachePolicy: local ? "none" : surface === "feed" ? "disk" : "memory-disk",
+    cachePolicy: local ? "none" : "memory-disk",
     contentFit,
     allowDownscaling: true,
-    enforceEarlyResizing: surface === "feed" && !local && !animated,
+    // iOS-only and a no-op on Android. Leaving it off avoids a decode path
+    // that can paint a partial bitmap, then stay stuck until remount.
+    enforceEarlyResizing: false,
     recyclingKey: uri,
+    priority: visible === false && surface === "feed" ? "normal" : "high",
+    sourceWidth: intrinsicWidth,
+    sourceHeight: intrinsicHeight,
   };
 }

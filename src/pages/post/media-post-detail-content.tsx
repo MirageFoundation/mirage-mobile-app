@@ -6,24 +6,17 @@
  *
  * Layout:
  *   - Header (absolute top, below safe-area inset): ✕ / topic / ⋯
- *   - Media (absolute, starts just below header): full screen width, height
- *     interpolates from "remaining screen" (expanded) to 30% screen height
- *     (collapsed). resizeMode "contain".
- *   - Footer (absolute bottom, expanded only): avatar+username, title,
- *     body, video controls (draggable seek + time), action row
- *     (vote / comment | block-options / share). Fades out on collapse.
- *   - Comment sheet (the scrollable list underneath): once collapsed,
- *     shows handle bar, divider, avatar+username, title, body, then
- *     "Comments (N)" header, then comments.
+ *   - Media (absolute overlay): height interpolates from the remaining
+ *     screen (expanded) to 30% screen height (collapsed) as the comments
+ *     list scrolls, Instagram-style.
+ *   - LegendList below the collapsed media: a collapse spacer, then the
+ *     post summary, then comments. Dragging the peek/summary up shrinks
+ *     the media and reveals comments.
  *   - Sticky CommentInput (absolute bottom): visible only when collapsed.
  *
  * Gesture model:
- *   - Single `scrollY` shared value drives all collapse interpolation.
- *   - The comments list's onScroll updates scrollY.
- *   - A Pan gesture on the media also updates scrollY (so dragging the
- *     media collapses/expands directly).
- *   - On release, snaps to fully expanded or fully collapsed based on
- *     position + velocity.
+ *   - LegendList `scrollOffset` shared value drives collapse interpolation.
+ *   - Swipe up on media collapses; swipe down expands or leaves.
  *   - Tapping the media when collapsed expands it back; tapping when
  *     expanded toggles video play/pause.
  */
@@ -35,6 +28,7 @@ import {
   type Comment,
 } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
+import { isTopicFollowed } from "@/src/domain/topics";
 import {
   useAuthGuard,
   useFollowHandler,
@@ -50,7 +44,11 @@ import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
-import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
+import {
+  isHostedStreamVideoUrl,
+  resolveOptimisticVideoPreviewMedia,
+  resolvePostContent,
+} from "@/src/components/molecules/post-card-utils";
 import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
@@ -58,9 +56,9 @@ import {
   MediaPostDetailActionSheets,
   type MediaPostDetailActionSheetsRef,
 } from "./media-post-detail-action-sheets";
-import { MediaPostDetailCommentSheet } from "./media-post-detail-comment-sheet";
+import { MediaPostDetailCommentsList } from "./media-post-detail-comments-list";
 import {
-  createMediaPostDetailSheetController,
+  createMediaPostDetailListController,
   type MediaPostDetailCommentsListRef,
 } from "./media-post-detail-contracts";
 import { MediaPostDetailGallery } from "./media-post-detail-gallery";
@@ -72,6 +70,8 @@ import { useMediaPostDetailData } from "./use-media-post-detail-data";
 import { useMediaPostDetailLayout } from "./use-media-post-detail-layout";
 import { useMediaPostDetailPendingComment } from "./use-media-post-detail-pending-comment";
 import { usePostDetailPendingCommentEdit } from "./use-post-detail-pending-comment-edit";
+import { transferCommentRevealId } from "./post-detail-comment-reveal";
+import { usePostedCommentRevealScroll } from "./use-posted-comment-reveal-scroll";
 import { useMediaPostDetailVideoControls } from "./use-media-post-detail-video-controls";
 import {
   useCallback,
@@ -90,6 +90,10 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getLastPressedMediaTransition } from "@/src/utils/post-transition";
+import {
+  HLS_PROCESSING_POLL_INTERVAL_MS,
+  isHlsManifestReady,
+} from "@/src/utils/hls-manifest";
 
 // ---------------------------------------------------------------------------
 // Main screen
@@ -137,12 +141,14 @@ export default function MediaPostDetailScreen({
   const preciseScrollTargetRef = useRef<string | null>(null);
   const coarseScrollTargetRef = useRef<string | null>(null);
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
-  const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
   const pendingPostedCommentScrollRef = useRef<{
     id: string;
     createdAt: number;
   } | null>(null);
+  const composerRevealIdRef = useRef<string | null>(null);
+  const scrolledPostedCommentIdRef = useRef<string | null>(null);
+  const lastCommentsContentHeightRef = useRef(0);
   const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
@@ -150,6 +156,7 @@ export default function MediaPostDetailScreen({
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
     initialHighlightCommentId ?? null,
   );
+  const [revealEpoch, setRevealEpoch] = useState(0);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedHighlightScrollRef = useRef<string | null>(null);
   const composeNavigationLockedUntilRef = useRef(0);
@@ -186,15 +193,12 @@ export default function MediaPostDetailScreen({
     setFocusedContextDepth,
     removeCommentFromState,
   } = useMediaPostDetailData({
-    commentsListRef,
     currentUser,
     displayCommentsLengthRef,
     focusedCommentId,
     focusedMode,
-    highlightedCommentId,
     id,
     isFocused,
-    pendingScrollToEndRef,
   });
 
   const [followUserOverrides, setFollowUserOverrides] = useState<
@@ -241,11 +245,23 @@ export default function MediaPostDetailScreen({
 
   const handleRemoveComment = useCallback(
     (commentId: string) => {
+      suppressedHighlightScrollRef.current = commentId;
+      preciseScrollTargetRef.current = `${commentId}:removed`;
+      coarseScrollTargetRef.current = `${commentId}:removed`;
+      if (pendingPostedCommentScrollRef.current?.id === commentId) {
+        pendingPostedCommentScrollRef.current = null;
+      }
+      if (composerRevealIdRef.current === commentId) {
+        composerRevealIdRef.current = null;
+      }
+      if (scrolledPostedCommentIdRef.current === commentId) {
+        scrolledPostedCommentIdRef.current = null;
+      }
+      setHighlightedCommentId((current) => (current === commentId ? null : current));
       removeCommentFromState(commentId);
       if (commentId === focusedCommentId && focusedMode !== "full") {
         setFocusedCommentId(null);
         setFocusedMode("full");
-        setHighlightedCommentId(null);
       }
     },
     [focusedCommentId, focusedMode, removeCommentFromState],
@@ -267,6 +283,11 @@ export default function MediaPostDetailScreen({
     },
   });
 
+  const canonicalProcessingMediaUri = useMemo(() => {
+    if (!post || !isPostVideoProcessing(post)) return undefined;
+    return resolvePostContent(post.body, post.media).resolvedMedia?.uri;
+  }, [post]);
+
   const mediaItems = useMemo<MediaItem[]>(() => {
     if (!post) return [];
     const resolved = resolvePostContent(post.body, post.media);
@@ -280,6 +301,9 @@ export default function MediaPostDetailScreen({
         : resolved.resolvedMedia
         ? [resolved.resolvedMedia]
         : [];
+    const localPreviewUri = isPostVideoProcessing(post)
+      ? post.optimisticDraft?.mediaUris?.[0]
+      : undefined;
     return list
       .filter(
         (media) =>
@@ -287,40 +311,100 @@ export default function MediaPostDetailScreen({
           media.type === "video" ||
           media.type === "gif",
       )
-      .map((media) => ({
-        uri: media.uri,
-        type: media.type as MediaItem["type"],
-        posterUri: media.posterUri,
-        aspectRatio: media.aspectRatio,
-      }));
+      .map((media, index) => {
+        const displayMedia = index === 0
+          ? resolveOptimisticVideoPreviewMedia(
+              media,
+              localPreviewUri,
+              isPostVideoProcessing(post),
+            ) ?? media
+          : media;
+        return {
+          uri: displayMedia.uri,
+          type: displayMedia.type as MediaItem["type"],
+          posterUri: displayMedia.posterUri,
+          aspectRatio: displayMedia.aspectRatio,
+        };
+      });
   }, [post]);
 
+  useEffect(() => {
+    if (
+      !post ||
+      !isFocused ||
+      !isPostVideoProcessing(post) ||
+      !canonicalProcessingMediaUri ||
+      !isHostedStreamVideoUrl(canonicalProcessingMediaUri)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      try {
+        const ready = await isHlsManifestReady(
+          canonicalProcessingMediaUri,
+          controller.signal,
+        );
+        if (cancelled) return;
+        if (ready) {
+          markOptimisticVideoProcessingComplete(queryClient, post.id);
+          return;
+        }
+      } catch {
+        if (cancelled) return;
+      }
+      timeout = setTimeout(poll, HLS_PROCESSING_POLL_INTERVAL_MS);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [canonicalProcessingMediaUri, isFocused, post, queryClient]);
+
   const {
-    animatedIndex,
-    animatedPosition,
-    collapseMedia,
+    collapseDistance,
     collapseProgress,
     compactOverlayStyle,
-    expandMedia,
     footerInteractive,
     headerH,
     headerStyle,
     inputDockStyle,
     inputDockTotalH,
+    isCollapsed,
     listTopY,
     mediaContainerStyle,
     measuredInputDockH,
     measuredPostSummaryH,
+    scrollOffset,
     setMeasuredInputDockH,
     setMeasuredPostSummaryH,
-    sheetAnimationConfigs,
-    sheetRef,
-    snapPoints,
   } = useMediaPostDetailLayout({
     insets,
+    shouldOpenInitially: shouldOpenSheetInitially,
     sourceMediaTransition:
       sourceMediaTransition?.postId === id ? sourceMediaTransition : null,
   });
+
+  const collapseMedia = useCallback(() => {
+    commentsListRef.current?.scrollToOffset({
+      offset: collapseDistance,
+      animated: true,
+    });
+  }, [collapseDistance]);
+
+  const expandMedia = useCallback(() => {
+    commentsListRef.current?.scrollToOffset({
+      offset: 0,
+      animated: true,
+    });
+  }, []);
 
   const {
     activeIndex,
@@ -354,30 +438,57 @@ export default function MediaPostDetailScreen({
     return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
   }, []);
 
-  useEffect(() => {
-    const pendingTarget = pendingPostedCommentScrollRef.current;
-    if (!pendingTarget || displayComments.length === 0) return;
-    const index = displayComments.findIndex((comment) =>
-      findCommentInTree(comment, pendingTarget.id),
-    );
-    if (index < 0) {
-      if (Date.now() - pendingTarget.createdAt > 4000) {
-        pendingPostedCommentScrollRef.current = null;
-      }
-      return;
+  const scrollPostedCommentIntoView = useCallback((index: number) => {
+    const commentId = scrolledPostedCommentIdRef.current;
+    if (commentId) {
+      coarseScrollTargetRef.current = `${commentId}:posted`;
     }
+    scrollCommentsToIndex(index, false);
+  }, [scrollCommentsToIndex]);
 
-    sheetRef.current?.snapToIndex?.(2);
-    coarseScrollTargetRef.current = `${pendingTarget.id}:pending`;
-    requestAnimationFrame(() => {
-      scrollCommentsToIndex(index, true);
+  const scrollPostedCommentToEnd = useCallback((contentHeight?: number) => {
+    const commentId =
+      scrolledPostedCommentIdRef.current ??
+      pendingPostedCommentScrollRef.current?.id ??
+      composerRevealIdRef.current;
+    if (commentId) {
+      coarseScrollTargetRef.current = `${commentId}:posted`;
+    }
+    if (contentHeight && contentHeight > 0) {
+      lastCommentsContentHeightRef.current = contentHeight;
+    }
+    const offset =
+      (contentHeight && contentHeight > 0
+        ? contentHeight
+        : lastCommentsContentHeightRef.current) || 100000;
+    console.log("[CommentReveal] scrollToOffset", {
+      commentId,
+      contentHeight: contentHeight ?? lastCommentsContentHeightRef.current ?? null,
+      offset,
+      hasListRef: !!commentsListRef.current,
+      hasScrollToOffset: typeof commentsListRef.current?.scrollToOffset === "function",
     });
-    const settleTimer = setTimeout(() => {
-      scrollCommentsToIndex(index, false);
-      pendingPostedCommentScrollRef.current = null;
-    }, 650);
-    return () => clearTimeout(settleTimer);
-  }, [displayComments, findCommentInTree, scrollCommentsToIndex, sheetRef]);
+    commentsListRef.current?.scrollToEnd?.({
+      animated: false,
+      viewOffset: inputDockTotalH,
+    });
+    commentsListRef.current?.scrollToOffset?.({
+      offset,
+      animated: false,
+    });
+  }, [inputDockTotalH]);
+
+  const tryRevealPostedComment = usePostedCommentRevealScroll({
+    alreadyScrolledIdRef: scrolledPostedCommentIdRef,
+    comments: displayComments,
+    epoch: revealEpoch,
+    feature: "media-post-detail",
+    pendingRef: pendingPostedCommentScrollRef,
+    postId: id,
+    ready: true,
+    scrollToEnd: scrollPostedCommentToEnd,
+    scrollToIndex: scrollPostedCommentIntoView,
+  });
 
   useEffect(() => {
     return () => {
@@ -422,6 +533,8 @@ export default function MediaPostDetailScreen({
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+    if (composerRevealIdRef.current === highlightedCommentId) return;
+    if (pendingPostedCommentScrollRef.current?.id === highlightedCommentId) return;
     const isPendingOptimisticReply = pendingReplyScrollIdRef.current === highlightedCommentId;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
@@ -448,6 +561,7 @@ export default function MediaPostDetailScreen({
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+      if (composerRevealIdRef.current === highlightedCommentId) return;
       const isPendingPostedComment =
         pendingPostedCommentScrollRef.current?.id === highlightedCommentId;
       if (
@@ -487,7 +601,6 @@ export default function MediaPostDetailScreen({
             return;
           }
 
-          sheetRef.current?.snapToIndex?.(2, { duration: 1 });
           const desiredY = listTopY + 96;
           const delta = y - desiredY;
           if (isPendingPostedComment) {
@@ -525,7 +638,7 @@ export default function MediaPostDetailScreen({
         });
       }, isPendingPostedComment ? 80 : 500);
     },
-    [highlightedCommentId, listTopY, post?.id, sheetRef],
+    [highlightedCommentId, listTopY, post?.id],
   );
 
   const handleAuthorPress = useCallback(() => {
@@ -591,43 +704,47 @@ export default function MediaPostDetailScreen({
   );
 
   const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
-    const currentIndex = animatedIndex.value;
-    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
-    requestAnimationFrame(() => {
-      sheetRef.current?.snapToIndex?.(2, { duration: 1 });
-    });
+    composerRevealIdRef.current = commentId;
+    scrolledPostedCommentIdRef.current = null;
     pendingPostedCommentScrollRef.current = { id: commentId, createdAt: Date.now() };
-    setTimeout(() => {
-      if (pendingPostedCommentScrollRef.current?.id !== commentId) return;
-      Sentry.captureMessage(
-        "Posted media-detail comment did not trigger reveal layout",
-        {
-          level: "warning",
-          tags: {
-            feature: "media-post-detail",
-            operation: "scroll-after-comment-post",
-          },
-          extra: {
-            postId: post?.id,
-            commentId,
-            isReply,
-            sheetIndexAtReveal: currentIndex,
-            displayCommentCount: displayCommentsLengthRef.current,
-          },
-        },
-      );
-      pendingPostedCommentScrollRef.current = null;
-    }, 4000);
+    suppressedHighlightScrollRef.current = commentId;
     coarseScrollTargetRef.current = null;
     preciseScrollTargetRef.current = null;
-    suppressedHighlightScrollRef.current = null;
+    setRevealEpoch((current) => current + 1);
+    console.log("[CommentReveal] reveal armed", {
+      commentId,
+      isReply,
+      collapseDistance,
+    });
     Sentry.addBreadcrumb({
       category: "media-post-detail",
       message: "Reveal comments after post submit",
       level: "info",
-      data: { postId: post?.id, sheetIndex: currentIndex, commentId, isReply },
+      data: { postId: post?.id, commentId, isReply },
     });
-  }, [animatedIndex, post?.id, sheetRef]);
+  }, [collapseDistance, post?.id]);
+
+  const handleConfirmedPostedCommentId = useCallback(
+    (optimisticCommentId: string, confirmedCommentId: string) => {
+      composerRevealIdRef.current = transferCommentRevealId(
+        composerRevealIdRef.current,
+        optimisticCommentId,
+        confirmedCommentId,
+      );
+      scrolledPostedCommentIdRef.current = transferCommentRevealId(
+        scrolledPostedCommentIdRef.current,
+        optimisticCommentId,
+        confirmedCommentId,
+      );
+      if (pendingPostedCommentScrollRef.current?.id === optimisticCommentId) {
+        pendingPostedCommentScrollRef.current = {
+          ...pendingPostedCommentScrollRef.current,
+          id: confirmedCommentId,
+        };
+      }
+    },
+    [],
+  );
 
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;
@@ -646,11 +763,11 @@ export default function MediaPostDetailScreen({
     highlightTimerRef,
     id,
     pendingReplyScrollIdRef,
-    pendingScrollToEndRef,
     refetchComments,
     setFocusedMode,
     setHighlightedCommentId,
     suppressedHighlightScrollRef,
+    onConfirmedCommentId: handleConfirmedPostedCommentId,
   });
 
   usePostDetailPendingCommentEdit({
@@ -698,11 +815,6 @@ export default function MediaPostDetailScreen({
             mediaItems={mediaItems}
             onMuteToggle={handleMuteToggle}
             onPlayPause={handlePlayPause}
-            onVideoReady={() => {
-              if (isPostVideoProcessing(post)) {
-                markOptimisticVideoProcessingComplete(queryClient, post.id);
-              }
-            }}
             registerVideo={registerVideo}
             setActiveIndex={setActiveIndex}
             sourceMediaTransition={
@@ -719,9 +831,9 @@ export default function MediaPostDetailScreen({
             }}
           />
 
-          {/* --------------- BottomSheet for comments ------------------ */}
-          <MediaPostDetailCommentSheet
-            controller={createMediaPostDetailSheetController({
+          {/* --------------- Comments list (collapsing media header) --- */}
+          <MediaPostDetailCommentsList
+            controller={createMediaPostDetailListController({
               threadState: {
                 comments: displayComments,
                 currentUserId: currentUser?.id ?? null,
@@ -756,7 +868,7 @@ export default function MediaPostDetailScreen({
                   ),
                 followTopic: () => {
                   if (post.topic) {
-                    followTopic(post.topic, followedTopics.includes(post.topic));
+                    followTopic(post.topic, isTopicFollowed(followedTopics, post.topic));
                   }
                 },
                 upvote: handleUpvote,
@@ -767,6 +879,7 @@ export default function MediaPostDetailScreen({
                 blockPost: () => actionSheetsRef.current?.requestBlockPost(),
                 blockTopic: () => actionSheetsRef.current?.requestBlockTopic(),
                 reportPost: () => actionSheetsRef.current?.requestReportPost(),
+                hidePost: handleBack,
                 expandSheet: collapseMedia,
               },
               commentActions: {
@@ -774,6 +887,12 @@ export default function MediaPostDetailScreen({
                   commentsScrollYRef.current = y;
                 },
                 scrollToIndex: scrollCommentsToIndex,
+                contentSizeChange: (height) => {
+                  if (height && height > 0) {
+                    lastCommentsContentHeightRef.current = height;
+                  }
+                  tryRevealPostedComment(height);
+                },
                 followAuthor: handleFollowCommentAuthor,
                 setFocusedMode,
                 refetchFocusedContext: () => setFocusedContextDepth(10),
@@ -813,18 +932,16 @@ export default function MediaPostDetailScreen({
                 seek: handleSeek,
                 muteToggle: handleMuteToggle,
               },
-              sheetLayout: {
-                sheetRef,
+              listLayout: {
                 commentsListRef,
+                collapseDistance,
                 inputDockTotalH,
-                shouldOpenInitially: shouldOpenSheetInitially,
-                snapPoints,
-                animatedIndex,
-                animatedPosition,
-                animationConfigs: sheetAnimationConfigs,
+                isCollapsed,
+                listTopY,
                 measuredPostSummaryH,
                 postSummaryHeightChange: setMeasuredPostSummaryH,
-                close: handleBack,
+                scrollOffset,
+                shouldOpenInitially: shouldOpenSheetInitially,
               },
             })}
           />

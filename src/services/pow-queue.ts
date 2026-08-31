@@ -48,9 +48,23 @@ export type PowActionType =
   | "block"
   | "unblock"
   | "report"
-  | "annotate";
+  | "annotate"
+  | "send_tokens"
+  | "gift_subscription"
+  | "award";
 
-const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set(["comment", "post", "edit", "annotate"]);
+// Non-idempotent writes: never auto-retry network errors (a duplicate POST
+// could double-post content or double-spend tokens) and never force-cancel
+// mid-flight on app background (the POST may already be committed).
+const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set([
+  "comment",
+  "post",
+  "edit",
+  "annotate",
+  "send_tokens",
+  "gift_subscription",
+  "award",
+]);
 
 export interface PowAction<T = unknown> {
   id: string;
@@ -65,11 +79,18 @@ export interface PowAction<T = unknown> {
   onRollback?: () => void;
 }
 
+export type PowActionPreview = Pick<
+  PowAction,
+  "id" | "type" | "label" | "showProgress"
+> & {
+  phase?: "preparing" | "submitting";
+};
+
 export interface PowQueueState {
   queue: PowAction[];
   queuedActionIds: QueuedActionIds;
   currentAction: PowAction | null;
-  preparingAction: PowAction | null;
+  preparingAction: PowActionPreview | null;
   isProcessing: boolean;
   completedCount: number;
   totalCount: number;
@@ -81,7 +102,7 @@ export interface PowQueueState {
 
 export interface PowQueueActions {
   enqueue: <T>(action: PowAction<T>) => void;
-  showPreparing: <T>(action: PowAction<T>) => void;
+  showPreparing: (action: PowActionPreview) => void;
   clearPreparing: (actionId?: string) => void;
   processNext: () => Promise<void>;
   updateProgress: (progress: number) => void;
@@ -93,7 +114,11 @@ export interface PowQueueActions {
 
 type PowQueueStore = PowQueueState & PowQueueActions;
 
-const NATIVE_CLEANUP_TIMEOUT_MS = 500;
+// After cancelling a PoW mid-computation, wait for the native module to
+// actually settle before starting the next action. The native Argon2 workers
+// only support one computation at a time; on low-end devices teardown can take
+// well over 500ms, and overlapping computations have frozen the device.
+const NATIVE_CLEANUP_TIMEOUT_MS = 2000;
 const SUCCESS_OVERLAY_DURATION_MS = 500;
 const MAX_NETWORK_RETRIES = 3;
 const NETWORK_RETRY_BACKOFF_MS = 2000;
@@ -144,6 +169,12 @@ export const getActionLabel = (type: PowActionType): string => {
       return "Reporting";
     case "annotate":
       return "Annotating";
+    case "send_tokens":
+      return "Sending gift";
+    case "gift_subscription":
+      return "Gifting subscription";
+    case "award":
+      return "Sending award";
     default:
       return "Processing";
   }
@@ -183,6 +214,12 @@ export const getSuccessLabel = (type: PowActionType): string => {
       return "Reported";
     case "annotate":
       return "Annotated";
+    case "send_tokens":
+      return "Gift sent";
+    case "gift_subscription":
+      return "Subscription gifted";
+    case "award":
+      return "Award sent";
     default:
       return "Done";
   }
@@ -510,6 +547,7 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
     }, SUCCESS_OVERLAY_DURATION_MS);
   } finally {
     immediateActions.delete(action.id);
+    usePowQueueStore.getState().clearPreparing(action.id);
   }
 };
 
@@ -531,6 +569,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     const { userLevel, user } = useAuthStore.getState();
     if (!action.forcePoW && canSkipPoWForUser(userLevel, user?.tier)) {
+      get().showPreparing({ ...action, phase: "submitting" });
       void executeImmediately(action);
       return;
     }
@@ -538,12 +577,19 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     const state = get();
     const needsKick = !isProcessingLock && !state.currentAction;
     const showProgress = action.showProgress !== false;
+    const isPromotingPreparingAction =
+      state.preparingAction?.id === action.id;
+    const shouldIncrementTotal =
+      showProgress && !isPromotingPreparingAction;
 
     const queue = [...state.queue, action as PowAction];
     set({
       queue,
       queuedActionIds: buildQueuedActionIds(queue),
-      totalCount: state.totalCount + (showProgress ? 1 : 0),
+      preparingAction: isPromotingPreparingAction
+        ? null
+        : state.preparingAction,
+      totalCount: state.totalCount + (shouldIncrementTotal ? 1 : 0),
       isProcessing: true,
     });
 
@@ -554,13 +600,28 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     }
   },
 
-  showPreparing: <T>(action: PowAction<T>) => {
+  showPreparing: (action: PowActionPreview) => {
     if (action.showProgress === false) return;
+    const state = get();
+    const hasVisibleQueue = state.queue.some(
+      (queuedAction) => queuedAction.showProgress !== false,
+    );
+    const hasVisibleCurrent =
+      state.currentAction?.showProgress !== false &&
+      state.currentAction !== null;
+    const hasOtherVisibleWork = hasVisibleCurrent || hasVisibleQueue;
+    const isReplacingPreparingAction = state.preparingAction !== null;
     set({
-      preparingAction: action as PowAction,
+      preparingAction: action,
       isProcessing: true,
-      completedCount: 0,
-      totalCount: 1,
+      completedCount:
+        hasOtherVisibleWork || isReplacingPreparingAction
+          ? state.completedCount
+          : 0,
+      totalCount:
+        hasOtherVisibleWork || isReplacingPreparingAction
+          ? state.totalCount + (isReplacingPreparingAction ? 0 : 1)
+          : 1,
       currentProgress: 0,
       lastError: null,
     });
@@ -575,7 +636,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     set({
       preparingAction: null,
       isProcessing: hasVisibleCurrent || hasVisibleQueue,
-      totalCount: hasVisibleCurrent || hasVisibleQueue ? state.totalCount : 0,
+      totalCount:
+        hasVisibleCurrent || hasVisibleQueue
+          ? Math.max(state.completedCount, state.totalCount - 1)
+          : 0,
     });
   },
 
@@ -942,6 +1006,20 @@ export const useIsPowActionCurrent = (actionId: string | undefined): boolean =>
   usePowQueueStore(
     (state) => !!actionId && state.currentAction?.id === actionId,
   );
+
+export function isPowQueueBusy(
+  state: Pick<
+    PowQueueState,
+    "isProcessing" | "queue" | "currentAction" | "preparingAction"
+  > = usePowQueueStore.getState(),
+): boolean {
+  return (
+    state.isProcessing ||
+    state.queue.length > 0 ||
+    !!state.currentAction ||
+    !!state.preparingAction
+  );
+}
 
 export function waitForQueueDrain(): Promise<void> {
  const state = usePowQueueStore.getState();

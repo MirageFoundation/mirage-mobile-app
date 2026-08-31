@@ -63,7 +63,7 @@ export function LoggedOutHome() {
       return;
     }
 
-    router.push("/(auth)/username");
+    router.push("/username");
   }, [nodeConfig, router]);
 
   const handleSwitchNode = useCallback(async () => {
@@ -83,7 +83,7 @@ export function LoggedOutHome() {
       toast.success(`Switched to ${newServer}`);
 
       if (result.data?.registration_enabled) {
-        router.push("/(auth)/username");
+        router.push("/username");
       }
     } finally {
       setIsSwitching(false);
@@ -301,7 +301,7 @@ export function LoggedOutHome() {
               ]}
               onPress={() => {
                 triggerHaptic("selection");
-                router.push("/(auth)/login");
+                router.push("/login");
               }}
             >
               <Text style={styles.signInButtonText}>Sign In</Text>

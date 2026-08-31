@@ -215,6 +215,8 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
         onBlockTopic={actions.blockTopic}
         topic={post.topic}
         onReport={actions.reportPost}
+        postId={post.id}
+        onHidePost={actions.hidePost}
         size="md"
         style={{ marginTop: 12 }}
       />

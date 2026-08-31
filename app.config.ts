@@ -85,7 +85,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     [
       "expo-image-picker",
       {
-        photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
+        photosPermission:
+          "$(PRODUCT_NAME) uses your photo library so you can select photos and videos to share in posts. For example, you can choose a photo to attach to a new post.",
       },
     ],
     [
@@ -107,7 +108,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.1.6",
+    version: "1.1.7",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -169,6 +170,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         }
       : {
           url: "https://u.expo.dev/25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+          checkAutomatically: "ON_LOAD",
+          fallbackToCacheTimeout: 0,
         },
     runtimeVersion: {
       policy: "appVersion",

@@ -117,26 +117,18 @@ export function usePostDetailController({
         actualRootPostId: focusedThread.actualRootPostId,
         commentsData: effectiveCommentsData,
         contextComments: focusedThread.contextComments,
-        contextDepth: focusedThread.contextDepth,
         focusedCommentData: focusedThread.focusedCommentData,
         focusedCommentId: focusedThread.focusedCommentId,
         fullThreadCommentsData: focusedThread.fullThreadCommentsData,
-        isLoadingContext: focusedThread.isLoadingContext,
         isViewingComment,
         showFocusedThread: focusedThread.showFocusedThread,
       }),
     [effectiveCommentsData, focusedThread, isViewingComment],
   );
 
-  const availableFocusedContextCount = useMemo(() => {
-    if (!focusedThread.focusedCommentId) return 0;
-    const rootId = focusedThread.actualRootPostId?.toLowerCase();
-    const focusedId = focusedThread.focusedCommentId.toLowerCase();
-    return (focusedThread.focusedContextCheckQuery.data?.context ?? []).filter((comment) => {
-      const contextPostId = comment.post_id.toLowerCase();
-      return contextPostId !== rootId && contextPostId !== focusedId;
-    }).length;
-  }, [focusedThread]);
+  // Derived inside the thread hook, from the ancestor chain the thread
+  // response carries.
+  const availableFocusedContextCount = focusedThread.focusedContextAvailableCount;
 
   const loadedFocusedContextCount = useMemo(() => {
     if (!focusedThread.focusedCommentId) return 0;
@@ -217,7 +209,7 @@ export function usePostDetailController({
     loadedAncestorCount: loadedFocusedContextCount,
     hasBranchReplies: hasFocusedBranchReplies,
     hasLoadedFocusedContext: focusedThread.hasLoadedFocusedContext,
-    isContextCheckFetched: focusedThread.focusedContextCheckQuery.isFetched,
+    isContextCheckFetched: focusedThread.isFocusedContextSettled,
     contextDepth: focusedThread.contextDepth,
   });
   const highlightScroll = usePostDetailHighlightScroll({
@@ -269,10 +261,6 @@ export function usePostDetailController({
   const handleCommentCountDelta = useCallback((delta: number, fallbackBase: number) => {
     setLocalPostUpdates((current) => applyPostDetailCommentCountDelta(current, delta, fallbackBase));
   }, [setLocalPostUpdates]);
-  const clearFocusedThread = useCallback(() => {
-    focusedThread.setShowFocusedThread(false);
-    focusedThread.setContextComments([]);
-  }, [focusedThread]);
 
   return {
     refs: { actionSheetsRef, commentComposerRef, commentsSectionRef },
@@ -289,14 +277,15 @@ export function usePostDetailController({
       hasFullThreadBeyondFocus,
       ...focusedContext,
       revealFocusedBranch,
-      loadFocusedContext: async (loadDepth: number) => {
+      // The whole ancestor chain ships with the thread response, so "show more
+      // context" is now a pure reveal — nothing left to fetch.
+      loadFocusedContext: async () => {
         setRevealFocusedBranch(true);
-        await focusedThread.loadFocusedContext(loadDepth);
       },
       showFullThread: () => {
         highlightScroll.suppressHighlightAutoScroll();
+        // Clearing the focus derives an empty context chain on the next render.
         focusedThread.setShowFocusedThread(false);
-        focusedThread.setContextComments([]);
       },
       followCommentAuthor: handleFollowCommentAuthor,
       replyToComment: handleReplyToComment,
@@ -311,7 +300,6 @@ export function usePostDetailController({
       incrementCommentCount,
       removeOptimisticComment,
       replaceOptimisticCommentId,
-      clearFocusedThread,
       handleCommentCountDelta,
       handleConfirmedCommentId,
       refetchAfterSuccess: () => commentsLifecycle.refetchCommentsRef.current?.(true),

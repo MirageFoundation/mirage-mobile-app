@@ -58,6 +58,7 @@ type PostCardCompactProps = {
   onBlockPost?: () => void;
   onBlockTopic?: () => void;
   onReport?: () => void;
+  onHidePost?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
   onOptimisticRetryPress?: () => void;
@@ -83,6 +84,7 @@ export const PostCardCompact = memo(function PostCardCompact({
   onBlockPost,
   onBlockTopic,
   onReport,
+  onHidePost,
   onRevealContent,
   onMediaPress,
   onOptimisticRetryPress,
@@ -357,6 +359,8 @@ export const PostCardCompact = memo(function PostCardCompact({
             onBlockTopic={disableInteractions ? undefined : onBlockTopic}
             topic={topic}
             onReport={disableInteractions ? undefined : onReport}
+            postId={post.id}
+            onHidePost={disableInteractions ? undefined : onHidePost}
             hideCommentAction={hideCommentAction}
             size="sm"
             style={styles.actions}

@@ -40,6 +40,43 @@ export type BoundedIndexRange = {
   count: number;
 };
 
+type ItemLayout = { y: number; height: number };
+
+type FeedListViewportState = {
+  scroll: number;
+  scrollLength: number;
+  positionAtIndex: (index: number) => number;
+  sizeAtIndex: (index: number) => number;
+};
+
+export type FeedListViewport = {
+  viewportHeight: number;
+  scrollOffset: number;
+  getLayout: (index: number) => ItemLayout | undefined;
+};
+
+export function getFeedListViewport(list: {
+  getState: () => FeedListViewportState;
+}): FeedListViewport | null {
+  try {
+    const state = list.getState();
+    if (!state.scrollLength) return null;
+    return {
+      viewportHeight: state.scrollLength,
+      scrollOffset: state.scroll,
+      getLayout: (index) => {
+        const height = state.sizeAtIndex(index);
+        if (!Number.isFinite(height) || height <= 0) return undefined;
+        const y = state.positionAtIndex(index);
+        if (!Number.isFinite(y)) return undefined;
+        return { y, height };
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 type BoundedIndexRangeOptions = {
   itemCount: number;
   scrollOffset: number;
@@ -95,8 +132,6 @@ export function getBoundedVisibleIndexRange({
     count: desiredEnd - desiredStart + 1,
   };
 }
-
-type ItemLayout = { y: number; height: number };
 
 type VisibleLayoutOptions = {
   range: BoundedIndexRange;

@@ -2,7 +2,11 @@ import * as Sentry from "@sentry/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { getBootstrap, type BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
-import { getNodeConfig, getSafeApiErrorContext } from "@/src/api/read/endpoints/parameters";
+import {
+  getChainConfig,
+  getNodeConfig,
+  getSafeApiErrorContext,
+} from "@/src/api/read/endpoints/parameters";
 import {
   getInviteCodes,
   getUserBlocked,
@@ -11,9 +15,17 @@ import {
   mergeUserFollowedEnabledAgents,
 } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
-import type { UserFollowedResponse } from "@/src/api/types";
+import type { NodeConfigResponse, UserFollowedResponse } from "@/src/api/types";
+import { walletService } from "@/src/services/wallet-service";
+import { hydrateBootstrapViewCache } from "@/src/api/cache/bootstrap-cache";
+import {
+  getAllowedTagsFromContentTypes,
+  usePreferencesStore,
+} from "@/src/stores/preferences-store";
 
 type BootstrapSection = keyof BootstrapResponse;
+
+const STARTUP_FEED_LIMIT = 10;
 
 const USER_SECTIONS: BootstrapSection[] = [
   "user_status",
@@ -28,16 +40,35 @@ function summarizeBootstrapResponse(
   hasAddress: boolean,
 ) {
   const nullSections = (Object.keys(response) as BootstrapSection[]).filter(
-    (section) => response[section] === null,
+    (section) => response[section] == null,
   );
 
   return {
     hasAddress,
     nullSections,
     hydratedSections: (Object.keys(response) as BootstrapSection[]).filter(
-      (section) => response[section] !== null,
+      (section) => response[section] != null,
     ),
     expectedUserSections: hasAddress,
+  };
+}
+
+export function getStartupBootstrapParams(address?: string) {
+  const { selectedContentTypes, adultContentEnabled } =
+    usePreferencesStore.getState();
+  const allowedTags = getAllowedTagsFromContentTypes(
+    selectedContentTypes,
+    adultContentEnabled,
+  );
+
+  if (!address) return {};
+
+  return {
+    address,
+    view: "feed:home" as const,
+    by: "magic" as const,
+    allowed_tags: allowedTags || undefined,
+    limit: STARTUP_FEED_LIMIT,
   };
 }
 
@@ -58,6 +89,9 @@ export function hydrateBootstrapCache(
   response: BootstrapResponse,
   address?: string,
 ) {
+  if (response.chain_config) {
+    queryClient.setQueryData(queryKeys.config(), response.chain_config);
+  }
   if (response.node_config) {
     queryClient.setQueryData(queryKeys.nodeConfig(), response.node_config);
     Sentry.addBreadcrumb({
@@ -102,6 +136,15 @@ function scheduleBootstrapFallbacks(
   response: BootstrapResponse,
   address?: string,
 ) {
+  if (!response.chain_config) {
+    addBootstrapFallbackBreadcrumb("chain_config", Boolean(address));
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.config(),
+      queryFn: getChainConfig,
+      staleTime: 1000 * 60 * 60 * 4,
+    });
+  }
+
   if (!response.node_config) {
     addBootstrapFallbackBreadcrumb("node_config", Boolean(address));
     queryClient.prefetchQuery({
@@ -179,7 +222,14 @@ function scheduleBootstrapFallbacks(
     addBootstrapFallbackBreadcrumb("user_followed", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.userFollowed(address),
-      queryFn: () => getUserFollowed({ address }),
+      queryFn: async () => {
+        const nodeConfig = await queryClient.ensureQueryData({
+          queryKey: queryKeys.nodeConfig(),
+          queryFn: getNodeConfig,
+          staleTime: 1000 * 60 * 60 * 24,
+        }).catch(() => null);
+        return getUserFollowed({ address }, { nodeConfig });
+      },
     });
   }
   if (!response.user_blocked) {
@@ -189,11 +239,25 @@ function scheduleBootstrapFallbacks(
       queryFn: () => getUserBlocked({ address }),
     });
   }
-  if (!response.invite_codes) {
+  // Invite codes are feature-gated: when registration_invite_code_required is
+  // false the endpoint always returns an empty list, so a null bootstrap
+  // section is expected and not worth a request. Only fall back when the
+  // feature is explicitly enabled.
+  const inviteCodesEnabled =
+    (response.node_config ??
+      queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig()))
+      ?.registration_invite_code_required === true;
+  if (!response.invite_codes && inviteCodesEnabled) {
     addBootstrapFallbackBreadcrumb("invite_codes", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.inviteCodes(address),
-      queryFn: () => getInviteCodes({ address }),
+      queryFn: async () => {
+        const wallet = await walletService.getWallet();
+        if (!wallet || wallet.address.toLowerCase() !== address.toLowerCase()) {
+          throw new Error("Active wallet changed before invite-code fallback");
+        }
+        return getInviteCodes(wallet);
+      },
     });
   }
 }
@@ -213,9 +277,27 @@ export async function primeBootstrap(
   });
 
   try {
-    const response = await getBootstrap(address ? { address } : undefined);
+    let wallet = null;
+    if (address) {
+      try {
+        const candidate = await walletService.getWallet();
+        if (candidate?.address.toLowerCase() === address.toLowerCase()) {
+          wallet = candidate;
+        }
+      } catch (error) {
+        Sentry.addBreadcrumb({
+          category: "bootstrap",
+          message: "Bootstrap identity proof unavailable; continuing without invite codes",
+          level: "warning",
+          data: { error: error instanceof Error ? error.name : "unknown" },
+        });
+      }
+    }
+    const params = getStartupBootstrapParams(address);
+    const response = await getBootstrap(params, wallet ?? undefined);
     if (!isCurrent()) return null;
     hydrateBootstrapCache(queryClient, response, address);
+    hydrateBootstrapViewCache(queryClient, response, params);
     scheduleBootstrapFallbacks(queryClient, response, address);
 
     const summary = summarizeBootstrapResponse(response, hasAddress);
@@ -228,7 +310,7 @@ export async function primeBootstrap(
 
     if (!hasAddress) {
       const unexpectedAnonymousSections = USER_SECTIONS.filter(
-        (section) => response[section] !== null,
+        (section) => response[section] != null,
       );
 
       if (unexpectedAnonymousSections.length > 0) {
