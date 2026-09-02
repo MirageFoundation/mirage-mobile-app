@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { getTopics, searchTopics, type SearchTopicsParams } from "../endpoints/topics";
+import {
+  isDebouncedSearchPending,
+  normalizeTopicSearchQuery,
+} from "../search-query";
 import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
 import { useAuthStore } from "@/src/stores";
 
@@ -39,19 +43,20 @@ export function useSearchTopics(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const normalizedQuery = normalizeTopicSearchQuery(query);
 
   return useQuery({
-    queryKey: queryKeys.searchTopics(query!, params?.limit, allowedTags),
+    queryKey: queryKeys.searchTopics(normalizedQuery, params?.limit, allowedTags),
     queryFn: () =>
       searchTopics({
-        q: query!,
+        q: normalizedQuery,
         allowed_tags: allowedTags || undefined,
         ...params,
       }),
-    enabled: !!query && query.length >= 2,
+    enabled: normalizedQuery.length >= 2,
     staleTime: 1000 * 60, // 1 minute
-  gcTime: 1000 * 60 * 5,
-  retry: false,
+    gcTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
@@ -69,15 +74,15 @@ export function useDebouncedSearchTopics(
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
 
   useEffect(() => {
-    const trimmedQuery = query?.trim() || "";
+    const normalizedQuery = normalizeTopicSearchQuery(query);
 
-    if (!trimmedQuery) {
+    if (!normalizedQuery) {
       setDebouncedQuery(null);
       return;
     }
 
     const timer = setTimeout(() => {
-      setDebouncedQuery(trimmedQuery);
+      setDebouncedQuery(normalizedQuery);
     }, delay);
 
     return () => clearTimeout(timer);
@@ -88,10 +93,10 @@ export function useDebouncedSearchTopics(
     params
   );
 
-  const isDebouncing = useMemo(() => {
-    const trimmedQuery = query?.trim() || "";
-    return trimmedQuery.length > 0 && trimmedQuery !== debouncedQuery;
-  }, [query, debouncedQuery]);
+  const isDebouncing = useMemo(
+    () => isDebouncedSearchPending(query, debouncedQuery, normalizeTopicSearchQuery),
+    [query, debouncedQuery],
+  );
 
   return {
     ...searchQuery,

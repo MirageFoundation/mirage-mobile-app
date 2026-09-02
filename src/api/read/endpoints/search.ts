@@ -1,5 +1,6 @@
 import { api } from "../../client";
 import type { SearchResponse } from "../../types";
+import { normalizeSearchRequestQuery } from "../search-query";
 
 export interface SearchParams {
   q: string;
@@ -15,5 +16,8 @@ export interface SearchParams {
  * Prefix @ for users, # for topics
  */
 export async function search(params: SearchParams): Promise<SearchResponse> {
-  return api.get<SearchResponse>("/search", params);
+  return api.get<SearchResponse>("/search", {
+    ...params,
+    q: normalizeSearchRequestQuery(params.q, params.type),
+  });
 }

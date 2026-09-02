@@ -1,5 +1,6 @@
 import { api } from "../../client";
 import type { TopicsResponse, SearchTopicsResponse } from "../../types";
+import { normalizeTopicSearchQuery } from "../search-query";
 
 export interface GetTopicsParams {
   limit?: number; // max 200
@@ -29,5 +30,8 @@ export interface SearchTopicsParams {
 export async function searchTopics(
   params: SearchTopicsParams
 ): Promise<SearchTopicsResponse> {
-  return api.get<SearchTopicsResponse>("/search_topics", params);
+  return api.get<SearchTopicsResponse>("/search_topics", {
+    ...params,
+    q: normalizeTopicSearchQuery(params.q),
+  });
 }

@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
+import { HAS_SEEN_ADULT_PROMPT_DEFAULT } from "@/src/services/home-entry-prompt-orchestrator";
 import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
@@ -150,7 +151,7 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       // Content
       adultContentEnabled: false,
-      hasSeenAdultPrompt: true,
+      hasSeenAdultPrompt: HAS_SEEN_ADULT_PROMPT_DEFAULT,
       adultPromptDismissedAt: 0,
       moderationReminderUnderstoodByUser: {},
       moderationReminderSnoozedUntilByUser: {},
@@ -307,6 +308,8 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.selectedContentTypes = ["sensitive"];
           state.adultContentEnabled = false;
           state.blurSensitiveMedia = false;
+          // Historical installs lacked this field. Leave them marked as
+          // already prompted so existing users are not reset.
           state.hasSeenAdultPrompt = true;
           state.adultPromptDismissedAt = 0;
         }

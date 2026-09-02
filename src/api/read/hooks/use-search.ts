@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { search, type SearchParams } from "../endpoints/search";
+import { normalizeSearchRequestQuery } from "../search-query";
 import { useAuthStore } from "@/src/stores";
 import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
 
@@ -19,17 +20,18 @@ export function useSearch(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const normalizedQuery = normalizeSearchRequestQuery(query, params?.type);
 
   return useQuery({
-    queryKey: queryKeys.search(query!, params?.type, params?.limit, allowedTags, walletAddress),
+    queryKey: queryKeys.search(normalizedQuery, params?.type, params?.limit, allowedTags, walletAddress),
     queryFn: () =>
       search({
-        q: query!,
+        q: normalizedQuery,
         address: walletAddress ?? undefined,
         allowed_tags: allowedTags || undefined,
         ...params,
       }),
-    enabled: !!query && query.length >= 1,
+    enabled: normalizedQuery.length >= 1,
     staleTime: 1000 * 60, // 1 minute
   });
 }

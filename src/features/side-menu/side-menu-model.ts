@@ -178,3 +178,12 @@ export function getFollowedUserDestination(address: string) {
 export function getFollowedTopicDestination(topic: string) {
   return `/topic/${topic}`;
 }
+
+export function getBalanceDestination() {
+  return "/profile";
+}
+
+export function dismissThenNavigate(close: () => void, navigate: () => void) {
+  close();
+  navigate();
+}

@@ -7,20 +7,8 @@ import {
   getHomeFeedTabIndex,
   getHomeFeedType,
   getHomeHeaderBorderColor,
-  getModerationReminderVisibility,
   HOME_FEED_OPTIONS,
 } from "../src/pages/home/home-screen-state";
-
-const reminderState = {
-  currentUserId: "user-1",
-  hasSeenAdultPrompt: true,
-  showAdultPopup: false,
-  adultPromptDismissedAt: 1_000,
-  moderationReminderUnderstood: false,
-  moderationReminderSnoozedUntil: 0,
-  nowMs: 2_000,
-  minimumAgeMs: 500,
-};
 
 describe("home screen state", () => {
   test("maps header selections to tab and navigation context", () => {
@@ -44,26 +32,6 @@ describe("home screen state", () => {
     })).toEqual(["second", "third"]);
     expect(followed).toEqual(["first", "second"]);
     expect(applyFollowUserOverrides(followed, {})).toEqual(followed);
-  });
-
-  test("shows moderation reminder only after all gates pass", () => {
-    expect(getModerationReminderVisibility(reminderState)).toBe(true);
-    expect(getModerationReminderVisibility({
-      ...reminderState,
-      showAdultPopup: true,
-    })).toBe(false);
-    expect(getModerationReminderVisibility({
-      ...reminderState,
-      moderationReminderUnderstood: true,
-    })).toBe(false);
-    expect(getModerationReminderVisibility({
-      ...reminderState,
-      moderationReminderSnoozedUntil: 2_001,
-    })).toBe(false);
-    expect(getModerationReminderVisibility({
-      ...reminderState,
-      nowMs: 1_499,
-    })).toBe(false);
   });
 
   test("maps reminder state to the header accent", () => {

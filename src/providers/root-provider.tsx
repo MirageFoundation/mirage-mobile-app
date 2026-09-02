@@ -17,12 +17,15 @@ import { WalletProvider } from "./wallet-provider";
 import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { identifyUser, isAnalyticsActive, setAnalyticsTrackingEnabled, trackEvent } from "@/src/services/analytics";
+import {
+  claimHomeEntryOsPrompt,
+  resetHomeEntryOsPromptClaims,
+} from "@/src/services/home-entry-prompt-orchestrator";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
-import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
+import { useResolvedHomeEntryPrompt } from "@/src/services/use-resolved-home-entry-prompt";
+import { useAuthStore } from "@/src/stores/auth-store";
 import { usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
-import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
-import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
 import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { Alert, AppState } from "react-native";
@@ -47,16 +50,8 @@ AuthProviders.displayName = "AuthProviders";
 
 export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
-    const walletAddress = useAuthStore((s) => s.walletAddress);
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-    const isInitializing = useAuthStore((s) => s.isInitializing);
-    const sessionStatus = useAuthStore(selectAuthSessionStatus);
-    const isPowBusy = usePowQueueStore(isPowQueueBusy);
-    const canPromptAfterHome = canRequestOsPermissions({
-      sessionStatus,
-      isInitializing,
-      isPowBusy,
-    });
+    const nextHomeEntryPrompt = useResolvedHomeEntryPrompt();
     const hadLoggedInSessionRef = useRef(isLoggedIn);
     const appStateRef = useRef(AppState.currentState);
 
@@ -79,9 +74,6 @@ export const RootProvider = memo(
 
     // Analytics: init when consent is granted; one-time opt-in prompt (EU)
     const analyticsConsent = usePreferencesStore((s) => s.analyticsConsent);
-    const analyticsConsentAsked = usePreferencesStore(
-      (s) => s.analyticsConsentAsked,
-    );
 
     useEffect(() => {
       void setAnalyticsTrackingEnabled(analyticsConsent).then(() => {
@@ -101,27 +93,25 @@ export const RootProvider = memo(
     }, [analyticsConsent]);
 
     useEffect(() => {
-      if (analyticsConsentAsked || !canPromptAfterHome) return;
-      const timer = setTimeout(() => {
-        const { setAnalyticsConsent } = usePreferencesStore.getState();
-        Alert.alert(
-          "Help improve Mirage",
-          "Allow anonymous usage analytics? No personal data or wallet contents are collected, and you can change this anytime in Settings.",
-          [
-            {
-              text: "Not now",
-              style: "cancel",
-              onPress: () => setAnalyticsConsent(false),
-            },
-            {
-              text: "Allow",
-              onPress: () => setAnalyticsConsent(true),
-            },
-          ],
-        );
-      }, 3000);
-      return () => clearTimeout(timer);
-    }, [analyticsConsentAsked, canPromptAfterHome]);
+      if (nextHomeEntryPrompt !== "analytics_consent") return;
+      if (!claimHomeEntryOsPrompt("analytics_consent")) return;
+      const { setAnalyticsConsent } = usePreferencesStore.getState();
+      Alert.alert(
+        "Help improve Mirage",
+        "Allow anonymous usage analytics? No personal data or wallet contents are collected, and you can change this anytime in Settings.",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => setAnalyticsConsent(false),
+          },
+          {
+            text: "Allow",
+            onPress: () => setAnalyticsConsent(true),
+          },
+        ],
+      );
+    }, [nextHomeEntryPrompt]);
 
     useEffect(() => {
       const sub = AppState.addEventListener("change", (nextState) => {
@@ -153,6 +143,7 @@ export const RootProvider = memo(
       }
       if (!hadLoggedInSessionRef.current) return;
       hadLoggedInSessionRef.current = false;
+      resetHomeEntryOsPromptClaims();
       cleanupInboxNotificationsForLogout().catch((error) => {
         console.warn("[RootProvider] Failed to cleanup inbox notifications:", error);
         Sentry.captureException(error, {
@@ -162,32 +153,24 @@ export const RootProvider = memo(
     }, [isLoggedIn]);
 
     useEffect(() => {
-      if (!walletAddress || !canPromptAfterHome) return;
+      if (nextHomeEntryPrompt !== "notification_permission") return;
+      if (AppState.currentState !== "active") return;
+      if (!claimHomeEntryOsPrompt("notification_permission")) return;
 
-      if (AppState.currentState !== "active") {
-        return;
-      }
+      initInboxNotifications();
 
-      const timer = setTimeout(() => {
-        if (AppState.currentState !== "active") return;
-
-        initInboxNotifications();
-
-        walletService.getWallet()
-          .then((wallet) => {
-            if (!wallet) return;
-            return registerPush(wallet);
-          })
-          .catch((error) => {
-            console.error("[RootProvider] Failed to register push after login:", error);
-            Sentry.captureException(error, {
-              tags: { feature: "push-notifications", operation: "root-provider-register" },
-            });
+      walletService.getWallet()
+        .then((wallet) => {
+          if (!wallet) return;
+          return registerPush(wallet);
+        })
+        .catch((error) => {
+          console.error("[RootProvider] Failed to register push after login:", error);
+          Sentry.captureException(error, {
+            tags: { feature: "push-notifications", operation: "root-provider-register" },
           });
-      }, 2_000);
-
-      return () => clearTimeout(timer);
-    }, [walletAddress, canPromptAfterHome]);
+        });
+    }, [nextHomeEntryPrompt]);
 
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>

@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { search, type SearchParams } from "../endpoints/search";
+import {
+  isDebouncedSearchPending,
+  normalizeSearchRequestQuery,
+} from "../search-query";
 import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
 import { useAuthStore } from "@/src/stores";
 
@@ -22,24 +26,25 @@ export function useDebouncedSearch(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const searchType = params?.type;
 
   // Debounce the query
   useEffect(() => {
-    const trimmedQuery = query?.trim() || "";
+    const normalizedQuery = normalizeSearchRequestQuery(query, searchType);
 
     // If query is empty, clear immediately
-    if (!trimmedQuery) {
+    if (!normalizedQuery) {
       setDebouncedQuery(null);
       return;
     }
 
     // Set up debounce timer
     const timer = setTimeout(() => {
-      setDebouncedQuery(trimmedQuery);
+      setDebouncedQuery(normalizedQuery);
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [query, delay]);
+  }, [query, delay, searchType]);
 
   // Perform the search with debounced query
   const searchQuery = useQuery({
@@ -56,10 +61,13 @@ export function useDebouncedSearch(
   });
 
   // Determine if we're waiting for debounce or fetching
-  const isDebouncing = useMemo(() => {
-    const trimmedQuery = query?.trim() || "";
-    return trimmedQuery.length > 0 && trimmedQuery !== debouncedQuery;
-  }, [query, debouncedQuery]);
+  const isDebouncing = useMemo(
+    () =>
+      isDebouncedSearchPending(query, debouncedQuery, (value) =>
+        normalizeSearchRequestQuery(value, searchType),
+      ),
+    [query, debouncedQuery, searchType],
+  );
 
   return {
     ...searchQuery,

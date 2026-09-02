@@ -1,10 +1,9 @@
-import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 
 import { useNodeConfig, useUserFollowed } from "@/src/api";
-import { ModerationReminderCard, type Post } from "@/src/components/molecules";
+import { type Post } from "@/src/components/molecules";
 import {
   shouldAutoplayVideo,
   useAuthGuard,
@@ -17,6 +16,7 @@ import { useRouter } from "@/src/navigation/guarded-router";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { useToast } from "@/src/providers/toast-provider";
+import { setHomeEntryFocused } from "@/src/services/home-entry-prompt-orchestrator";
 import { markSeen } from "@/src/services/seen-posts";
 import {
   storage,
@@ -30,17 +30,14 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostActionController } from "../post/use-post-action-controller";
 import type { HomeTabbedFeedRef } from "./home-tabbed-feed";
+import { useHomeEntryPrompts } from "./use-home-entry-prompts";
 import {
   applyFollowUserOverrides,
   getHomeFeedSyncContext,
   getHomeFeedTabIndex,
   getHomeFeedType,
-  getModerationReminderVisibility,
   HOME_FEED_OPTIONS,
 } from "./home-screen-state";
-
-const MODERATION_REMINDER_MIN_AGE_MS = 10 * 60 * 1000;
-const MODERATION_REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type NewPostAvatar = { userId: string; username: string };
 
@@ -55,7 +52,6 @@ export function useHomeScreenController() {
   const backgroundTimeRef = useRef<number | null>(null);
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const isNavigatingRef = useRef(false);
-  const moderationReminderShownForRef = useRef<string | null>(null);
 
   const [feedTabIndex, setFeedTabIndex] = useState(0);
   const [hasNewPosts, setHasNewPosts] = useState(false);
@@ -72,30 +68,12 @@ export function useHomeScreenController() {
   const unhidePost = useContentModerationStore((state) => state.unhidePost);
   const blockUser = useContentModerationStore((state) => state.blockUser);
   const blockTopicOptimistic = useContentModerationStore((state) => state.blockTopic);
-  const hasSeenAdultPrompt = usePreferencesStore((state) => state.hasSeenAdultPrompt);
-  const setHasSeenAdultPrompt = usePreferencesStore((state) => state.setHasSeenAdultPrompt);
-  const adultPromptDismissedAt = usePreferencesStore((state) => state.adultPromptDismissedAt);
-  const setAdultPromptDismissedAt = usePreferencesStore((state) => state.setAdultPromptDismissedAt);
-  const reminderUnderstoodByUser = usePreferencesStore(
-    (state) => state.moderationReminderUnderstoodByUser,
-  );
-  const reminderSnoozedUntilByUser = usePreferencesStore(
-    (state) => state.moderationReminderSnoozedUntilByUser,
-  );
-  const dismissModerationReminder = usePreferencesStore(
-    (state) => state.dismissModerationReminder,
-  );
-  const snoozeModerationReminder = usePreferencesStore(
-    (state) => state.snoozeModerationReminder,
-  );
-  const setAdultContent = usePreferencesStore((state) => state.setAdultContent);
   const shareServer = usePreferencesStore((state) => state.apiServer);
   const autoPlayVideos = usePreferencesStore((state) => state.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((state) => state.videoAutoplayNetwork);
   const currentUser = useAuthStore((state) => state.user);
   const isInitializing = useAuthStore((state) => state.isInitializing);
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
-  const timeTick = useTimeTickStore((state) => state.tick);
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
   const shouldScrollToTop = useHomePostCardStore((state) => state.shouldScrollToTop);
@@ -104,12 +82,12 @@ export function useHomeScreenController() {
 
   void hiddenPostIds;
   void blockedUserIds;
-  void timeTick;
 
   const { data: nodeConfig } = useNodeConfig();
   const { data: followedData } = useUserFollowed();
   const networkType = useNetworkType();
   const isHomeFocused = useIsFocused();
+  const homeEntryPrompts = useHomeEntryPrompts();
   const followedUsers = useMemo(() => followedData?.followed_users ?? [], [followedData]);
   const followedTopics = useMemo(() => followedData?.followed_topics ?? [], [followedData]);
   const displayFollowedUsers = useMemo(
@@ -312,29 +290,6 @@ export function useHomeScreenController() {
     sideMenuOpen,
   ]);
 
-  const showAdultPopup = Boolean(currentUser) && !hasSeenAdultPrompt;
-  const currentUserId = currentUser?.id ?? "";
-  // Lowercased lookups match the store's normalized keys (BUG-016).
-  const reminderUserKey = currentUserId.toLowerCase();
-  const reminderUnderstood = reminderUserKey
-    ? reminderUnderstoodByUser[reminderUserKey] === true
-    : false;
-  const reminderSnoozedUntil = reminderUserKey
-    ? reminderSnoozedUntilByUser[reminderUserKey] ?? 0
-    : 0;
-  const nowMs = Date.now();
-  const adultPromptAgeMs = adultPromptDismissedAt > 0 ? nowMs - adultPromptDismissedAt : 0;
-  const showModerationReminder = getModerationReminderVisibility({
-    currentUserId,
-    hasSeenAdultPrompt,
-    showAdultPopup,
-    adultPromptDismissedAt,
-    moderationReminderUnderstood: reminderUnderstood,
-    moderationReminderSnoozedUntil: reminderSnoozedUntil,
-    nowMs,
-    minimumAgeMs: MODERATION_REMINDER_MIN_AGE_MS,
-  });
-
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === "background" || nextState === "inactive") {
@@ -370,43 +325,6 @@ export function useHomeScreenController() {
   }, [showBars]);
 
   useEffect(() => {
-    if (!currentUser || !hasSeenAdultPrompt || showAdultPopup || adultPromptDismissedAt > 0) return;
-    const dismissedAt = Date.now();
-    setAdultPromptDismissedAt(dismissedAt);
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Adult prompt dismissal timestamp backfilled",
-      level: "info",
-      data: { userId: currentUser.id, dismissedAt },
-    });
-  }, [
-    adultPromptDismissedAt,
-    currentUser,
-    hasSeenAdultPrompt,
-    setAdultPromptDismissedAt,
-    showAdultPopup,
-  ]);
-
-  useEffect(() => {
-    if (!showModerationReminder || !currentUserId) {
-      moderationReminderShownForRef.current = null;
-      return;
-    }
-    if (moderationReminderShownForRef.current === currentUserId) return;
-    moderationReminderShownForRef.current = currentUserId;
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Moderation reminder shown",
-      level: "info",
-      data: {
-        userId: currentUserId,
-        adultPromptAgeMs,
-        snoozedUntil: reminderSnoozedUntil,
-      },
-    });
-  }, [adultPromptAgeMs, currentUserId, reminderSnoozedUntil, showModerationReminder]);
-
-  useEffect(() => {
     if (!shouldScrollToTop || !isHomeFocused) return;
     const delay = Platform.OS === "android" ? 150 : 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -422,6 +340,8 @@ export function useHomeScreenController() {
 
   useFocusEffect(useCallback(() => {
     useTimeTickStore.getState().bump();
+    setHomeEntryFocused(true);
+    return () => setHomeEntryFocused(false);
   }, []));
 
   const handleFeedTypeChange = useCallback((value: string) => {
@@ -445,78 +365,6 @@ export function useHomeScreenController() {
       setIsBannerLoading(false);
     }
   }, []);
-  const chooseModerationAgents = useCallback(() => {
-    if (!currentUserId) return;
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Choose agents pressed",
-      level: "info",
-      data: { userId: currentUserId },
-    });
-    dismissModerationReminder(currentUserId);
-    router.push("/agents");
-  }, [currentUserId, dismissModerationReminder, router]);
-  const dismissReminder = useCallback(() => {
-    if (!currentUserId) return;
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Moderation reminder dismissed",
-      level: "info",
-      data: { userId: currentUserId },
-    });
-    dismissModerationReminder(currentUserId);
-  }, [currentUserId, dismissModerationReminder]);
-  const snoozeReminder = useCallback(() => {
-    if (!currentUserId) return;
-    const snoozedUntil = Date.now() + MODERATION_REMINDER_SNOOZE_MS;
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Moderation reminder snoozed",
-      level: "info",
-      data: { userId: currentUserId, snoozedUntil },
-    });
-    snoozeModerationReminder(currentUserId, snoozedUntil);
-  }, [currentUserId, snoozeModerationReminder]);
-  const moderationReminderHeader = useMemo(() => {
-    if (!showModerationReminder) return null;
-    return (
-      <ModerationReminderCard
-        onChooseAgents={chooseModerationAgents}
-        onUnderstand={dismissReminder}
-        onRemindLater={snoozeReminder}
-      />
-    );
-  }, [chooseModerationAgents, dismissReminder, showModerationReminder, snoozeReminder]);
-
-  const updateAdultPreference = useCallback((enabled: boolean) => {
-    const dismissedAt = Date.now();
-    setAdultContent(enabled);
-    setHasSeenAdultPrompt();
-    setAdultPromptDismissedAt(dismissedAt);
-    Sentry.addBreadcrumb({
-      category: "content_filter",
-      message: enabled
-        ? "iOS: Adult content enabled via popup"
-        : "iOS: Adult content declined via popup",
-      level: "info",
-    });
-    Sentry.addBreadcrumb({
-      category: "moderation_reminder",
-      message: "Adult prompt dismissed before reminder timer",
-      level: "info",
-      data: {
-        action: enabled ? "enabled_adult_content" : "declined_adult_content",
-        userId: currentUserId,
-        dismissedAt,
-      },
-    });
-  }, [
-    currentUserId,
-    setAdultContent,
-    setAdultPromptDismissedAt,
-    setHasSeenAdultPrompt,
-  ]);
-
   return {
     showLoggedOutHome: !isLoggedIn && !isInitializing && !(nodeConfig?.open_browsing_enabled ?? false),
     feedRuntimeConfig,
@@ -529,8 +377,8 @@ export function useHomeScreenController() {
     handleFeedTypeChange,
     openSideMenu,
     openSearch: () => router.push("/search"),
-    showModerationReminder,
-    moderationReminderHeader,
+    showModerationReminder: homeEntryPrompts.showModerationReminder,
+    moderationReminderHeader: homeEntryPrompts.moderationReminderHeader,
     handleNewPostsChange,
     // Hide the banner whenever this screen isn't focused (e.g. a post detail
     // is open above the feed) so it can't render over or steal taps from
@@ -541,9 +389,9 @@ export function useHomeScreenController() {
     newPostCount,
     isBannerLoading,
     easUpdate,
-    showAdultPopup,
-    enableAdultContent: () => updateAdultPreference(true),
-    declineAdultContent: () => updateAdultPreference(false),
+    showAdultPopup: homeEntryPrompts.showAdultPopup,
+    enableAdultContent: homeEntryPrompts.enableAdultContent,
+    declineAdultContent: homeEntryPrompts.declineAdultContent,
     openSettings: () => router.push("/settings"),
     postActions,
   };

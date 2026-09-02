@@ -7,6 +7,7 @@ import {
   type UserPostsQueryParams,
   type UserPostsQueryParamsInput,
 } from "./request-params";
+import { normalizeSearchRequestQuery, normalizeTopicSearchQuery } from "./search-query";
 import { normalizeUsernameIdentity } from "./username-resolution";
 
 const serverKey = <T extends readonly unknown[]>(...key: T) =>
@@ -116,7 +117,7 @@ export const queryKeys = {
     viewerAddress: string | null | undefined,
   ) => serverKey("topics", ...viewerKey(viewerAddress), limit, allowedTags),
   searchTopics: (query: string, limit?: number, allowedTags?: string) =>
-    serverKey("topics", "search", query, limit, allowedTags),
+    serverKey("topics", "search", normalizeTopicSearchQuery(query), limit, allowedTags),
 
   // Search
   search: (
@@ -125,7 +126,15 @@ export const queryKeys = {
     limit: number | undefined,
     allowedTags: string | undefined,
     viewerAddress: string | null | undefined,
-  ) => serverKey("search", ...viewerKey(viewerAddress), query, type, limit, allowedTags),
+  ) =>
+    serverKey(
+      "search",
+      ...viewerKey(viewerAddress),
+      normalizeSearchRequestQuery(query, type),
+      type,
+      limit,
+      allowedTags,
+    ),
 
   // Username/Address Resolution
   addressFromUsername: (username: string) =>

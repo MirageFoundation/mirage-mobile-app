@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createSideMenuRouteDelegate,
+  dismissThenNavigate,
+  getBalanceDestination,
   getFollowedTopicDestination,
   getFollowedUserDestination,
   SIDE_MENU_SECTIONS,
@@ -78,5 +80,15 @@ describe("side-menu controller model", () => {
   test("builds followed user and topic destinations", () => {
     expect(getFollowedUserDestination("address-1")).toBe("/user/address-1");
     expect(getFollowedTopicDestination("news")).toBe("/topic/news");
+  });
+
+  test("opens balance on profile after dismissing the overlay", () => {
+    expect(getBalanceDestination()).toBe("/profile");
+    const events = [];
+    dismissThenNavigate(
+      () => events.push("close"),
+      () => events.push("navigate"),
+    );
+    expect(events).toEqual(["close", "navigate"]);
   });
 });

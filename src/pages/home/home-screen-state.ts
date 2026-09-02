@@ -31,39 +31,6 @@ export function applyFollowUserOverrides(
   return Array.from(result);
 }
 
-type ModerationReminderState = {
-  currentUserId: string;
-  hasSeenAdultPrompt: boolean;
-  showAdultPopup: boolean;
-  adultPromptDismissedAt: number;
-  moderationReminderUnderstood: boolean;
-  moderationReminderSnoozedUntil: number;
-  nowMs: number;
-  minimumAgeMs: number;
-};
-
-export function getModerationReminderVisibility({
-  currentUserId,
-  hasSeenAdultPrompt,
-  showAdultPopup,
-  adultPromptDismissedAt,
-  moderationReminderUnderstood,
-  moderationReminderSnoozedUntil,
-  nowMs,
-  minimumAgeMs,
-}: ModerationReminderState): boolean {
-  const adultPromptAgeMs = adultPromptDismissedAt > 0
-    ? nowMs - adultPromptDismissedAt
-    : 0;
-  return Boolean(currentUserId)
-    && hasSeenAdultPrompt
-    && !showAdultPopup
-    && adultPromptDismissedAt > 0
-    && adultPromptAgeMs >= minimumAgeMs
-    && !moderationReminderUnderstood
-    && moderationReminderSnoozedUntil <= nowMs;
-}
-
 export function getHomeHeaderBorderColor(
   showModerationReminder: boolean,
   errorColor: string,

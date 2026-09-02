@@ -21,6 +21,8 @@ import {
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   createSideMenuRouteDelegate,
+  dismissThenNavigate,
+  getBalanceDestination,
   getFollowedTopicDestination,
   getFollowedUserDestination,
   type SideMenuAction,
@@ -225,10 +227,11 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
   }, [router]);
   const openBalance = useCallback(() => {
     // No dedicated wallet screen yet; the profile tab shows balance and
-    // reward details (BUG-030).
+    // reward details (BUG-030). Close first so the tab overlay cannot
+    // remain over Profile (BUG-036).
     triggerHaptic("light");
-    router.push("/profile");
-  }, [router]);
+    dismissThenNavigate(close, () => router.push(getBalanceDestination() as never));
+  }, [close, router]);
 
   return {
     isLoggedIn,
