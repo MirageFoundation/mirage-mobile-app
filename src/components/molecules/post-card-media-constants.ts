@@ -40,6 +40,6 @@ export function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (media.width && media.height) {
     return media.width / media.height;
   }
-  if (media.type === "video") return 4 / 3;
-  return 16 / 9;
+  if (media.type === "youtube") return 16 / 9;
+  return 4 / 5;
 }

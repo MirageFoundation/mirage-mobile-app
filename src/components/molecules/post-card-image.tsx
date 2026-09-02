@@ -66,7 +66,7 @@ export const PostCardImage = memo(function PostCardImage({
   const { mediaLoaded, setMediaLoaded, clearLoadingFallback } =
     useMediaLoadedState(resolvedMediaUri);
   const { effectiveAspectRatio, updateMediaAspectRatioFromSize } =
-    useMediaAspectRatio(media);
+    useMediaAspectRatio(media, { preserveFallback: !isPostDetail });
   const { mediaFrameRef, runWithMediaTransition } = useMediaPressTransition({
     isPostDetail,
     postId,

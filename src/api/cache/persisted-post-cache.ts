@@ -109,6 +109,24 @@ export function isLaunchCriticalFeedQuery(queryKey: unknown): boolean {
   );
 }
 
+export function isPersistedRewardSummaryQuery(queryKey: unknown): boolean {
+  return (
+    Array.isArray(queryKey) &&
+    queryKey[0] === "server" &&
+    typeof queryKey[1] === "string" &&
+    queryKey[2] === "rewards" &&
+    queryKey[3] === "summary" &&
+    typeof queryKey[4] === "string"
+  );
+}
+
+export function isLaunchPersistedQuery(queryKey: unknown): boolean {
+  return (
+    isLaunchCriticalFeedQuery(queryKey) ||
+    isPersistedRewardSummaryQuery(queryKey)
+  );
+}
+
 function isSafeServerPost(value: unknown): value is UnknownRecord {
   if (!isRecord(value)) return false;
   if (
@@ -167,6 +185,17 @@ export function sanitizePersistedPostsData(data: unknown): unknown | undefined {
   };
 }
 
+function sanitizePersistedRewardSummaryData(data: unknown): unknown | undefined {
+  if (
+    !isRecord(data) ||
+    !Array.isArray(data.daily_quests) ||
+    !Array.isArray(data.pending_rewards)
+  ) {
+    return undefined;
+  }
+  return data;
+}
+
 function sanitizeAllowedQuery(
   query: unknown,
   namespace: string,
@@ -174,7 +203,7 @@ function sanitizeAllowedQuery(
   if (
     !isRecord(query) ||
     !Array.isArray(query.queryKey) ||
-    !isLaunchCriticalFeedQuery(query.queryKey) ||
+    !isLaunchPersistedQuery(query.queryKey) ||
     !isRecord(query.state) ||
     query.state.status !== "success"
   ) {
@@ -187,7 +216,9 @@ function sanitizeAllowedQuery(
     return undefined;
   }
 
-  const data = sanitizePersistedPostsData(query.state.data);
+  const data = isLaunchCriticalFeedQuery(query.queryKey)
+    ? sanitizePersistedPostsData(query.state.data)
+    : sanitizePersistedRewardSummaryData(query.state.data);
   if (data === undefined) return undefined;
   return { ...query, state: { ...query.state, data } };
 }
@@ -234,6 +265,9 @@ export function preparePersistedQueryClient(
     .map((query) => sanitizeAllowedQuery(query, namespace))
     .filter((query): query is UnknownRecord => query !== undefined)
     .sort((left, right) => {
+      const leftPriority = isPersistedRewardSummaryQuery(left.queryKey) ? 1 : 0;
+      const rightPriority = isPersistedRewardSummaryQuery(right.queryKey) ? 1 : 0;
+      if (leftPriority !== rightPriority) return rightPriority - leftPriority;
       const leftUpdated = isRecord(left.state) ? Number(left.state.dataUpdatedAt) : 0;
       const rightUpdated = isRecord(right.state) ? Number(right.state.dataUpdatedAt) : 0;
       return rightUpdated - leftUpdated;

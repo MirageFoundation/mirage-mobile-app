@@ -19,6 +19,7 @@ import {
   galleryStyles,
   getGalleryItemAspectRatio,
 } from "./media-gallery-shared";
+import { hasGalleryItemAspectRatio } from "./media-gallery-sizing";
 
 type MediaGalleryProps = {
   media: ResolvedMedia[];
@@ -75,9 +76,10 @@ export const MediaGallery = memo(function MediaGallery({
 
   const handleAspectRatioDetected = useCallback(
     (uri: string, ratio: number) => {
-      itemRatiosRef.current.set(uri, ratio);
       const currentItem = media[activeIndexRef.current];
       if (currentItem?.uri === uri) {
+        if (!isPostDetail && !hasGalleryItemAspectRatio(currentItem)) return;
+        itemRatiosRef.current.set(uri, ratio);
         const newHeight = computeGalleryHeight(ratio);
         setContainerHeight((prev) => {
           if (Math.abs(prev - newHeight) < 1) return prev;
@@ -85,7 +87,7 @@ export const MediaGallery = memo(function MediaGallery({
         });
       }
     },
-    [media],
+    [isPostDetail, media],
   );
 
   const updateActiveIndex = useCallback(
@@ -97,13 +99,15 @@ export const MediaGallery = memo(function MediaGallery({
       activeIndexRef.current = newIndex;
       setActiveIndex((current) => (current === newIndex ? current : newIndex));
 
-      const ratio = itemRatiosRef.current.get(item.uri) ?? getGalleryItemAspectRatio(item);
+      const ratio = isPostDetail || hasGalleryItemAspectRatio(item)
+        ? itemRatiosRef.current.get(item.uri) ?? getGalleryItemAspectRatio(item)
+        : getGalleryItemAspectRatio(item);
       const newHeight = computeGalleryHeight(ratio);
       setContainerHeight((current) =>
         Math.abs(current - newHeight) < 1 ? current : newHeight,
       );
     },
-    [media],
+    [isPostDetail, media],
   );
 
   const onViewableItemsChanged = useCallback(

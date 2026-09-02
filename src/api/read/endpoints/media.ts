@@ -6,7 +6,7 @@
 
 import { apiClient } from "@/src/api/client";
 import * as Sentry from "@sentry/react-native";
-import { AppState, Platform } from "react-native";
+import { AppState, Image as ReactNativeImage, Platform } from "react-native";
 import {
   backgroundUpload,
   Image as CompressorImage,
@@ -168,6 +168,29 @@ async function prepareImageForUpload(
     });
     return { uri: localUri, contentType };
   }
+}
+
+function getImageDimensions(
+  uri: string,
+): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    ReactNativeImage.getSize(
+      uri,
+      (width, height) => {
+        if (
+          Number.isInteger(width) &&
+          width > 0 &&
+          Number.isInteger(height) &&
+          height > 0
+        ) {
+          resolve({ width, height });
+          return;
+        }
+        resolve(null);
+      },
+      () => resolve(null),
+    );
+  });
 }
 
 async function getVideoUploadParameters(localUri: string): Promise<UploadMediaParameters> {
@@ -441,6 +464,7 @@ export async function uploadImage(
   try {
     onProgress?.(0, "processing");
     const preparedImage = await prepareImageForUpload(localUri, contentType);
+    const imageDimensions = await getImageDimensions(preparedImage.uri);
     onProgress?.(100, "processing");
     onProgress?.(0, "uploading");
     const uploadResponse = await uploadMedia(
@@ -454,10 +478,16 @@ export async function uploadImage(
     console.log("[MediaUpload] File uploaded successfully");
     const accountHash = uploadResponse.accountHash ?? uploadResponse.account_hash;
     const assetId = uploadResponse.asset_id ?? uploadResponse.id;
-    const finalUrl = uploadResponse.url ?? (accountHash && assetId
+    const playbackUrl = uploadResponse.url ?? (accountHash && assetId
       ? getImageUrl(accountHash, assetId)
       : "");
-    if (!finalUrl) throw new Error("Upload service did not return an image URL.");
+    if (!playbackUrl) throw new Error("Upload service did not return an image URL.");
+    const finalUrl = imageDimensions
+      ? appendMediaDimensions(playbackUrl, {
+          width: String(imageDimensions.width),
+          height: String(imageDimensions.height),
+        })
+      : playbackUrl;
     Sentry.addBreadcrumb({
       category: "media-upload",
       message: "Image upload complete",
@@ -551,6 +581,25 @@ function deriveVideoThumbnailUrl(playbackUrl: string): string {
   }
 }
 
+function appendMediaDimensions(
+  playbackUrl: string,
+  parameters: UploadMediaParameters,
+): string {
+  const width = Number(parameters.width);
+  const height = Number(parameters.height);
+  if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) {
+    return playbackUrl;
+  }
+  try {
+    const parsed = new URL(playbackUrl);
+    parsed.searchParams.set("w", String(width));
+    parsed.searchParams.set("h", String(height));
+    return parsed.toString();
+  } catch {
+    return playbackUrl;
+  }
+}
+
 export async function uploadVideo(
   localUri: string,
   contentType: string = "video/mp4",
@@ -608,16 +657,17 @@ export async function uploadVideo(
     console.log("[VideoUpload] File uploaded successfully");
 
     const assetId = uploadResponse.asset_id ?? uploadResponse.uid;
-    const finalUrl = uploadResponse.url;
-    if (!finalUrl) {
+    const playbackUrl = uploadResponse.url;
+    if (!playbackUrl) {
       throw new Error("Upload service did not return a video URL.");
     }
+    const finalUrl = appendMediaDimensions(playbackUrl, videoParameters);
     const thumbnailUrl =
       uploadResponse.thumbnailUrl ??
       uploadResponse.thumbnail_url ??
       uploadResponse.posterUrl ??
       uploadResponse.poster_url ??
-      deriveVideoThumbnailUrl(finalUrl);
+      deriveVideoThumbnailUrl(playbackUrl);
     const totalUploadDurationMs = Date.now() - uploadStartedAt;
     console.log("[VideoTiming] upload complete", {
       uid: assetId,

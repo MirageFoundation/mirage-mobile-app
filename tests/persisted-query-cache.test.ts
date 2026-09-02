@@ -10,6 +10,8 @@ import {
   buildPersistedQueryStorageKey,
   getHydratablePersistedQueryClient,
   isLaunchCriticalFeedQuery,
+  isLaunchPersistedQuery,
+  isPersistedRewardSummaryQuery,
   preparePersistedQueryClient,
   restorePersistedQueryClient,
 } from "../src/api/cache/persisted-post-cache";
@@ -46,6 +48,31 @@ function persistedQuery(
           has_more: index < ids.length - 1,
         })),
         pageParams: ids.map((_, index) => index + 1),
+      },
+    },
+  };
+}
+
+function persistedRewardSummaryQuery(updatedAt = 1) {
+  const key = queryKeys.rewardSummary("mirage1viewer");
+  return {
+    queryKey: key,
+    queryHash: JSON.stringify(key),
+    state: {
+      status: "success",
+      dataUpdatedAt: updatedAt,
+      data: {
+        suspended: false,
+        daily_quests: [{ id: "daily-post", progress: 1, target: 1 }],
+        flash_quest: null,
+        pending_rewards: [],
+        seconds_until_reset: 100,
+        reward_multiplier: 1,
+        total_mirage: 10,
+        total_mirage_after_multiplier: 10,
+        pending_invite_codes: 0,
+        claiming_available: false,
+        debug: false,
       },
     },
   };
@@ -90,7 +117,7 @@ describe("persisted query namespace", () => {
   });
 });
 
-describe("persisted launch feed allowlist", () => {
+describe("persisted launch query allowlist", () => {
   test("allows only namespaced magic home/following feeds", () => {
     expect(isLaunchCriticalFeedQuery(launchKey)).toBe(true);
     expect(
@@ -106,6 +133,31 @@ describe("persisted launch feed allowlist", () => {
     expect(isLaunchCriticalFeedQuery(queryKeys.profile("mirage1viewer"))).toBe(
       false,
     );
+  });
+
+  test("persists reward summaries for the current server and viewer", () => {
+    const rewardSummary = persistedRewardSummaryQuery();
+    expect(isPersistedRewardSummaryQuery(rewardSummary.queryKey)).toBe(true);
+    expect(isLaunchPersistedQuery(rewardSummary.queryKey)).toBe(true);
+
+    const prepared = preparePersistedQueryClient(
+      client([persistedQuery(launchKey, ["first"]), rewardSummary]),
+      namespace,
+    );
+
+    expect(prepared.client.clientState.queries).toHaveLength(2);
+    expect(prepared.client.clientState.queries[0].queryKey).toEqual(
+      rewardSummary.queryKey,
+    );
+    expect(
+      prepared.client.clientState.queries[0].state.data.daily_quests[0].id,
+    ).toBe("daily-post");
+
+    const wrongViewer = preparePersistedQueryClient(
+      client([rewardSummary]),
+      buildPersistedQueryNamespace("https://node.example", "mirage1other"),
+    );
+    expect(wrongViewer.metrics.queryCount).toBe(0);
   });
 
   test("drops arbitrary queries and caps infinite data to the first page", () => {

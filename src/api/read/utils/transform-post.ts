@@ -57,6 +57,20 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
   return "image";
 }
 
+function getMediaDimensionsFromUrl(url: string): { width?: number; height?: number } {
+  try {
+    const parsedUrl = new URL(url);
+    const width = Number(parsedUrl.searchParams.get("w"));
+    const height = Number(parsedUrl.searchParams.get("h"));
+    return {
+      width: Number.isInteger(width) && width > 0 ? width : undefined,
+      height: Number.isInteger(height) && height > 0 ? height : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Map API tag to UI content warning type
  */
@@ -139,8 +153,9 @@ export function transformApiPost(
     media: mediaList && mediaList.length > 0
       ? mediaList.map((url, i) => {
           const meta = editOverride?.media ? undefined : apiPost.media_meta?.[i];
-          const w = meta?.w;
-          const h = meta?.h;
+          const urlDimensions = getMediaDimensionsFromUrl(url);
+          const w = meta?.w ?? urlDimensions.width;
+          const h = meta?.h ?? urlDimensions.height;
           const type = getMediaTypeFromUrl(url);
           // Fall back to the server-computed post thumbnail for the first
           // media item so hosted stream providers (Bunny, ...)

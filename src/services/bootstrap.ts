@@ -7,6 +7,7 @@ import {
   getNodeConfig,
   getSafeApiErrorContext,
 } from "@/src/api/read/endpoints/parameters";
+import type { RewardSummaryResponse } from "@/src/api/read/endpoints/rewards";
 import {
   getInviteCodes,
   getUserBlocked,
@@ -127,7 +128,20 @@ export function hydrateBootstrapCache(
     queryClient.setQueryData(queryKeys.inviteCodes(address), response.invite_codes);
   }
   if (response.rewards_summary) {
-    queryClient.setQueryData(queryKeys.rewardSummary(address), response.rewards_summary);
+    queryClient.setQueryData<RewardSummaryResponse>(
+      queryKeys.rewardSummary(address),
+      (cached) => {
+        const incoming = response.rewards_summary!;
+        if (
+          incoming.disabled &&
+          incoming.daily_quests.length === 0 &&
+          (cached?.daily_quests.length ?? 0) > 0
+        ) {
+          return cached;
+        }
+        return incoming;
+      },
+    );
   }
 }
 

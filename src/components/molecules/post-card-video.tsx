@@ -151,7 +151,7 @@ export const PostCardVideo = memo(
     const { mediaLoaded, setMediaLoaded, clearLoadingFallback } =
       useMediaLoadedState(resolvedMediaUri, () => setIsVideoLoading(false));
     const { effectiveAspectRatio, updateMediaAspectRatioFromSize } =
-      useMediaAspectRatio(media);
+      useMediaAspectRatio(media, { preserveFallback: !isPostDetail });
     const { mediaFrameRef, runWithMediaTransition } = useMediaPressTransition({
       isPostDetail,
       postId,

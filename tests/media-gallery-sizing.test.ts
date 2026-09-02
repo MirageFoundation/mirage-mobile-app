@@ -2,8 +2,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  GALLERY_MEDIA_FALLBACK_ASPECT_RATIO,
   GALLERY_MEDIA_MAX_HEIGHT,
   computeGalleryFrameHeight,
+  hasGalleryItemAspectRatio,
   resolveGalleryItemAspectRatio,
 } from "../src/components/molecules/media-gallery-sizing";
 
@@ -20,8 +22,12 @@ describe("media gallery sizing", () => {
     expect(resolveGalleryItemAspectRatio({ aspectRatio: 4 / 3 })).toBe(4 / 3);
   });
 
-  test("falls back to 16:9 when the item has no size metadata", () => {
-    expect(resolveGalleryItemAspectRatio({})).toBe(16 / 9);
+  test("uses a stable tall fallback when the item has no size metadata", () => {
+    expect(resolveGalleryItemAspectRatio({})).toBe(
+      GALLERY_MEDIA_FALLBACK_ASPECT_RATIO,
+    );
+    expect(hasGalleryItemAspectRatio({})).toBe(false);
+    expect(hasGalleryItemAspectRatio({ width: 1200, height: 800 })).toBe(true);
   });
 
   test("sizes landscape slides below the 450 cap used for tall media", () => {

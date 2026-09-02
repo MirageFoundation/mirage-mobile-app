@@ -23,7 +23,7 @@ import {
   buildPersistedQueryNamespace,
   buildPersistedQueryStorageKey,
   getHydratablePersistedQueryClient,
-  isLaunchCriticalFeedQuery,
+  isLaunchPersistedQuery,
   PERSISTED_QUERY_BUSTER,
   PERSISTED_QUERY_MAX_AGE_MS,
   preparePersistedQueryClient,
@@ -178,7 +178,7 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
             query.state.status === "success" &&
-            isLaunchCriticalFeedQuery(query.queryKey),
+            isLaunchPersistedQuery(query.queryKey),
         },
       }}
       onSuccess={addPersistedCacheRestoredBreadcrumb}

@@ -17,9 +17,14 @@ import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
 /**
  * Aspect-ratio state for the media frame. Prefers the LRU cache, then
  * server-provided dimensions, then detected sizes reported via
- * `updateMediaAspectRatioFromSize` (poster/image loads, video tracks).
+ * `updateMediaAspectRatioFromSize` outside feed cards. Media without dimensions
+ * keeps its reserved fallback frame so decoding cannot resize a mounted list
+ * row; current upload clients include dimensions for an exact frame.
  */
-export function useMediaAspectRatio(media: ResolvedMedia | undefined) {
+export function useMediaAspectRatio(
+  media: ResolvedMedia | undefined,
+  { preserveFallback = false }: { preserveFallback?: boolean } = {},
+) {
   const resolvedMediaUri = media?.uri;
   const aspectRatioLockedRef = useRef(false);
   const cachedAspectRatio = resolvedMediaUri
@@ -46,10 +51,11 @@ export function useMediaAspectRatio(media: ResolvedMedia | undefined) {
     media?.aspectRatio ||
     (media?.width && media?.height)
   );
+  const shouldKeepFallbackAspectRatio = preserveFallback && !hasServerAspectRatio;
 
   const updateMediaAspectRatioFromSize = useCallback(
     (width?: number, height?: number) => {
-      if (hasServerAspectRatio) return;
+      if (hasServerAspectRatio || shouldKeepFallbackAspectRatio) return;
       if (!width || !height) return;
       const ratio = width / height;
       if (!Number.isFinite(ratio) || ratio <= 0) return;
@@ -62,7 +68,7 @@ export function useMediaAspectRatio(media: ResolvedMedia | undefined) {
       }
       aspectRatioLockedRef.current = true;
     },
-    [hasServerAspectRatio, resolvedMediaUri],
+    [hasServerAspectRatio, resolvedMediaUri, shouldKeepFallbackAspectRatio],
   );
 
   return { effectiveAspectRatio, updateMediaAspectRatioFromSize };
