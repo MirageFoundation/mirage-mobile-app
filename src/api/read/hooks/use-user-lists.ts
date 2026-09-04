@@ -8,6 +8,9 @@ import {
 } from "../endpoints/users";
 import { useAuthStore } from "@/src/stores";
 
+/** Follow/agent/community lists can change on another device; keep them fresh. */
+export const USER_FOLLOWED_STALE_TIME_MS = 60 * 1000;
+
 /**
  * Get current user's followed users, topics, and enabled agents
  * Only enabled when wallet is connected
@@ -26,7 +29,7 @@ export function useUserFollowed() {
       isLoggedIn &&
       !isInitializing &&
       !isBootstrapping,
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    staleTime: USER_FOLLOWED_STALE_TIME_MS,
     gcTime: 1000 * 60 * 60 * 24, // 24 hours
   });
 }
@@ -39,7 +42,7 @@ export function useUserFollowedByAddress(address: string | undefined | null) {
     queryKey: queryKeys.userFollowed(address!),
     queryFn: () => getUserFollowed({ address: address! }),
     enabled: !!address,
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    staleTime: USER_FOLLOWED_STALE_TIME_MS,
   });
 }
 

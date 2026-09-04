@@ -45,6 +45,7 @@ import {
   useContentModerationStore,
   useFeedScrollStore,
   usePreferencesStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
@@ -238,13 +239,14 @@ export function useUserProfileController(
   const headerHeight = headerInset + PROFILE_HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
   const minimumContentHeight = windowHeight + stickyThreshold + 1;
-  const profileData = useMemo(() => ({
+  useTimeTickStore((state) => state.tick);
+  const profileData = {
     balance: formatMirageBalance(userStatus?.balance ?? 0),
     reserve: formatMirageBalance(userStatus?.reserve_funds ?? 0),
     accountAgeDays: calculateAccountAgeDays(
       profile?.created_at ?? userStatus?.profile_registered_at,
     ),
-  }), [profile, userStatus]);
+  };
   const userProfileFeedContext = useMemo(() => `profile:user:${id}:posts`, [id]);
   const setFeedScrolling = useCallback((scrolling: boolean) => {
     useFeedScrollStore.getState().setContextScrolling(userProfileFeedContext, scrolling);

@@ -42,13 +42,11 @@ export function getOwnProfileActionRoute(
   return identity ? `/user-following/${identity}` : null;
 }
 
-export function calculateAccountAgeDays(
-  createdAt: number | null | undefined,
-  nowSeconds = Date.now() / 1000,
-): number {
-  if (!createdAt) return 0;
-  return (nowSeconds - createdAt) / (60 * 60 * 24);
-}
+export {
+  calculateAccountAgeDays,
+  formatAccountAgeLong,
+  formatAccountAgeShort,
+} from "@/src/utils/account-age";
 
 export function formatMirageBalance(umirage: number): number {
   return Math.floor(umirage / 1_000_000);

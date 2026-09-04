@@ -12,6 +12,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTimeTickStore } from "@/src/stores";
+import { calculateAccountAgeDays, formatAccountAgeLong } from "@/src/utils/account-age";
 import { TIER_NAMES } from "@/src/utils/tiers";
 
 import {
@@ -47,24 +49,6 @@ const formatWeight = (weight: number): string => {
 
 const formatSimilarity = (similarity: number): string => {
   return `${(similarity * 100).toFixed(0)}%`;
-};
-
-const formatAccountAge = (days: number): string => {
-  if (days < 1) {
-    const hours = Math.floor(days * 24);
-    if (hours < 1) return "< 1 hour";
-    return `${hours} hour${hours !== 1 ? "s" : ""}`;
-  }
-  if (days < 30) {
-    const d = Math.floor(days);
-    return `${d} day${d !== 1 ? "s" : ""}`;
-  }
-  if (days < 365) {
-    const months = Math.floor(days / 30);
-    return `${months} month${months !== 1 ? "s" : ""}`;
-  }
-  const years = Math.floor(days / 365);
-  return `${years} year${years !== 1 ? "s" : ""}`;
 };
 
 const formatBalance = (umirage: number): string => {
@@ -422,6 +406,7 @@ function ProfileDetailsSection({
   isLoading: boolean;
 }) {
   const { theme } = useUnistyles();
+  useTimeTickStore((state) => state.tick);
 
   if (isLoading) {
     return (
@@ -442,9 +427,7 @@ function ProfileDetailsSection({
   if (!profile && !userStatus) return null;
 
   const createdAt = profile?.created_at ?? userStatus?.profile_registered_at;
-  const accountAgeDays = createdAt
-    ? (Date.now() / 1000 - createdAt) / (60 * 60 * 24)
-    : 0;
+  const accountAgeDays = calculateAccountAgeDays(createdAt);
   const tierName =
     TIER_NAMES[userStatus?.user_level ?? profile?.level ?? 0] ?? "Free";
   const balance = userStatus?.balance ?? 0;
@@ -484,7 +467,7 @@ function ProfileDetailsSection({
   if (accountAgeDays > 0) {
     details.push({
       label: "Account Age",
-      value: formatAccountAge(accountAgeDays),
+      value: formatAccountAgeLong(accountAgeDays),
       icon: "time-outline",
     });
   }

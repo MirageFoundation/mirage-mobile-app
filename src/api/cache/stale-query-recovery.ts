@@ -60,7 +60,12 @@ export function isAllowlistedRecoveryQuery(
   if (family !== "user") return false;
 
   const userFamily = queryKey[3];
-  if (userFamily === "status" || userFamily === "profile") {
+  if (
+    userFamily === "status" ||
+    userFamily === "profile" ||
+    userFamily === "followed" ||
+    userFamily === "blocked"
+  ) {
     return viewer !== "anonymous" && queryKey[4] === viewer;
   }
 

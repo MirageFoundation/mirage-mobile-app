@@ -20,6 +20,7 @@ import {
   useContentModerationStore,
   useFeedScrollStore,
   usePreferencesStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
@@ -175,13 +176,14 @@ export function useProfileController(headerInset: number, windowHeight: number) 
   const headerHeight = headerInset + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
   const minimumContentHeight = windowHeight + stickyThreshold + 1;
-  const profileData = useMemo(() => ({
+  useTimeTickStore((state) => state.tick);
+  const profileData = {
     balance: formatMirageBalance(userStatus?.balance ?? 0),
     reserve: formatMirageBalance(userStatus?.reserve_funds ?? 0),
     accountAgeDays: calculateAccountAgeDays(
       profile?.created_at ?? userStatus?.profile_registered_at,
     ),
-  }), [profile, userStatus]);
+  };
 
   const setFeedScrolling = useCallback((scrolling: boolean) => {
     useFeedScrollStore.getState().setContextScrolling(PROFILE_POSTS_FEED_CONTEXT, scrolling);

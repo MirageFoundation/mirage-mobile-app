@@ -128,13 +128,15 @@ describe("stale query recovery transitions", () => {
 describe("stale query recovery selection", () => {
   const context = { serverIdentity: SERVER, viewerAddress: VIEWER };
 
-  test("allowlists current-viewer posts, comments, detail, inbox, profile, and search", () => {
+  test("allowlists current-viewer posts, comments, detail, inbox, profile, follows, and search", () => {
     const keys = [
       [...root, "posts", ...viewer, {}],
       [...root, "comments", ...viewer, "post-1"],
       [...root, "inbox", VIEWER, "infinite", {}],
       [...root, "user", "status", VIEWER],
       [...root, "user", "profile", VIEWER],
+      [...root, "user", "followed", VIEWER],
+      [...root, "user", "blocked", VIEWER],
       [...root, "user", "posts", "0xowner", ...viewer, {}],
       [...root, "search", ...viewer, "mirage", undefined, 20, undefined],
     ];

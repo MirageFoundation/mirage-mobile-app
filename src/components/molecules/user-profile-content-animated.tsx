@@ -15,40 +15,9 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { formatAccountAgeShort } from "@/src/utils/account-age";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
-
-const formatAccountAge = (days: number): string => {
-  const totalMinutes = days * 24 * 60;
-  const totalHours = days * 24;
-
-  if (totalMinutes < 1) {
-    return "-";
-  }
-
-  if (totalHours < 1) {
-    const minutes = Math.floor(totalMinutes);
-    return `${minutes}min`;
-  }
-
-  if (days < 1) {
-    const hours = Math.floor(totalHours);
-    return `${hours}hr`;
-  }
-
-  if (days < 30) {
-    const d = Math.floor(days);
-    return `${d}d`;
-  }
-
-  if (days < 365) {
-    const months = Math.floor(days / 30);
-    return `${months}mo`;
-  }
-
-  const years = Math.floor(days / 365);
-  return `${years}yr`;
-};
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000) {
@@ -312,7 +281,7 @@ export const UserProfileContentAnimated = memo(
                   <View style={styles.statSkeleton} />
                 ) : (
                   <Text size="lg" weight="bold" style={styles.whiteText}>
-                    {formatAccountAge(accountAgeDays)}
+                    {formatAccountAgeShort(accountAgeDays)}
                   </Text>
                 )}
                 <Text size="xs" style={styles.statLabel}>
