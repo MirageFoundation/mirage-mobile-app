@@ -66,3 +66,19 @@ export function shouldAutoFillFollowingFeed({
     !isFetchingNextPage
   );
 }
+
+export function shouldShowNewPostsBanner(
+  hasNewPosts: boolean,
+  isScreenFocused: boolean,
+): boolean {
+  return hasNewPosts && isScreenFocused;
+}
+
+export function createChainedTaskQueue() {
+  let inFlight: Promise<unknown> = Promise.resolve();
+  return function enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = inFlight.catch(() => undefined).then(task);
+    inFlight = run;
+    return run;
+  };
+}

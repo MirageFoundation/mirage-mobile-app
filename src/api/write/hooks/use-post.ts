@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getPosts } from "@/src/api/read/endpoints/posts";
+import { invalidateRewardSummaryForAction } from "@/src/api/cache/reward-summary-cache";
 import { removePostAliasesFromData } from "@/src/api/cache/remove-post-aliases";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {
@@ -1070,6 +1071,8 @@ export function usePost(options: UsePostOptions = {}) {
         queryKey: queryKeys.topicsRoot(),
         refetchType: "inactive",
       });
+
+      void invalidateRewardSummaryForAction(queryClient, address, "post");
     },
     onError: (error, input) => {
       Sentry.captureException(error, {
@@ -1196,6 +1199,7 @@ export function useComment(options: UsePostOptions = {}) {
         is_reply: !!input.rootPostId && input.rootPostId !== input.parentId,
         has_media: (input.media?.length ?? 0) > 0,
       });
+      void invalidateRewardSummaryForAction(queryClient, address, "comment");
     },
     onSettled: () => {
       queryClient.invalidateQueries({

@@ -3,11 +3,13 @@ import { describe, expect, test } from "bun:test";
 
 import {
   FOLLOWING_AUTO_FILL_MAX_PAGES,
+  createChainedTaskQueue,
   getHomeFeedContext,
   getLatestPostTimestamp,
   selectHomeFeedTab,
   shouldAutoFillFollowingFeed,
   shouldPrefetchNextPage,
+  shouldShowNewPostsBanner,
 } from "../src/pages/home/home-tabbed-feed-state";
 
 describe("home tabbed feed state", () => {
@@ -56,5 +58,41 @@ describe("home tabbed feed state", () => {
       ...ready,
       isFetchingNextPage: true,
     })).toBe(false);
+  });
+
+  test("hides the New Posts banner unless Home or Following is focused", () => {
+    expect(shouldShowNewPostsBanner(true, true)).toBe(true);
+    expect(shouldShowNewPostsBanner(true, false)).toBe(false);
+    expect(shouldShowNewPostsBanner(false, true)).toBe(false);
+  });
+
+  test("chains a New Posts refresh behind an in-flight pull-refresh", async () => {
+    const enqueue = createChainedTaskQueue();
+    const events: string[] = [];
+    let secondSawFirstRunning = false;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+
+    const first = enqueue(async () => {
+      events.push("first-start");
+      markFirstStarted();
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      events.push("first-end");
+    });
+    const second = enqueue(async () => {
+      secondSawFirstRunning = events.includes("first-start") && !events.includes("first-end");
+      events.push("second");
+    });
+
+    await firstStarted;
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(secondSawFirstRunning).toBe(false);
+    expect(events).toEqual(["first-start", "first-end", "second"]);
   });
 });

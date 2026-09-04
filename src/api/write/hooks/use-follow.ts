@@ -2,6 +2,7 @@
  * Follow/Unfollow Mutation Hooks
  */
 
+import { invalidateRewardSummaryForAction } from "@/src/api/cache/reward-summary-cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { toggleFollowedTopics } from "@/src/domain/topics";
 import { useWallet } from "@/src/hooks/use-wallet";
@@ -113,6 +114,7 @@ export function useFollowUser(options: UseFollowOptions = {}) {
       }
       // Following changes feed composition; keep home stale and refresh active Following feeds.
       markPostsStaleAfterFollow(queryClient);
+      void invalidateRewardSummaryForAction(queryClient, address, "follow");
     },
   });
 }
@@ -167,6 +169,7 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
       }
       // Topic follows change feed composition; keep home stale and refresh active Following feeds.
       markPostsStaleAfterFollow(queryClient);
+      void invalidateRewardSummaryForAction(queryClient, address, "follow");
     },
   });
 }
@@ -351,6 +354,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
 
       if (!isCurrentlyFollowing) {
         trackEvent("topic_followed", { topic });
+        void invalidateRewardSummaryForAction(queryClient, address, "follow");
       }
 
       // Delay the query invalidation to give the indexer time to process
@@ -497,6 +501,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
 
       if (!isCurrentlyFollowing) {
         trackEvent("user_followed");
+        void invalidateRewardSummaryForAction(queryClient, address, "follow");
       }
 
       // Delay the query invalidation to give the indexer time to process

@@ -43,6 +43,7 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { PostActionOverlays } from "../post/post-action-overlays";
 import { usePostActionController } from "../post/use-post-action-controller";
 import { styles } from "./following-styles";
+import { shouldShowNewPostsBanner } from "./home-tabbed-feed-state";
 
 export function FollowingScreen() {
   const insets = useSafeAreaInsets();
@@ -377,7 +378,7 @@ export function FollowingScreen() {
       />
 
       <NewPostsButton
-        visible={hasNewPosts && isFocused}
+        visible={shouldShowNewPostsBanner(hasNewPosts, isFocused)}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 44}
         avatars={newPostAvatars}

@@ -20,7 +20,6 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -262,15 +261,6 @@ export function QuestsSummaryCard() {
     triggerHaptic("light");
     router.push("/quests");
   }, [router]);
-
-  const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
-
-  useEffect(() => {
-    if (!questsCardExpanded) return;
-
-    const timeout = setTimeout(() => triggerScrollToTop(), 100);
-    return () => clearTimeout(timeout);
-  }, [questsCardExpanded, triggerScrollToTop]);
 
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");

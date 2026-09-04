@@ -38,6 +38,7 @@ import {
   getHomeFeedType,
   HOME_FEED_OPTIONS,
 } from "./home-screen-state";
+import { shouldShowNewPostsBanner } from "./home-tabbed-feed-state";
 
 type NewPostAvatar = { userId: string; username: string };
 
@@ -383,7 +384,7 @@ export function useHomeScreenController() {
     // Hide the banner whenever this screen isn't focused (e.g. a post detail
     // is open above the feed) so it can't render over or steal taps from
     // other screens (BUG-035).
-    hasNewPosts: hasNewPosts && isHomeFocused,
+    hasNewPosts: shouldShowNewPostsBanner(hasNewPosts, isHomeFocused),
     handleNewPostsPress,
     newPostAvatars,
     newPostCount,

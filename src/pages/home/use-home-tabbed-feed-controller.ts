@@ -21,6 +21,7 @@ import {
   fetchAndMergeInfinitePostsRefresh,
   type InfinitePostsData,
 } from "@/src/api/cache/merge-infinite-posts-refresh";
+import { invalidateRewardSummary } from "@/src/api/cache/reward-summary-cache";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
@@ -39,6 +40,7 @@ import {
 import { useFeedPostCardRuntime } from "./feed-post-card-runtime";
 import { scrollFeedListToTop, type FeedListRef } from "./feed-list-scroll";
 import {
+  createChainedTaskQueue,
   getHomeFeedContext,
   getLatestPostTimestamp,
   INITIAL_PAGE_SIZE,
@@ -118,7 +120,7 @@ export function useHomeTabbedFeedController({
   const activeListRef = useRef<FeedListRef>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const refreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
-  const refreshPromiseRef = useRef<Promise<void> | null>(null);
+  const enqueueRefresh = useMemo(() => createChainedTaskQueue(), []);
 
   const {
     clearTransformedPageCache,
@@ -250,9 +252,7 @@ export function useHomeTabbedFeedController({
       queryClient.setQueryData(queryKey, data);
       const newFirstPage = data.pages[0];
       if (currentUser?.walletAddress) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
-        });
+        void invalidateRewardSummary(queryClient, currentUser.walletAddress);
       }
       Sentry.addBreadcrumb({
         category: "home-feed",
@@ -292,20 +292,11 @@ export function useHomeTabbedFeedController({
     onRefreshingChange,
     queryClient,
   ]);
-  const handleRefresh = useCallback(async (options?: FeedRefreshOptions) => {
-    if (isRefreshingRef.current) {
-      // A refresh is already in flight. Never silently drop the request —
-      // a dropped "New Posts" banner tap used to leave the feed stale
-      // (BUG-024). Chain this refresh after the current one instead.
-      const inFlight = refreshPromiseRef.current ?? Promise.resolve();
-      const chained = inFlight.catch(() => {}).then(() => runRefresh(options));
-      refreshPromiseRef.current = chained;
-      return chained;
-    }
-    const promise = runRefresh(options);
-    refreshPromiseRef.current = promise;
-    return promise;
-  }, [runRefresh]);
+  const handleRefresh = useCallback((options?: FeedRefreshOptions) => {
+    // Never drop a concurrent pull-refresh or New Posts tap; serialize them
+    // so the latest explicit refresh still runs (BUG-012).
+    return enqueueRefresh(() => runRefresh(options));
+  }, [enqueueRefresh, runRefresh]);
   refreshRef.current = handleRefresh;
 
   const scrollToTop = useCallback((

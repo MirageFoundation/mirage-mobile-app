@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateRewardSummaryForAction } from "@/src/api/cache/reward-summary-cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useTxStatusPolling } from "@/src/api/read/hooks/use-tx-status";
@@ -72,6 +73,8 @@ export function useVote(options: UseVoteOptions = {}) {
           refetchType: "none",
         });
       }
+
+      void invalidateRewardSummaryForAction(queryClient, address, "vote");
 
       return data.tx_hash;
     },
