@@ -9,6 +9,7 @@ export type {
   PostDraft,
   PostMedia,
 } from "./types";
+export { EMPTY_POST_DRAFT, isClearedPostDraft } from "./types";
 export {
   clearContentWarningSelection,
   CONTENT_WARNING_CONFIG,

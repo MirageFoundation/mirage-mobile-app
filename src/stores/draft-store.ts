@@ -4,7 +4,7 @@ import {
  registerWalletScopedStore,
  walletScopedStorage,
 } from "./wallet-scoped-storage";
-import type { AttachmentType, PostDraft } from "@/src/domain/content";
+import { EMPTY_POST_DRAFT, type AttachmentType, type PostDraft } from "@/src/domain/content";
 
 export type { AttachmentType, Community, PostDraft } from "@/src/domain/content";
 
@@ -24,23 +24,10 @@ type DraftState = {
   removeAttachment: () => void;
 };
 
-const emptyDraft: PostDraft = {
-  community: null,
-  topic: null,
-  title: "",
-  body: "",
-  contentWarning: [],
-  mediaUris: [],
-  stickerUrls: [],
-  linkUrl: null,
-  attachmentType: null,
-  tags: [],
-};
-
 export const useDraftStore = create<DraftState>()(
   persist(
     (set) => ({
-      draft: emptyDraft,
+      draft: EMPTY_POST_DRAFT,
       hasDraft: false,
 
       updateDraft: (partial) =>
@@ -48,7 +35,7 @@ export const useDraftStore = create<DraftState>()(
           draft: { ...state.draft, ...partial },
           hasDraft: true,
         })),
-      clearDraft: () => set({ draft: emptyDraft, hasDraft: false }),
+      clearDraft: () => set({ draft: EMPTY_POST_DRAFT, hasDraft: false }),
       setAttachment: (type, uri) =>
         set((state) => {
           const mediaUris =

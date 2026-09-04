@@ -10,6 +10,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { FeedType } from "@/src/stores";
+import { getTabLabelColors } from "./tab-label-colors";
 
 export const FEED_TAB_BAR_HEIGHT = 44;
 
@@ -76,6 +77,7 @@ export const FeedTypeTabBar = ({
   animatedStyle,
 }: FeedTypeTabBarProps) => {
   const { theme } = useUnistyles();
+  const { activeColor, inactiveColor } = getTabLabelColors(theme.colors.text);
 
   const handleTabPress = useCallback(
     (index: number) => {
@@ -115,8 +117,8 @@ export const FeedTypeTabBar = ({
                 index={index}
                 scrollProgress={scrollProgress}
                 selectedIndex={selectedIndex}
-                activeColor={theme.colors.text.default}
-                inactiveColor={theme.colors.text.subtle}
+                activeColor={activeColor}
+                inactiveColor={inactiveColor}
               />
             </AnimatedPressable>
           );

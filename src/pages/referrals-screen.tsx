@@ -27,6 +27,11 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
+import {
+  buildSignupShareUrl,
+  copySignupShareUrl,
+  shareSignupShareUrl,
+} from "@/src/utils/signup-share-url";
 import { useReferralSummary } from "@/src/api/read/hooks";
 import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
@@ -203,11 +208,10 @@ export function ReferralsScreen() {
     }, [refetchUserStatus, refetchReferrals])
   );
 
-  const referralUrl = useMemo(() => {
-    if (!username) return null;
-    const base = getShareBaseUrl(shareServer);
-    return `${base}/signup?ref=${username}`;
-  }, [username, shareServer]);
+  const referralUrl = useMemo(
+    () => buildSignupShareUrl(getShareBaseUrl(shareServer), { ref: username }),
+    [username, shareServer],
+  );
 
   const handleTogglePrecheck = useCallback(async (value: boolean) => {
     setToggleLoading(true);
@@ -235,9 +239,13 @@ export function ReferralsScreen() {
   }, [linkCopied]);
 
   const handleCopyReferralLink = useCallback(async () => {
-    if (!referralUrl || !linkEnabled) return;
     try {
-      await Clipboard.setStringAsync(referralUrl);
+      const result = await copySignupShareUrl(
+        referralUrl,
+        linkEnabled,
+        Clipboard.setStringAsync,
+      );
+      if (result === "skipped") return;
       triggerHaptic("success");
       setLinkCopied(true);
     } catch (error) {
@@ -250,13 +258,16 @@ export function ReferralsScreen() {
   }, [referralUrl, linkEnabled, toast]);
 
   const handleShareReferralLink = useCallback(async () => {
-    if (!referralUrl || !linkEnabled) return;
-    try {
+    const result = await shareSignupShareUrl(referralUrl, linkEnabled, async (payload) => {
       triggerHaptic("light");
-      await Share.share({ message: referralUrl, title: "Join Mirage" });
-    } catch (error) {
-      // Share sheet dismissal also rejects on some platforms; only breadcrumb.
-      Sentry.addBreadcrumb({ category: "referral", message: "Share link failed", data: { error: String(error) }, level: "warning" });
+      await Share.share(payload);
+    });
+    if (result === "dismissed") {
+      Sentry.addBreadcrumb({
+        category: "referral",
+        message: "Share link failed",
+        level: "warning",
+      });
     }
   }, [referralUrl, linkEnabled]);
 

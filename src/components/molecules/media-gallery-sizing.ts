@@ -36,3 +36,14 @@ export function computeGalleryFrameHeight(
   }
   return Math.min(galleryWidth / aspectRatio, maxHeight);
 }
+
+export function resolveGallerySlideFrame(
+  aspectRatio: number,
+  galleryWidth: number,
+  maxHeight = GALLERY_MEDIA_MAX_HEIGHT,
+): { width: number; height: number } {
+  return {
+    width: galleryWidth,
+    height: computeGalleryFrameHeight(aspectRatio, galleryWidth, maxHeight),
+  };
+}

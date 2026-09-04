@@ -28,6 +28,7 @@ import { useAgents } from "@/src/api/read/hooks/use-agents";
 import type { Post as ApiPostType } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
+import { getTabLabelColors } from "@/src/components/molecules/tab-label-colors";
 import { Box, Icon, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 
@@ -75,16 +76,12 @@ function AnimatedTabLabel({
 }) {
   const animStyle = useAnimatedStyle(() => {
     const distance = Math.abs(animatedIndex.value - index);
-    const opacity = interpolate(distance, [0, 0.5, 1], [1, 0.6, 0.5], "clamp");
-    const scale = interpolate(distance, [0, 1], [1, 0.97], "clamp");
     const color = interpolateColor(
       distance,
       [0, 0.5],
       [activeColor, inactiveColor],
     );
     return {
-      opacity,
-      transform: [{ scale }],
       color,
       fontWeight: distance < 0.5 ? "700" : "500",
     } as any;
@@ -690,8 +687,7 @@ export function UserFollowingScreen() {
                     label={label}
                     index={index}
                     animatedIndex={animatedTabIndex}
-                    activeColor={theme.colors.text.default}
-                    inactiveColor={theme.colors.text.subtle}
+                    {...getTabLabelColors(theme.colors.text)}
                   />
                 </Pressable>
               );

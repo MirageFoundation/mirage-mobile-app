@@ -50,6 +50,7 @@ export const MediaGallery = memo(function MediaGallery({
   onRevealContent,
 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [galleryWidth, setGalleryWidth] = useState(GALLERY_WIDTH);
   const flatListRef = useRef<FlatList>(null);
   const activeIndexRef = useRef(0);
 
@@ -57,11 +58,11 @@ export const MediaGallery = memo(function MediaGallery({
 
   const getHeightForIndex = useCallback((index: number): number => {
     const item = media[index];
-    if (!item) return computeGalleryHeight(16 / 9);
+    if (!item) return computeGalleryHeight(16 / 9, galleryWidth);
     const cached = itemRatiosRef.current.get(item.uri);
-    if (cached) return computeGalleryHeight(cached);
-    return computeGalleryHeight(getGalleryItemAspectRatio(item));
-  }, [media]);
+    if (cached) return computeGalleryHeight(cached, galleryWidth);
+    return computeGalleryHeight(getGalleryItemAspectRatio(item), galleryWidth);
+  }, [galleryWidth, media]);
 
   const firstItemHeight = getHeightForIndex(0);
   const [containerHeight, setContainerHeight] = useState(firstItemHeight);
@@ -80,14 +81,14 @@ export const MediaGallery = memo(function MediaGallery({
       if (currentItem?.uri === uri) {
         if (!isPostDetail && !hasGalleryItemAspectRatio(currentItem)) return;
         itemRatiosRef.current.set(uri, ratio);
-        const newHeight = computeGalleryHeight(ratio);
+        const newHeight = computeGalleryHeight(ratio, galleryWidth);
         setContainerHeight((prev) => {
           if (Math.abs(prev - newHeight) < 1) return prev;
           return newHeight;
         });
       }
     },
-    [isPostDetail, media],
+    [galleryWidth, isPostDetail, media],
   );
 
   const updateActiveIndex = useCallback(
@@ -102,12 +103,12 @@ export const MediaGallery = memo(function MediaGallery({
       const ratio = isPostDetail || hasGalleryItemAspectRatio(item)
         ? itemRatiosRef.current.get(item.uri) ?? getGalleryItemAspectRatio(item)
         : getGalleryItemAspectRatio(item);
-      const newHeight = computeGalleryHeight(ratio);
+      const newHeight = computeGalleryHeight(ratio, galleryWidth);
       setContainerHeight((current) =>
         Math.abs(current - newHeight) < 1 ? current : newHeight,
       );
     },
-    [isPostDetail, media],
+    [galleryWidth, isPostDetail, media],
   );
 
   const onViewableItemsChanged = useCallback(
@@ -122,10 +123,10 @@ export const MediaGallery = memo(function MediaGallery({
   const handleMomentumScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       updateActiveIndex(
-        Math.round(event.nativeEvent.contentOffset.x / GALLERY_WIDTH),
+        Math.round(event.nativeEvent.contentOffset.x / galleryWidth),
       );
     },
-    [updateActiveIndex],
+    [galleryWidth, updateActiveIndex],
   );
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
@@ -134,11 +135,11 @@ export const MediaGallery = memo(function MediaGallery({
     ({ item, index }: { item: ResolvedMedia; index: number }) => {
       const isVideo = item.type === "video";
       return (
-        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: containerHeight }]}>
+        <View style={[galleryStyles.itemWrapper, { width: galleryWidth, height: containerHeight }]}>
           {isVideo ? (
             <GalleryVideoItem
               item={item}
-              width={GALLERY_WIDTH}
+              width={galleryWidth}
               height={containerHeight}
               isActive={index === activeIndex}
               screenActive={screenActive}
@@ -158,7 +159,7 @@ export const MediaGallery = memo(function MediaGallery({
           ) : (
             <GalleryImageItem
               item={item}
-              width={GALLERY_WIDTH}
+              width={galleryWidth}
               height={containerHeight}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
@@ -169,7 +170,7 @@ export const MediaGallery = memo(function MediaGallery({
         </View>
       );
     },
-    [onMediaPress, containerHeight, activeIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
+    [onMediaPress, containerHeight, activeIndex, galleryWidth, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(
@@ -178,7 +179,15 @@ export const MediaGallery = memo(function MediaGallery({
   );
 
   return (
-    <View style={[galleryStyles.galleryRoot, { height: containerHeight }]}>
+    <View
+      style={[galleryStyles.galleryRoot, { height: containerHeight }]}
+      onLayout={(event) => {
+        const width = event.nativeEvent.layout.width;
+        if (width > 0 && Math.abs(width - galleryWidth) >= 1) {
+          setGalleryWidth(width);
+        }
+      }}
+    >
       <FlatList
         ref={flatListRef}
         data={media}
@@ -191,15 +200,15 @@ export const MediaGallery = memo(function MediaGallery({
         onViewableItemsChanged={onViewableItemsChanged}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         viewabilityConfig={viewabilityConfig}
-        snapToInterval={GALLERY_WIDTH}
+        snapToInterval={galleryWidth}
         decelerationRate="fast"
-        extraData={`${activeIndex}:${containerHeight}`}
+        extraData={`${activeIndex}:${containerHeight}:${galleryWidth}`}
         initialNumToRender={2}
         maxToRenderPerBatch={2}
         windowSize={3}
         getItemLayout={(_, index) => ({
-          length: GALLERY_WIDTH,
-          offset: GALLERY_WIDTH * index,
+          length: galleryWidth,
+          offset: galleryWidth * index,
           index,
         })}
       />

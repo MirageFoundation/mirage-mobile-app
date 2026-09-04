@@ -1,22 +1,23 @@
-import { Dimensions } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
+import {
+  MEDIA_HORIZONTAL_PADDING,
+  SCREEN_WIDTH,
+} from "./post-card-media-constants";
 import {
   computeGalleryFrameHeight,
   hasGalleryItemAspectRatio,
   resolveGalleryItemAspectRatio,
 } from "./media-gallery-sizing";
 
-export { GALLERY_MEDIA_MAX_HEIGHT } from "./media-gallery-sizing";
+export { GALLERY_MEDIA_MAX_HEIGHT, resolveGallerySlideFrame } from "./media-gallery-sizing";
 
 /**
  * Shared sizing, caches, and styles for the gallery container and its item
  * components (`gallery-video-item.tsx`, `gallery-image-item.tsx`).
  */
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const MEDIA_HORIZONTAL_PADDING = 32;
 export const GALLERY_WIDTH = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
 
 export const GALLERY_ASPECT_RATIO_CACHE = new BoundedLruMap<string, number>(256);
@@ -30,8 +31,11 @@ export function getGalleryItemAspectRatio(item: ResolvedMedia): number {
   return resolveGalleryItemAspectRatio(item);
 }
 
-export function computeGalleryHeight(aspectRatio: number): number {
-  return computeGalleryFrameHeight(aspectRatio, GALLERY_WIDTH);
+export function computeGalleryHeight(
+  aspectRatio: number,
+  galleryWidth = GALLERY_WIDTH,
+): number {
+  return computeGalleryFrameHeight(aspectRatio, galleryWidth);
 }
 
 export const galleryStyles = StyleSheet.create((theme) => ({
@@ -46,6 +50,8 @@ export const galleryStyles = StyleSheet.create((theme) => ({
   itemContainer: {
     overflow: "hidden",
     borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
   },
   itemMedia: {
     borderRadius: theme.radius.md,

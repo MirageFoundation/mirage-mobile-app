@@ -9,7 +9,7 @@ mock.module("@sentry/react-native", () => ({
   addBreadcrumb: () => undefined,
 }));
 
-const { isAppRoute } = await import("../src/navigation/route-map");
+const { isAppRoute, resolveMirageUrl } = await import("../src/navigation/route-map");
 
 describe("isAppRoute segment-boundary matching", () => {
   const accepted = [
@@ -74,5 +74,39 @@ describe("isAppRoute segment-boundary matching", () => {
 
   test.each(accepted)("isAppRoute(%s) => %s", (path, expected) => {
     expect(isAppRoute(path)).toBe(expected);
+  });
+});
+
+describe("shared profile and referral deep links", () => {
+  test("profile share URLs resolve to the target user, not self", () => {
+    expect(resolveMirageUrl("https://mirage.talk/u/alice")).toEqual({
+      type: "user",
+      hostname: "mirage.talk",
+      route: "/user/alice",
+      requiresAuth: true,
+      resourceId: "alice",
+    });
+    expect(resolveMirageUrl("https://mirage.talk/user/bob")).toMatchObject({
+      type: "user",
+      route: "/user/bob",
+      resourceId: "bob",
+    });
+    expect(resolveMirageUrl("mirage://u/carol")).toMatchObject({
+      type: "user",
+      route: "/user/carol",
+      resourceId: "carol",
+    });
+    expect(resolveMirageUrl("https://mirage.talk/u/alice")?.route).not.toContain("__SELF__");
+    expect(resolveMirageUrl("https://mirage.talk/follows")?.route).toBe("/user-following/__SELF__");
+  });
+
+  test("referral signup URLs keep the referrer identity", () => {
+    expect(resolveMirageUrl("https://mirage.talk/signup?ref=alice")).toEqual({
+      type: "signup",
+      hostname: "mirage.talk",
+      route: "/username?ref=alice",
+      requiresAuth: false,
+      resourceId: "alice",
+    });
   });
 });

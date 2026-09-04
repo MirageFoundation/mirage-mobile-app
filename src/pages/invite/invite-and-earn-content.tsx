@@ -36,6 +36,11 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
+import {
+  buildSignupShareUrl,
+  copySignupShareUrl,
+  shareSignupShareUrl,
+} from "@/src/utils/signup-share-url";
 import { useInviteCodes } from "@/src/api/read/hooks";
 import type { InviteCode } from "@/src/api/types";
 
@@ -274,9 +279,7 @@ onDismiss: () => void;
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const shareUrl = code
-    ? `${getShareBaseUrl(shareServer)}/signup?invite=${code}`
-    : "";
+  const shareUrl = buildSignupShareUrl(getShareBaseUrl(shareServer), { invite: code }) ?? "";
 
   const handleCopyCode = useCallback(async () => {
     if (!code) return;
@@ -295,11 +298,9 @@ onDismiss: () => void;
   }, [code, toast]);
 
   const handleCopyLink = useCallback(async () => {
-    // Never copy an empty string and pretend it worked (BUG-028): without a
-    // code there is no link.
-    if (!shareUrl) return;
     try {
-      await Clipboard.setStringAsync(shareUrl);
+      const result = await copySignupShareUrl(shareUrl, true, Clipboard.setStringAsync);
+      if (result === "skipped") return;
       triggerHaptic("success");
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -313,17 +314,20 @@ onDismiss: () => void;
   }, [shareUrl, toast]);
 
   const handleNativeShare = useCallback(async () => {
-    if (!shareUrl) return;
-    try {
+    const result = await shareSignupShareUrl(shareUrl, true, async (payload) => {
       triggerHaptic("light");
-      await Share.share({
-        message: shareUrl,
-        title: "Join Mirage",
-      });
+      await Share.share(payload);
+    });
+    if (result === "shared") {
       sheetRef.current?.dismiss();
-    } catch (error) {
-      // Share sheet dismissal also rejects on some platforms; only breadcrumb.
-      Sentry.addBreadcrumb({ category: "invite", message: "Native share failed", data: { error: String(error) }, level: "warning" });
+      return;
+    }
+    if (result === "dismissed") {
+      Sentry.addBreadcrumb({
+        category: "invite",
+        message: "Native share failed",
+        level: "warning",
+      });
     }
   }, [shareUrl, sheetRef]);
 

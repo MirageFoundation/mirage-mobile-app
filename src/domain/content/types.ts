@@ -28,6 +28,34 @@ export type PostDraft = {
   tags: string[];
 };
 
+export const EMPTY_POST_DRAFT: PostDraft = {
+  community: null,
+  topic: null,
+  title: "",
+  body: "",
+  contentWarning: [],
+  mediaUris: [],
+  stickerUrls: [],
+  linkUrl: null,
+  attachmentType: null,
+  tags: [],
+};
+
+export function isClearedPostDraft(draft: PostDraft): boolean {
+  return (
+    draft.community === null &&
+    draft.topic === null &&
+    draft.title === "" &&
+    draft.body === "" &&
+    draft.contentWarning.length === 0 &&
+    draft.mediaUris.length === 0 &&
+    (draft.stickerUrls?.length ?? 0) === 0 &&
+    draft.linkUrl === null &&
+    draft.attachmentType === null &&
+    draft.tags.length === 0
+  );
+}
+
 export type PostAuthor = {
   id: string;
   username: string;

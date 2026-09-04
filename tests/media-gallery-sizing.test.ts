@@ -7,6 +7,7 @@ import {
   computeGalleryFrameHeight,
   hasGalleryItemAspectRatio,
   resolveGalleryItemAspectRatio,
+  resolveGallerySlideFrame,
 } from "../src/components/molecules/media-gallery-sizing";
 
 describe("media gallery sizing", () => {
@@ -33,5 +34,15 @@ describe("media gallery sizing", () => {
   test("sizes landscape slides below the 450 cap used for tall media", () => {
     expect(computeGalleryFrameHeight(2, 360)).toBe(180);
     expect(computeGalleryFrameHeight(0.5, 360)).toBe(GALLERY_MEDIA_MAX_HEIGHT);
+  });
+
+  test("keeps mixed portrait and landscape slides on the same gallery width", () => {
+    const galleryWidth = 360;
+    const landscape = resolveGallerySlideFrame(16 / 9, galleryWidth);
+    const portrait = resolveGallerySlideFrame(4 / 5, galleryWidth);
+    expect(landscape.width).toBe(galleryWidth);
+    expect(portrait.width).toBe(galleryWidth);
+    expect(landscape.height).toBeLessThan(portrait.height);
+    expect(portrait.height).toBeLessThanOrEqual(GALLERY_MEDIA_MAX_HEIGHT);
   });
 });

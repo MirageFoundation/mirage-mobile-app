@@ -23,6 +23,10 @@ const readyLoggedIn = {
 
 describe("startup route policy", () => {
   test("always anchors a cold-start target on Home", () => {
+    expect(resolveInitialHomeAnchor("/user/alice")).toEqual({
+      route: "/",
+      pendingRoute: "/user/alice",
+    });
     expect(resolveInitialHomeAnchor("/post/123?highlight=456")).toEqual({
       route: "/",
       pendingRoute: "/post/123?highlight=456",
@@ -85,5 +89,10 @@ describe("startup route policy", () => {
   test("navigates tabs and pushes stack screens after all startup gates", () => {
     expect(resolveStartupRouteAction("/inbox", readyLoggedIn)).toBe("navigate_tab");
     expect(resolveStartupRouteAction("/topic/mirage", readyLoggedIn)).toBe("push_screen");
+    expect(resolveStartupRouteAction("/user/alice", readyLoggedIn)).toBe("push_screen");
+    expect(resolveStartupRouteAction("/username?ref=alice", {
+      ...readyLoggedIn,
+      isLoggedIn: false,
+    })).toBe("push_screen");
   });
 });

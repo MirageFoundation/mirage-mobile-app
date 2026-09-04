@@ -190,7 +190,7 @@ export function mapMiragePathToRoute(
       };
     }
 
-    if (prefix === "u") {
+    if (prefix === "u" || prefix === "user") {
       return {
         type: "user",
         hostname: "",

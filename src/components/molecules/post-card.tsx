@@ -32,6 +32,7 @@ import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
 import { PostCardMedia } from "./post-card-media";
 import type { Post } from "./post-card-types";
+import { shouldTriggerPostCardPressHaptic } from "./post-card-press";
 import {
   isSuccessfulOptimisticPost,
   resolvePostContent,
@@ -179,8 +180,8 @@ const PostCardView = memo(function PostCardView({
 
   const handlePress = useCallback(() => {
     // No haptic when the card has no press action (e.g. post detail):
-    // vibrating on inert body text reads as a broken tap (BUG-034).
-    if (!onPress) return;
+    // vibrating on inert body text reads as a broken tap (BUG-020).
+    if (!shouldTriggerPostCardPressHaptic(onPress)) return;
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
     if (containerRef.current) {
