@@ -4,6 +4,7 @@ import { extractRedditEmbedMeta, getRedditEmbedUrl } from "./reddit-embed-meta";
 import {
   selectHighestQualityMp4Variant,
   selectRedditPreviewVideoUrl,
+  selectRedditSourceVideoUrl,
 } from "./link-meta-video-selection";
 
 export type LinkMeta = {
@@ -354,8 +355,12 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     const redditVideo = post.secure_media?.reddit_video ?? post.media?.reddit_video;
     let audioUrl: string | null = null;
     let audioUrls: string[] = [];
+    let redditFallbackUrl: string | null = null;
     if (redditVideo) {
-      videoUrl = redditVideo.fallback_url ?? redditVideo.dash_url ?? redditVideo.hls_url ?? null;
+      videoUrl = selectRedditSourceVideoUrl(redditVideo);
+      redditFallbackUrl = typeof redditVideo.fallback_url === "string"
+        ? redditVideo.fallback_url.replace(/&amp;/g, "&")
+        : null;
       if (videoUrl) {
         try {
           const vUrl = new URL(videoUrl);
@@ -380,7 +385,10 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       const crosspost = post.crosspost_parent_list[0];
       const crossVideo = crosspost.secure_media?.reddit_video ?? crosspost.media?.reddit_video;
       if (crossVideo) {
-        videoUrl = crossVideo.fallback_url ?? crossVideo.dash_url ?? crossVideo.hls_url ?? null;
+        videoUrl = selectRedditSourceVideoUrl(crossVideo);
+        redditFallbackUrl = typeof crossVideo.fallback_url === "string"
+          ? crossVideo.fallback_url.replace(/&amp;/g, "&")
+          : redditFallbackUrl;
         if (videoUrl && audioUrls.length === 0) {
           try {
             const vUrl = new URL(videoUrl);
@@ -459,6 +467,13 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     if (videoUrl && !videos.includes(videoUrl)) {
       videos.unshift(videoUrl);
+    }
+    if (
+      redditFallbackUrl &&
+      redditFallbackUrl !== videoUrl &&
+      !videos.includes(redditFallbackUrl)
+    ) {
+      videos.push(redditFallbackUrl);
     }
 
     Sentry.addBreadcrumb({

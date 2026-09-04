@@ -32,7 +32,7 @@ const PLAN_ICONS: Record<string, string> = {
 const BALANCE_INFO =
   "Spendable wallet balance in MIRAGE.\nThis is what a subscription will be paid with.";
 const RESERVE_INFO =
-  "Escrowed reserve in MIRAGE used for relayed gas and subscriptions.\nHeld internally by the blockchain and used to process all transactions while subscribed.\nNot directly spendable and will get burned if not used.";
+  "Locked MIRAGE held as subscription escrow.\nIt is set when you subscribe or renew, and burned when the subscription ends.\nNot spendable from your wallet.";
 
 type InfoPopupProps = {
   visible: boolean;

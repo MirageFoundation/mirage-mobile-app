@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   selectHighestQualityMp4Variant,
   selectRedditPreviewVideoUrl,
+  selectRedditSourceVideoUrl,
 } from "../src/utils/link-meta-video-selection";
 
 describe("link metadata video selection", () => {
@@ -47,5 +48,44 @@ describe("link metadata video selection", () => {
     expect(selectRedditPreviewVideoUrl({
       fallback_url: "https://v.redd.it/preview/DASH_480.mp4",
     })).toBe("https://v.redd.it/preview/DASH_480.mp4");
+  });
+});
+
+describe("Reddit source video selection", () => {
+  test("upgrades a compressed DASH fallback to the reported source height", () => {
+    expect(selectRedditSourceVideoUrl({
+      fallback_url: "https://v.redd.it/abc/DASH_96.mp4?source=fallback",
+      width: 1920,
+      height: 1080,
+    })).toBe("https://v.redd.it/abc/DASH_1080.mp4?source=fallback");
+  });
+
+  test("uses the shorter side so portrait 1080p maps to DASH_1080", () => {
+    expect(selectRedditSourceVideoUrl({
+      fallback_url: "https://v.redd.it/abc/DASH_240.mp4?source=fallback",
+      width: 1080,
+      height: 1920,
+    })).toBe("https://v.redd.it/abc/DASH_1080.mp4?source=fallback");
+  });
+
+  test("does not downgrade a fallback that already matches or exceeds the source", () => {
+    expect(selectRedditSourceVideoUrl({
+      fallback_url: "https://v.redd.it/abc/DASH_720.mp4?source=fallback",
+      width: 1280,
+      height: 720,
+    })).toBe("https://v.redd.it/abc/DASH_720.mp4?source=fallback");
+  });
+
+  test("keeps the original fallback when dimensions are missing", () => {
+    expect(selectRedditSourceVideoUrl({
+      fallback_url: "https://v.redd.it/abc/DASH_96.mp4?source=fallback",
+    })).toBe("https://v.redd.it/abc/DASH_96.mp4?source=fallback");
+  });
+
+  test("falls back to dash then hls when fallback_url is absent", () => {
+    expect(selectRedditSourceVideoUrl({
+      dash_url: "https://v.redd.it/abc/DASHPlaylist.mpd?a=1&amp;b=2",
+      hls_url: "https://v.redd.it/abc/HLSPlaylist.m3u8",
+    })).toBe("https://v.redd.it/abc/DASHPlaylist.mpd?a=1&b=2");
   });
 });
