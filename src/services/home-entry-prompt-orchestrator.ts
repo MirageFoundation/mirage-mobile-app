@@ -1,5 +1,7 @@
 export const HAS_SEEN_ADULT_PROMPT_DEFAULT = false;
 
+export const MODERATION_REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const HOME_ENTRY_PROMPT_ORDER = [
   "adult",
   "moderation",
@@ -39,6 +41,23 @@ export function resolvePersistedHasSeenAdultPrompt(
   return typeof persistedValue === "boolean"
     ? persistedValue
     : HAS_SEEN_ADULT_PROMPT_DEFAULT;
+}
+
+export function normalizeReminderUserKey(userId: string): string {
+  return userId.trim().toLowerCase();
+}
+
+export function selectModerationReminderState(
+  userId: string,
+  understoodByUser: Record<string, boolean>,
+  snoozedUntilByUser: Record<string, number>,
+): { understood: boolean; snoozedUntil: number } {
+  const key = normalizeReminderUserKey(userId);
+  if (!key) return { understood: false, snoozedUntil: 0 };
+  return {
+    understood: understoodByUser[key] === true,
+    snoozedUntil: snoozedUntilByUser[key] ?? 0,
+  };
 }
 
 export function isHomeEntrySurfaceReady(state: HomeEntryPromptState): boolean {

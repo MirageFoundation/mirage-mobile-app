@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { Platform } from "react-native";
 
 import { LaunchRouteOrchestrator } from "@/src/navigation/launch-route-orchestrator";
+import { POST_DETAIL_STACK_GESTURE_OPTIONS } from "@/src/navigation/post-detail-route-policy";
 
 /**
  * The single app Stack. The root layout only mounts providers around a Slot;
@@ -33,12 +34,14 @@ export default function AppStackLayout() {
         options={{
           animation: "fade",
           animationDuration: 250,
+          ...POST_DETAIL_STACK_GESTURE_OPTIONS,
         }}
       />
       <Stack.Screen
         name="p/[id]"
         options={{
           animation: "none",
+          ...POST_DETAIL_STACK_GESTURE_OPTIONS,
         }}
       />
       <Stack.Screen

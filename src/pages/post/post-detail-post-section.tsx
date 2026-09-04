@@ -9,6 +9,10 @@ import { Text } from "@/src/components/ui/primitives";
 import { isTopicFollowed } from "@/src/domain/topics";
 import { useFollowHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
+import {
+  POST_DETAIL_HOME_ROUTE,
+  resolvePostDetailExitAction,
+} from "@/src/navigation/post-detail-route-policy";
 import { getShareBaseUrl } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePostDetailActionStateStore } from "@/src/stores/post-detail-action-state-store";
@@ -177,11 +181,11 @@ export function PostDetailPostSection({
   }, [followedTopics, handleFollowTopicViaQueue, post?.topic, topicFollowOverride]);
 
   const handleHidePost = useCallback(() => {
-    if (router.canGoBack()) {
+    if (resolvePostDetailExitAction(router.canGoBack()) === "back") {
       router.back();
       return;
     }
-    router.replace("/");
+    router.replace(POST_DETAIL_HOME_ROUTE);
   }, [router]);
 
   if (!post) {

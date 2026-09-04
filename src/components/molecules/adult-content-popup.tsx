@@ -6,8 +6,9 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { useCallback, useEffect, useRef } from "react";
+import { BackHandler, Platform, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type AdultContentPopupProps = {
@@ -24,24 +25,30 @@ export const AdultContentPopup = ({
   onGoToSettings,
 }: AdultContentPopupProps) => {
   const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const settledRef = useRef(false);
   const isAndroid = Platform.OS === "android";
+  const bottomPadding = Math.max(insets.bottom, 24);
 
   useEffect(() => {
-    if (visible) {
-      const timer = setTimeout(() => {
-        bottomSheetRef.current?.present();
-      }, isMounted ? 0 : 500);
-      return () => clearTimeout(timer);
-    } else {
+    if (!visible) {
+      settledRef.current = false;
       bottomSheetRef.current?.dismiss();
+      return;
     }
-  }, [visible, isMounted]);
+    settledRef.current = false;
+    const frame = requestAnimationFrame(() => {
+      bottomSheetRef.current?.present();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [visible]);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    if (!visible) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => subscription.remove();
+  }, [visible]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -50,38 +57,47 @@ export const AdultContentPopup = ({
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.6}
-        pressBehavior={isAndroid ? "close" : "none"}
+        pressBehavior="none"
       />
     ),
-    [isAndroid]
+    [],
   );
+
+  const handleSheetDismiss = useCallback(() => {
+    if (settledRef.current || !visible) return;
+    bottomSheetRef.current?.present();
+  }, [visible]);
+
+  const complete = useCallback((action: () => void) => {
+    settledRef.current = true;
+    action();
+  }, []);
 
   const handleEnable = useCallback(() => {
     triggerHaptic("success");
-    onEnable();
-  }, [onEnable]);
+    complete(onEnable);
+  }, [complete, onEnable]);
 
   const handleDecline = useCallback(() => {
     triggerHaptic("selection");
-    onDecline();
-  }, [onDecline]);
+    complete(onDecline);
+  }, [complete, onDecline]);
 
   const handleGoToSettings = useCallback(() => {
     triggerHaptic("selection");
-    onDecline();
-    onGoToSettings?.();
-  }, [onDecline, onGoToSettings]);
-
-  const handleDismiss = useCallback(() => {
-    triggerHaptic("selection");
-    onDecline();
-  }, [onDecline]);
+    complete(() => {
+      onDecline();
+      onGoToSettings?.();
+    });
+  }, [complete, onDecline, onGoToSettings]);
 
   if (isAndroid) {
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        enablePanDownToClose
+        enablePanDownToClose={false}
+        enableHandlePanningGesture={false}
+        enableContentPanningGesture={false}
         enableDynamicSizing
         backdropComponent={renderBackdrop}
         backgroundStyle={{
@@ -91,7 +107,7 @@ export const AdultContentPopup = ({
           backgroundColor: theme.colors.border.default,
           width: 40,
         }}
-        onDismiss={handleDismiss}
+        onDismiss={handleSheetDismiss}
       >
         <BottomSheetView style={styles.container}>
           <View style={styles.iconContainer}>
@@ -115,7 +131,7 @@ export const AdultContentPopup = ({
             Settings.
           </Text>
 
-          <Box gap="sm" style={{ marginTop: 24, width: "100%", paddingBottom: 24 }}>
+          <Box gap="sm" style={{ marginTop: 24, width: "100%", paddingBottom: bottomPadding }}>
             <Button size="lg" rounded="lg" onPress={handleGoToSettings}>
               <Button.Text weight="semibold">Go to settings</Button.Text>
             </Button>
@@ -124,7 +140,7 @@ export const AdultContentPopup = ({
               size="lg"
               variant="outline"
               rounded="lg"
-              onPress={handleDismiss}
+              onPress={handleDecline}
               style={{
                 backgroundColor: theme.colors.background.subtle,
                 borderWidth: 0.5,
@@ -143,6 +159,8 @@ export const AdultContentPopup = ({
     <BottomSheetModal
       ref={bottomSheetRef}
       enablePanDownToClose={false}
+      enableHandlePanningGesture={false}
+      enableContentPanningGesture={false}
       enableDynamicSizing
       backdropComponent={renderBackdrop}
       backgroundStyle={{
@@ -152,6 +170,7 @@ export const AdultContentPopup = ({
         backgroundColor: theme.colors.border.default,
         width: 40,
       }}
+      onDismiss={handleSheetDismiss}
     >
       <BottomSheetView style={styles.container}>
         <View style={styles.iconContainer}>
@@ -199,7 +218,7 @@ export const AdultContentPopup = ({
         <Text
           size="xs"
           mode="subtle"
-          style={{ textAlign: "center", marginTop: 16, paddingBottom: 24 }}
+          style={{ textAlign: "center", marginTop: 16, paddingBottom: bottomPadding }}
         >
           You can change this anytime in settings.
         </Text>

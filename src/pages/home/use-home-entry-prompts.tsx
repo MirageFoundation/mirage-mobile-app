@@ -3,10 +3,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ModerationReminderCard } from "@/src/components/molecules";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { MODERATION_REMINDER_SNOOZE_MS } from "@/src/services/home-entry-prompt-orchestrator";
 import { useResolvedHomeEntryPrompt } from "@/src/services/use-resolved-home-entry-prompt";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
-
-const MODERATION_REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function useHomeEntryPrompts() {
   const router = useRouter();

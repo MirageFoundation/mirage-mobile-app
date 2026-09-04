@@ -6,6 +6,7 @@ import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
 import {
   getHomeEntryFocused,
   resolveHomeEntryPrompt,
+  selectModerationReminderState,
   subscribeHomeEntryFocused,
   type HomeEntryPromptId,
 } from "@/src/services/home-entry-prompt-orchestrator";
@@ -44,7 +45,11 @@ export function useResolvedHomeEntryPrompt(): HomeEntryPromptId | null {
   const timeTick = useTimeTickStore((state) => state.tick);
   void timeTick;
 
-  const reminderUserKey = currentUserId.toLowerCase();
+  const reminderState = selectModerationReminderState(
+    currentUserId,
+    reminderUnderstoodByUser,
+    reminderSnoozedUntilByUser,
+  );
   return resolveHomeEntryPrompt({
     isInitializing,
     isAuthenticated: sessionStatus === "authenticated",
@@ -52,12 +57,8 @@ export function useResolvedHomeEntryPrompt(): HomeEntryPromptId | null {
     isHomeFocused,
     hasCurrentUser: Boolean(currentUserId),
     hasSeenAdultPrompt,
-    moderationReminderUnderstood: reminderUserKey
-      ? reminderUnderstoodByUser[reminderUserKey] === true
-      : false,
-    moderationReminderSnoozedUntil: reminderUserKey
-      ? reminderSnoozedUntilByUser[reminderUserKey] ?? 0
-      : 0,
+    moderationReminderUnderstood: reminderState.understood,
+    moderationReminderSnoozedUntil: reminderState.snoozedUntil,
     nowMs: Date.now(),
     analyticsConsentAsked,
     canRequestOsPermissions: canRequestOsPermissions({

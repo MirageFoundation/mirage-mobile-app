@@ -7,6 +7,7 @@ import { AuthSheet } from "@/src/components/molecules/auth-sheet";
 import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { BackHandler, Platform, ToastAndroid } from "react-native";
+import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
 import * as Sentry from '@sentry/react-native';
 import { useEffect, useRef } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
@@ -144,11 +145,13 @@ export default Sentry.wrap(function RootLayout() {
   }, [ref]);
 
   return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
     <AndroidShareIntentColdStartRefresh />
     <UpdateProvider>
       <RootContent />
     </UpdateProvider>
     </ShareIntentProvider>
+    </SafeAreaProvider>
   );
 });

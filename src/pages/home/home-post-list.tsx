@@ -487,6 +487,7 @@ const HomePostListInner = function HomePostListInner(
         itemVisibleTimerRef.current = null;
       }
       requestAnimationFrame(() => {
+        recomputeViewableFromLayout();
         scheduleSeenSync();
         flushViewability();
       });

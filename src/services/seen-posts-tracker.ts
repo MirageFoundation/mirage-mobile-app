@@ -1,6 +1,11 @@
 import { AppState } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import { markSeen } from "./seen-posts";
+import {
+  SEEN_TRACKER_MAX_EXPOSURES,
+  needsSeenExposurePrune,
+  shouldDropEndedExposure,
+} from "./seen-posts-tracker-policy";
 
 const DWELL_THRESHOLD_MS = 3_000;
 const GLANCE_THRESHOLD_MS = 250;
@@ -104,18 +109,46 @@ function clearAllTimers(state: PostExposureState): void {
   clearDwellTimer(state);
 }
 
+function dropExposure(trackerState: SeenTrackerState, postId: string): void {
+  const state = trackerState.exposureMap.get(postId);
+  if (state) clearAllTimers(state);
+  trackerState.exposureMap.delete(postId);
+  trackerState.lastVisibilityMap.delete(postId);
+  trackerState.visiblePostIds.delete(postId);
+}
+
+function pruneExposureMap(trackerState: SeenTrackerState): void {
+  if (!needsSeenExposurePrune(trackerState.exposureMap.size)) return;
+
+  for (const [postId, state] of trackerState.exposureMap) {
+    if (trackerState.visiblePostIds.has(postId)) continue;
+    if (state.dwellTimer || state.glanceTimer) continue;
+    dropExposure(trackerState, postId);
+    if (trackerState.exposureMap.size <= SEEN_TRACKER_MAX_EXPOSURES) return;
+  }
+
+  for (const postId of trackerState.exposureMap.keys()) {
+    if (trackerState.visiblePostIds.has(postId)) continue;
+    dropExposure(trackerState, postId);
+    if (trackerState.exposureMap.size <= SEEN_TRACKER_MAX_EXPOSURES) return;
+  }
+}
+
 function markPostSeen(trackerKey: string, postId: string, reason: SeenEmitReason): void {
   const trackerState = getTrackerState(trackerKey);
-  const state = getOrCreate(trackerKey, postId);
-  const glanceCount = state.glanceCount;
+  const state = trackerState.exposureMap.get(postId);
+  const glanceCount = state?.glanceCount ?? 0;
 
-  state.markedDuringCurrentExposure = true;
-  state.glanceQualified = false;
-  state.glanceCount = 0;
-  clearAllTimers(state);
+  if (state) {
+    state.markedDuringCurrentExposure = true;
+    state.glanceQualified = false;
+    state.glanceCount = 0;
+    clearAllTimers(state);
+  }
 
   markSeen(postId, reason, trackerState.lastVisibilityMap.get(postId)?.title);
   addSeenEmitBreadcrumb(postId, reason, glanceCount);
+  dropExposure(trackerState, postId);
 }
 
 function startGlanceTimer(trackerKey: string, postId: string): void {
@@ -181,11 +214,16 @@ function endExposure(trackerKey: string, postId: string): void {
     state.glanceCount = nextGlanceCount;
     if (nextGlanceCount >= GLANCE_MIN_EXPOSURES) {
       markPostSeen(trackerKey, postId, "glance");
+      return;
     }
   }
 
   state.glanceQualified = false;
   state.markedDuringCurrentExposure = false;
+  if (shouldDropEndedExposure(state.glanceCount)) {
+    dropExposure(trackerState, postId);
+  }
+  pruneExposureMap(trackerState);
 }
 
 function updateExposure(trackerKey: string, postId: string, visibility: SeenPostVisibility): void {

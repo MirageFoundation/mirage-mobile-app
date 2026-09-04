@@ -3,7 +3,10 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
-import { HAS_SEEN_ADULT_PROMPT_DEFAULT } from "@/src/services/home-entry-prompt-orchestrator";
+import {
+  HAS_SEEN_ADULT_PROMPT_DEFAULT,
+  normalizeReminderUserKey,
+} from "@/src/services/home-entry-prompt-orchestrator";
 import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
@@ -215,21 +218,24 @@ export const usePreferencesStore = create<PreferencesState>()(
       // User keys are lowercased so the dismiss/snooze state survives any
       // address-casing differences across sessions (BUG-016).
       dismissModerationReminder: (userId) =>
-        set((state) => ({
-          moderationReminderUnderstoodByUser: {
-            ...state.moderationReminderUnderstoodByUser,
-            [userId.toLowerCase()]: true,
-          },
-          moderationReminderSnoozedUntilByUser: {
-            ...state.moderationReminderSnoozedUntilByUser,
-            [userId.toLowerCase()]: 0,
-          },
-        })),
+        set((state) => {
+          const key = normalizeReminderUserKey(userId);
+          return {
+            moderationReminderUnderstoodByUser: {
+              ...state.moderationReminderUnderstoodByUser,
+              [key]: true,
+            },
+            moderationReminderSnoozedUntilByUser: {
+              ...state.moderationReminderSnoozedUntilByUser,
+              [key]: 0,
+            },
+          };
+        }),
       snoozeModerationReminder: (userId, until) =>
         set((state) => ({
           moderationReminderSnoozedUntilByUser: {
             ...state.moderationReminderSnoozedUntilByUser,
-            [userId.toLowerCase()]: until,
+            [normalizeReminderUserKey(userId)]: until,
           },
         })),
       setSelectedContentTypes: (types) => {
@@ -351,7 +357,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           const lowerKeys = <T,>(map?: Record<string, T>): Record<string, T> => {
             const out: Record<string, T> = {};
             for (const [key, value] of Object.entries(map ?? {})) {
-              out[key.toLowerCase()] = value;
+              out[normalizeReminderUserKey(key)] = value;
             }
             return out;
           };

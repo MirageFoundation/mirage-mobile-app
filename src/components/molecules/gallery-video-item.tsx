@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import {
@@ -25,6 +25,7 @@ import {
 } from "@/src/utils/video-ttff";
 import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
 import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
+import { useVideoForegroundRecovery } from "./use-video-foreground-recovery";
 import {
   GALLERY_ASPECT_RATIO_CACHE,
   GALLERY_LOADED_CACHE,
@@ -187,33 +188,16 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     clearVideoPrepareMark(itemUri);
   }, [itemUri, shouldPrepare]);
 
-  // Returning from background/lock can leave the video frozen or blank. A
-  // seek-in-place + play on foreground recovers (same nudge as single-video
-  // cards). iOS screen lock often only reports `inactive`, so both states
-  // must arm the recovery (BUG-009).
-  const wasBackgroundedRef = useRef(false);
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState.match(/inactive|background/)) {
-        wasBackgroundedRef.current = true;
-        return;
-      }
-      if (nextState !== "active" || !wasBackgroundedRef.current) return;
-      wasBackgroundedRef.current = false;
-      if (!shouldPlayVideo) return;
-      if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
-      try {
-        if (videoPlayer.status === "readyToPlay") {
-          const position = videoPlayer.currentTime;
-          videoPlayer.currentTime = position;
-          videoPlayer.play();
-        }
-      } catch {
-        // Player already released; the prepare gates will recreate it.
-      }
-    });
-    return () => sub.remove();
-  }, [shouldPlayVideo, videoPlayer, adoptedLease]);
+  // Returning from background/lock can leave the video frozen or blank.
+  // Recovery stays armed until playback is requested again — viewability /
+  // screenActive often lag AppState (BUG-006).
+  useVideoForegroundRecovery({
+    sourceKey: itemUri,
+    shouldPlay: shouldPlayVideo,
+    videoPlayer,
+    adoptedLease,
+    maxReloadAttempts: 0,
+  });
 
   useEffect(() => {
     if (!shouldPrepare || GALLERY_LOADED_CACHE.has(itemUri)) return;

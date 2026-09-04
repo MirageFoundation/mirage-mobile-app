@@ -36,6 +36,11 @@ import {
 } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
 import {
+  POST_DETAIL_HOME_ROUTE,
+  resolveMediaPostDetailSwipeDown,
+  resolvePostDetailExitAction,
+} from "@/src/navigation/post-detail-route-policy";
+import {
   getShareBaseUrl,
   useAuthStore,
   usePreferencesStore,
@@ -685,15 +690,15 @@ export default function MediaPostDetailScreen({
   }, [post, collapseMedia]);
 
   const handleBack = useCallback(() => {
-    if (router.canGoBack()) {
+    if (resolvePostDetailExitAction(router.canGoBack()) === "back") {
       router.back();
       return;
     }
-    router.replace("/");
+    router.replace(POST_DETAIL_HOME_ROUTE);
   }, [router]);
 
   const handleUnavailableBack = useCallback(() => {
-    router.replace("/");
+    router.replace(POST_DETAIL_HOME_ROUTE);
   }, [router]);
 
   const handleFollowCommentAuthor = useCallback(
@@ -823,7 +828,7 @@ export default function MediaPostDetailScreen({
             videoSyncScope={videoSyncScope}
             onSwipeUp={collapseMedia}
             onSwipeDown={() => {
-              if (collapseProgress.value > 0.1) {
+              if (resolveMediaPostDetailSwipeDown(collapseProgress.value) === "expand") {
                 expandMedia();
               } else {
                 handleBack();

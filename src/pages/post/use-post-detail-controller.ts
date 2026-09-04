@@ -4,6 +4,10 @@ import type { Comment, Post } from "@/src/components/molecules";
 import type { useAuthGuard } from "@/src/hooks";
 import * as Sentry from "@sentry/react-native";
 import { useRouter } from "@/src/navigation/guarded-router";
+import {
+  POST_DETAIL_HOME_ROUTE,
+  resolvePostDetailExitAction,
+} from "@/src/navigation/post-detail-route-policy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useContentModerationStore } from "@/src/stores";
@@ -229,10 +233,10 @@ export function usePostDetailController({
   const stickyHeader = usePostDetailStickyHeader({ currentScrollYRef: highlightScroll.currentScrollYRef });
 
   const handleBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/");
+    if (resolvePostDetailExitAction(router.canGoBack()) === "back") router.back();
+    else router.replace(POST_DETAIL_HOME_ROUTE);
   }, [router]);
-  const handleUnavailableBack = useCallback(() => router.replace("/"), [router]);
+  const handleUnavailableBack = useCallback(() => router.replace(POST_DETAIL_HOME_ROUTE), [router]);
   const handleReplyToComment = useCallback((comment: Comment) => {
     commentComposerRef.current?.startReply(comment);
   }, []);

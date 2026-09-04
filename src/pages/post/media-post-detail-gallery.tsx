@@ -14,6 +14,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
 import { Box, Text } from "@/src/components/ui/primitives";
+import {
+  isDeliberateMediaPostDetailSwipeDown,
+  MEDIA_POST_DETAIL_SWIPE_LEAVE,
+} from "@/src/navigation/post-detail-route-policy";
 import { MediaProcessingOverlay } from "@/src/components/molecules/post-card-media-overlays";
 import type { PressedMediaTransition } from "@/src/utils/post-transition";
 import {
@@ -153,13 +157,21 @@ export function MediaPostDetailGallery({
   );
 
   const verticalSwipeGesture = Gesture.Pan()
-    .activeOffsetY([-12, 12])
-    .failOffsetX([-20, 20])
+    .activeOffsetY([
+      -MEDIA_POST_DETAIL_SWIPE_LEAVE.activeOffsetY,
+      MEDIA_POST_DETAIL_SWIPE_LEAVE.activeOffsetY,
+    ])
+    .failOffsetX([
+      -MEDIA_POST_DETAIL_SWIPE_LEAVE.failOffsetX,
+      MEDIA_POST_DETAIL_SWIPE_LEAVE.failOffsetX,
+    ])
     .onEnd((event) => {
       const { translationY, velocityY } = event;
-      if (translationY < -30 || velocityY < -400) {
+      if (
+        isDeliberateMediaPostDetailSwipeDown(-translationY, -velocityY)
+      ) {
         runOnJS(handleVerticalSwipe)("up");
-      } else if (translationY > 30 || velocityY > 400) {
+      } else if (isDeliberateMediaPostDetailSwipeDown(translationY, velocityY)) {
         runOnJS(handleVerticalSwipe)("down");
       }
     });

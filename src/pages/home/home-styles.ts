@@ -9,4 +9,13 @@ export const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.default,
     zIndex: 101,
   },
+  moderationModalRoot: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-start",
+  },
+  moderationModalCard: {
+    backgroundColor: theme.colors.background.default,
+    overflow: "hidden",
+  },
 }));

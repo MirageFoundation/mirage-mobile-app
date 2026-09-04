@@ -30,7 +30,15 @@ export function resolveAuthSignupScreenAccess(state: {
   sessionStatus: AuthSessionStatus;
   hasRecoveryPhrase: boolean;
   isCompletingSignup: boolean;
+  isInitializing?: boolean;
 }): AuthSignupScreenAccess {
+  // Wallet restore is async (mnemonic is not in the persisted auth slice).
+  // Hold the current signup screen until that finishes so a process recreate
+  // on the 12-word step cannot bounce to username before the phrase is loaded.
+  if (state.isInitializing) {
+    return "show";
+  }
+
   if (state.sessionStatus === "authenticated" && !state.isCompletingSignup) {
     return "redirect_home";
   }

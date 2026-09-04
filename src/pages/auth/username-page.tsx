@@ -12,11 +12,13 @@ import UsernameScreen from "./username-content";
 export default function UsernamePage() {
   const sessionStatus = useAuthStore(selectAuthSessionStatus);
   const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
   const access = resolveAuthSignupScreenAccess({
     screen: "username",
     sessionStatus,
     hasRecoveryPhrase: !!recoveryPhrase,
     isCompletingSignup: false,
+    isInitializing,
   });
 
   if (access === "redirect_home") {

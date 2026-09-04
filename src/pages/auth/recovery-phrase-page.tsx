@@ -13,7 +13,7 @@ import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
 import { usePreferencesStore, getApiBaseUrl } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -25,12 +25,14 @@ export default function RecoveryPhraseScreen() {
 
   const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
   const sessionStatus = useAuthStore(selectAuthSessionStatus);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
   const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
 
   const [hasSaved, setHasSaved] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [words] = useState(() =>
-    recoveryPhrase ? recoveryPhrase.split(" ") : [],
+  const words = useMemo(
+    () => (recoveryPhrase ? recoveryPhrase.split(" ").filter(Boolean) : []),
+    [recoveryPhrase],
   );
 
   const access = resolveAuthSignupScreenAccess({
@@ -38,6 +40,7 @@ export default function RecoveryPhraseScreen() {
     sessionStatus,
     hasRecoveryPhrase: words.length > 0,
     isCompletingSignup: isConfirming,
+    isInitializing,
   });
 
   useEffect(() => {

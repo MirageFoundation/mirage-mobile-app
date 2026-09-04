@@ -158,6 +158,10 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     if (!adoptedPlayer) return;
     try {
       if (isVideoPlaying && mediaSurfaceActive) {
+        if (adoptedPlayer.status === "readyToPlay") {
+          const position = adoptedPlayer.currentTime;
+          adoptedPlayer.currentTime = position;
+        }
         adoptedPlayer.play();
       } else {
         adoptedPlayer.pause();

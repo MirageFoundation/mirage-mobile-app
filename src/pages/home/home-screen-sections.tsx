@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { Modal, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -48,7 +48,6 @@ export function HomeScreenSections({ controller }: HomeScreenSectionsProps) {
           key={controller.shareServer}
           feedType="home"
           activeTabIndex={controller.feedTabIndex}
-          ListHeaderExtra={controller.moderationReminderHeader}
           onNewPostsChange={controller.handleNewPostsChange}
         />
 
@@ -66,6 +65,20 @@ export function HomeScreenSections({ controller }: HomeScreenSectionsProps) {
           onInstall={controller.easUpdate.install}
           onDismiss={controller.easUpdate.dismiss}
         />
+
+        <Modal
+          visible={controller.showModerationReminder}
+          transparent
+          animationType="fade"
+          onRequestClose={() => undefined}
+          statusBarTranslucent
+        >
+          <View style={[styles.moderationModalRoot, { paddingTop: insets.top }]}>
+            <View style={styles.moderationModalCard}>
+              {controller.moderationReminderHeader}
+            </View>
+          </View>
+        </Modal>
 
         <AdultContentPopup
           visible={controller.showAdultPopup}

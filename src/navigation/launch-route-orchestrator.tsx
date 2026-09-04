@@ -24,7 +24,11 @@ import {
   isStartupHomePath,
   STARTUP_HOME_ROUTE,
 } from "@/src/navigation/startup-route-policy";
-import { signalStartupHomeReady } from "@/src/navigation/startup-navigation-readiness";
+import {
+  hasCompletedLaunchThisRuntime,
+  markLaunchCompletedThisRuntime,
+  signalStartupHomeReady,
+} from "@/src/navigation/startup-navigation-readiness";
 
 /**
  * Establishes one deterministic cold-start history:
@@ -55,6 +59,18 @@ export function LaunchRouteOrchestrator() {
 
   useEffect(() => {
     if (!pathname) return;
+
+    // A layout remount in the same JS runtime is not process death. Re-anchoring
+    // Home would drop inner-screen state after a short background (BUG-007).
+    if (hasCompletedLaunchThisRuntime()) {
+      homeAnchorEstablishedRef.current = true;
+      initialLaunchHandledRef.current = true;
+      if (!startupHomeReadySignaledRef.current) {
+        startupHomeReadySignaledRef.current = true;
+        signalStartupHomeReady();
+      }
+      return;
+    }
 
     // Record Home as soon as it mounts, even while auth is still resolving.
     // Otherwise a quick in-app push can be mistaken for a cold-start target
@@ -112,6 +128,7 @@ export function LaunchRouteOrchestrator() {
 
     if (sessionStatus === "pending_signup") {
       initialLaunchHandledRef.current = true;
+      markLaunchCompletedThisRuntime();
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Resuming pending signup on recovery phrase",
@@ -123,6 +140,7 @@ export function LaunchRouteOrchestrator() {
 
     if (isInboxNotificationNavigationPending()) {
       initialLaunchHandledRef.current = true;
+      markLaunchCompletedThisRuntime();
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Notification owns post-Home startup navigation",
@@ -142,6 +160,7 @@ export function LaunchRouteOrchestrator() {
         authRequiredPresentedRef.current = true;
       }
       initialLaunchHandledRef.current = true;
+      markLaunchCompletedThisRuntime();
       return;
     }
 
@@ -154,6 +173,7 @@ export function LaunchRouteOrchestrator() {
     }
 
     initialLaunchHandledRef.current = true;
+    markLaunchCompletedThisRuntime();
   }, [
     hasSeenAdultPrompt,
     hasShareIntent,

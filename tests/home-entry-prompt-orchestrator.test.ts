@@ -3,13 +3,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   HAS_SEEN_ADULT_PROMPT_DEFAULT,
+  MODERATION_REMINDER_SNOOZE_MS,
   claimHomeEntryOsPrompt,
   getHomeEntryFocused,
   isHomeEntrySurfaceReady,
+  normalizeReminderUserKey,
   resetHomeEntryOsPromptClaims,
   resetHomeEntryPromptOrchestrator,
   resolveHomeEntryPrompt,
   resolvePersistedHasSeenAdultPrompt,
+  selectModerationReminderState,
   setHomeEntryFocused,
   subscribeHomeEntryFocused,
   type HomeEntryPromptState,
@@ -100,6 +103,24 @@ describe("home-entry prompt order", () => {
     })).toBe("moderation");
   });
 
+  test("uses a 7-day explicit snooze and no timer-based initial gate", () => {
+    expect(MODERATION_REMINDER_SNOOZE_MS).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(resolveHomeEntryPrompt({
+      ...readyState,
+      hasSeenAdultPrompt: true,
+      moderationReminderUnderstood: false,
+      moderationReminderSnoozedUntil: 0,
+      nowMs: 1,
+    })).toBe("moderation");
+    expect(resolveHomeEntryPrompt({
+      ...readyState,
+      hasSeenAdultPrompt: true,
+      moderationReminderUnderstood: false,
+      moderationReminderSnoozedUntil: 1 + MODERATION_REMINDER_SNOOZE_MS,
+      nowMs: 1,
+    })).toBe("notification_permission");
+  });
+
   test("preserves understood and explicit snooze state", () => {
     expect(resolveHomeEntryPrompt({
       ...readyState,
@@ -168,6 +189,25 @@ describe("home-entry focus and OS prompt claims", () => {
 
     expect(seen).toEqual([true, false]);
     expect(getHomeEntryFocused()).toBe(true);
+  });
+
+  test("keys snooze and dismiss per lowercased wallet so account switch is isolated", () => {
+    expect(normalizeReminderUserKey("  MIRAGE1ABC  ")).toBe("mirage1abc");
+    const understood = { mirage1abc: true };
+    const snoozed = { mirage1xyz: 9_000 };
+
+    expect(selectModerationReminderState("MIRAGE1ABC", understood, snoozed)).toEqual({
+      understood: true,
+      snoozedUntil: 0,
+    });
+    expect(selectModerationReminderState("mirage1xyz", understood, snoozed)).toEqual({
+      understood: false,
+      snoozedUntil: 9_000,
+    });
+    expect(selectModerationReminderState("mirage1other", understood, snoozed)).toEqual({
+      understood: false,
+      snoozedUntil: 0,
+    });
   });
 
   test("claims each OS prompt once so analytics and notification cannot race", () => {

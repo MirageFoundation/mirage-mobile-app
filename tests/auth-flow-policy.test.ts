@@ -45,6 +45,28 @@ describe("auth signup screen access", () => {
     ).toBe("show");
   });
 
+  test("holds the current signup screen while wallet restore is in flight", () => {
+    expect(
+      resolveAuthSignupScreenAccess({
+        screen: "recovery-phrase",
+        sessionStatus: "guest",
+        hasRecoveryPhrase: false,
+        isCompletingSignup: false,
+        isInitializing: true,
+      }),
+    ).toBe("show");
+
+    expect(
+      resolveAuthSignupScreenAccess({
+        screen: "username",
+        sessionStatus: "pending_signup",
+        hasRecoveryPhrase: true,
+        isCompletingSignup: false,
+        isInitializing: true,
+      }),
+    ).toBe("show");
+  });
+
   test("pending signup with a phrase resumes on recovery, not username", () => {
     expect(
       resolveAuthSignupScreenAccess({

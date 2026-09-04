@@ -115,6 +115,10 @@ export const PreviewVideoItem = memo(function PreviewVideoItem({
     if (!adoptedPlayer) return;
     try {
       if (playing && isActive) {
+        if (adoptedPlayer.status === "readyToPlay") {
+          const position = adoptedPlayer.currentTime;
+          adoptedPlayer.currentTime = position;
+        }
         adoptedPlayer.play();
       } else {
         adoptedPlayer.pause();

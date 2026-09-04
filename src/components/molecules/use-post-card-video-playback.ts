@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AppState, Platform } from "react-native";
+import { Platform } from "react-native";
 import type { ResolvedMedia } from "./post-card-utils";
 import { MEDIA_LOADED_CACHE } from "./post-card-media-constants";
 import {
@@ -30,6 +30,7 @@ import {
   clearVideoPrepareMark,
   markVideoPrepareStart,
 } from "@/src/utils/video-ttff";
+import { useVideoForegroundRecovery } from "./use-video-foreground-recovery";
 
 /**
  * Core native-video playback state for a post card: player
@@ -511,33 +512,20 @@ export function usePostCardVideoPlayback({
   // Returning from background/lock can leave the video frozen (the OS pauses
   // the native player and blocks play() while locked) or blank (surface needs
   // a repaint). A seek-in-place + play on foreground recovers both.
-  //
-  // Important: iOS screen lock often only reports `inactive` (never
-  // `background`) for quick locks, so both states must arm the recovery —
-  // arming on `background` alone left videos frozen after unlock (BUG-009).
-  const wasBackgroundedRef = useRef(false);
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState.match(/inactive|background/)) {
-        wasBackgroundedRef.current = true;
-        return;
-      }
-      if (nextState !== "active" || !wasBackgroundedRef.current) return;
-      wasBackgroundedRef.current = false;
-      if (!shouldPlayNativeVideo) return;
-      if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
-      try {
-        if (videoPlayer.status === "readyToPlay") {
-          const position = videoPlayer.currentTime;
-          videoPlayer.currentTime = position;
-          videoPlayer.play();
-        }
-      } catch {
-        // Player already released; the mount gates will recreate it.
-      }
-    });
-    return () => sub.remove();
-  }, [shouldPlayNativeVideo, videoPlayer, adoptedLease]);
+  // Feed cards also clear viewability on background, so recovery stays armed
+  // until play is requested again (BUG-006).
+  useVideoForegroundRecovery({
+    sourceKey: resolvedMediaUri,
+    shouldPlay: shouldPlayNativeVideo,
+    videoPlayer,
+    adoptedLease,
+    retryKey: mediaRetryKey,
+    onReload: () => setMediaRetryKey((k) => k + 1),
+    onRecoveryExhausted: () => {
+      setIsVideoPlaying(false);
+      setIsVideoLoading(false);
+    },
+  });
 
   return {
     // Effective visibility (optimistic prime applied).
