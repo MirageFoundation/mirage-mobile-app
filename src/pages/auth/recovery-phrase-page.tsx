@@ -7,23 +7,37 @@ import {
   resolveAuthSignupScreenAccess,
 } from "@/src/navigation/auth-flow-policy";
 import { exitAuthModal } from "@/src/navigation/auth-navigation";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { trackEvent } from "@/src/services/analytics";
 import { apiClient } from "@/src/api/client";
 import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
 import { usePreferencesStore, getApiBaseUrl } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSecretScreen } from "@/src/hooks/use-secret-screen";
+import { copySecretWithExpiry } from "@/src/services/secret-screen";
+import { authSessionCoordinator } from "@/src/services/auth-session-coordinator";
 import { BackHandler, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function RecoveryPhraseScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ username?: string }>();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
 
   const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
+  const hasConfirmedUsername = useAuthStore((s) => s.hasUsername);
+  const protection = useSecretScreen();
+  const locked = useRef(false);
+  const mounted = useRef(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const sessionStatus = useAuthStore(selectAuthSessionStatus);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
@@ -39,6 +53,7 @@ export default function RecoveryPhraseScreen() {
     screen: "recovery-phrase",
     sessionStatus,
     hasRecoveryPhrase: words.length > 0,
+    hasConfirmedUsername,
     isCompletingSignup: isConfirming,
     isInitializing,
   });
@@ -59,28 +74,36 @@ export default function RecoveryPhraseScreen() {
   }, [access]);
 
   const handleCheckboxChange = useCallback(() => {
+    if (!protection.isVisible()) return;
     triggerHaptic("selection");
     setHasSaved((prev) => !prev);
-  }, []);
+  }, [protection]);
 
   const handleContinue = useCallback(async () => {
-    if (!hasSaved || isConfirming) return;
-
+    if (!hasSaved || locked.current || !protection.isVisible()) return;
+    locked.current = true;
+    const session = authSessionCoordinator.current();
     setIsConfirming(true);
     triggerHaptic("selection");
 
     try {
-      await confirmWalletCreation();
+      await confirmWalletCreation(() => mounted.current && protection.isVisible());
+      if (!mounted.current || !authSessionCoordinator.isCurrent(session)) return;
       triggerHaptic("success");
       const currentServer = usePreferencesStore.getState().apiServer;
       apiClient.setBaseUrl(getApiBaseUrl(currentServer));
       exitAuthModal();
-    } catch (error) {
-      console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
-      triggerHaptic("error");
-      setIsConfirming(false);
+    } catch {
+      if (mounted.current && authSessionCoordinator.isCurrent(session)) {
+        setErrorMessage("Unable to confirm this signup. Return to registration and check its status; your key is retained.");
+        triggerHaptic("error");
+        setIsConfirming(false);
+      }
+    } finally {
+      locked.current = false;
+      if (mounted.current) setIsConfirming(false);
     }
-  }, [hasSaved, isConfirming, confirmWalletCreation]);
+  }, [hasSaved, confirmWalletCreation, protection]);
 
   if (access === "redirect_home") {
     return <Redirect href={AUTH_EXIT_ROUTE} />;
@@ -131,11 +154,19 @@ export default function RecoveryPhraseScreen() {
         </View>
 
         <View style={styles.phraseContainer}>
-          <RecoveryPhraseGrid
-            words={words}
-            masked={false}
-            showCopyButton={true}
-          />
+          {protection.visible ? <>
+            <RecoveryPhraseGrid words={words} showCopyButton={false} />
+            <Button variant="ghost" onPress={async () => {
+              try { await copySecretWithExpiry(words.join(" "), protection.isVisible); }
+              catch { setErrorMessage("Unable to copy the recovery phrase."); }
+            }}><Button.Text>Copy phrase (clears after 30 seconds)</Button.Text></Button>
+          </> : <Button disabled={protection.protection !== "ready"} onPress={protection.reveal}>
+            <Button.Text>{protection.protection === "unavailable" ? "Screen protection unavailable" : "Reveal recovery phrase"}</Button.Text>
+          </Button>}
+          {errorMessage && <Text size="sm" accessibilityRole="alert">{errorMessage}</Text>}
+          {(errorMessage || protection.protection === "unavailable") && <Button variant="ghost" onPress={() => router.replace(AUTH_USERNAME_ROUTE)}>
+            <Button.Text>Return to registration</Button.Text>
+          </Button>}
         </View>
 
         <Pressable onPress={handleCheckboxChange} style={styles.checkboxRow}>
@@ -159,7 +190,7 @@ export default function RecoveryPhraseScreen() {
           size="lg"
           rounded="full"
           onPress={handleContinue}
-          disabled={!hasSaved || isConfirming}
+          disabled={!hasSaved || isConfirming || !protection.visible}
           loading={isConfirming}
           style={{
             width: "100%",

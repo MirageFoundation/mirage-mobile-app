@@ -47,7 +47,7 @@ export type AnalyticsEventName =
   | "comment_posted"
   | "vote_cast"
   | "user_followed"
-  | "topic_followed";
+  | "community_joined";
 
 type AnalyticsProperties = Record<
   string,

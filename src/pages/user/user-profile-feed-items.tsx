@@ -53,7 +53,7 @@ type PostWrapperProps = {
  onBlockPost: (postId: string) => void;
  onReport: (postId: string) => void;
  onRevealContent?: (postId: string) => void;
- onTopicPress: (topic: string) => void;
+ onCommunityPress: (topic: string) => void;
  videoSyncScope?: string;
 };
 
@@ -76,7 +76,7 @@ export const UserProfilePostWrapper = memo(function UserProfilePostWrapper({
  onBlockPost,
  onReport,
  onRevealContent,
- onTopicPress,
+ onCommunityPress,
  videoSyncScope,
 }: PostWrapperProps) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
@@ -84,7 +84,7 @@ export const UserProfilePostWrapper = memo(function UserProfilePostWrapper({
    ...post,
    title: editOverride.title,
    body: editOverride.content || undefined,
-   topic: editOverride.topic ?? post.topic,
+   community: editOverride.community ?? post.community,
    media: editOverride.media
      ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
      : post.media,
@@ -112,7 +112,7 @@ export const UserProfilePostWrapper = memo(function UserProfilePostWrapper({
     onBlockPost={onBlockPost}
     onReport={onReport}
     onRevealContent={onRevealContent}
-    onTopicPress={onTopicPress}
+    onCommunityPress={onCommunityPress}
    />
  );
 });

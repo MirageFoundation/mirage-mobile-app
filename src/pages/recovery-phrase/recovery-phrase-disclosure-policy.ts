@@ -36,6 +36,10 @@ export class RecoveryPhraseDisclosurePolicy {
     return this.snapshot;
   }
 
+  isCurrent(request: number): boolean {
+    return request === this.generation;
+  }
+
   beginAuthentication(): number {
     const request = ++this.generation;
     this.snapshot = {

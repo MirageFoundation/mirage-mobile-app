@@ -61,7 +61,7 @@ describe("post row scalar indexes", () => {
       "src/components/molecules/post-card.tsx",
       "src/pages/home/home-post-card-item.tsx",
       "src/pages/post/post-detail-content.tsx",
-      "src/pages/post/use-media-post-detail-data.ts",
+      "src/pages/post/post-media-page.tsx",
     ];
 
     for (const path of paths) {

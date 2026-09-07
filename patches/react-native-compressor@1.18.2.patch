@@ -1,10 +1,13 @@
 diff --git a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
-index 7b6b49894dc48b89a2b5d42be3fd84766a2c7cbe..1b2c12e0549c9193a333526a4230af680c287b72 100644
+index 7b6b49894dc48b89a2b5d42be3fd84766a2c7cbe..d1c6cf6e1c3e27d101fcab587e926625ec8bcb94 100644
 --- a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
 +++ b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
-@@ -88,8 +88,8 @@ class Uploader(private val reactContext: ReactApplicationContext) {
+@@ -87,9 +87,11 @@ class Uploader(private val reactContext: ReactApplicationContext) {
+     get() {
        if (client == null) {
          val builder = OkHttpClient.Builder()
++          .followRedirects(false)
++          .followSslRedirects(false)
            .connectTimeout(60, TimeUnit.SECONDS)
 -          .readTimeout(60, TimeUnit.SECONDS)
 -          .writeTimeout(60, TimeUnit.SECONDS)
@@ -14,16 +17,479 @@ index 7b6b49894dc48b89a2b5d42be3fd84766a2c7cbe..1b2c12e0549c9193a333526a4230af68
        }
        return client
 diff --git a/ios/Utils/Uploader.swift b/ios/Utils/Uploader.swift
-index 2e6cd0aa4deb8cd6fc88e23b1bd35100aca8a41f..7fb9f21b46852cd673176da5dc97846ec753b8a7 100644
+index 2e6cd0aa4deb8cd6fc88e23b1bd35100aca8a41f..032a2aa8364177ab0b75d3b02e129e4a8d5fb951 100644
 --- a/ios/Utils/Uploader.swift
 +++ b/ios/Utils/Uploader.swift
-@@ -83,6 +83,9 @@ class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
-       let type:UploaderUploadType=self.getUploadType(from: uploadType)
-  
-       let config = URLSessionConfiguration.background(withIdentifier: uuid)
-+      config.timeoutIntervalForRequest = 600
-+      config.timeoutIntervalForResource = 600
-+      request.timeoutInterval = 600
-       let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-         var task:URLSessionUploadTask!;
-         if type == .UploaderBinaryContent {
+@@ -1,12 +1,4 @@
+-//
+-//  Uploader.swift
+-//  react-native-compressor
+-//
+-//  Created by Numan on 10/09/2023.
+-//
+-
+ import Foundation
+-import MobileCoreServices
+ 
+ enum UploaderUploadType: Int {
+     case UploaderInvalidType = -1
+@@ -14,238 +6,185 @@ enum UploaderUploadType: Int {
+     case UploaderMultipart = 1
+ }
+ 
+-struct UploadError: Error {
+-  private let message: String
+-
+-  var localizedDescription: String {
+-    return message
+-  }
+-  
+-  init(message: String) {
+-    self.message = message
+-  }
++struct UploadError: LocalizedError {
++    let message: String
++    var errorDescription: String? { message }
+ }
+ 
+ class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
+-    var uploadResolvers: [String: RCTPromiseResolveBlock] = [:]
+-    var uploadRejectors: [String: RCTPromiseRejectBlock] = [:]
+-    var currentTask: URLSessionDataTask?
+-    var storage:[Int:Data] = [:]
+-    private lazy var taskManager = UrlTaskManager()
+-    
+-    func upload(filePath: String, options: [String: Any], resolve:@escaping RCTPromiseResolveBlock, reject:@escaping RCTPromiseRejectBlock) -> Void {
+-        let fileUrl = Utils.makeValidUri(filePath: filePath)
+-      
+-      guard let uuid = options["uuid"] as? String else {
+-        let uploadError = UploadError(message: "UUID is missing")
+-        reject("Upload Failed", "UUID is missing", uploadError)
+-        return
+-      }
+-
+-      guard let remoteUrl = options["url"] as? String else {
+-        let uploadError = UploadError(message: "url is missing")
+-        reject("Upload Failed", "url is missing", uploadError)
+-        return
+-      }
+-
+-      guard let method = options["method"] as? String else {
+-        let uploadError = UploadError(message: "method is missing")
+-        reject("Upload Failed", "method is missing", uploadError)
+-        return
+-      }
+-
+-      guard let localFile = URL(string: fileUrl) else{
+-        let uploadError = UploadError(message: "invalid file url")
+-        reject("Failed", "Upload Failed", uploadError)
+-        return
+-      }
+-        
+-      let fieldName = options["fieldName"] as? String ?? "file"
+-      let mimeType = options["mimeType"] as? String ?? ""
+-      
+-      let parameters = options["parameters"] as? [String: String]
+-        
+-      let uploadType = options["uploadType"] as? Int ?? 0
+-          
+-
+-      let headers = options["headers"] as? [String: String] ?? [:]
+-
+-      let url = URL(string: remoteUrl)!
+-      var request = URLRequest(url: url)
+-      request.httpMethod=method
+-      for(header, v) in headers{
+-        request.setValue(v, forHTTPHeaderField: header)
+-      }
+-
+-      uploadResolvers[uuid] = resolve
+-      uploadRejectors[uuid] = reject
+-        
+-      let type:UploaderUploadType=self.getUploadType(from: uploadType)
+- 
+-      let config = URLSessionConfiguration.background(withIdentifier: uuid)
+-      let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+-        var task:URLSessionUploadTask!;
+-        if type == .UploaderBinaryContent {
+-            task = session.uploadTask(with: request, fromFile: localFile)
+-        } else if type == .UploaderMultipart {
+-            let boundaryString = UUID().uuidString
+-            let data = try? createMultipartBody(boundary: boundaryString, sourceUrl:localFile,parameters:parameters,fieldName:fieldName,mimeType:mimeType)
+-
+-                request.setValue("multipart/form-data; boundary=\(boundaryString)", forHTTPHeaderField: "Content-Type")
+-                request.httpBody = data
++    private struct UploadState {
++        let task: URLSessionUploadTask
++        let resolve: RCTPromiseResolveBlock
++        let reject: RCTPromiseRejectBlock
++        let temporaryFile: URL?
++        var responseData = Data()
++        var redirectResponse: HTTPURLResponse?
++    }
+ 
+-              task=session.uploadTask(withStreamedRequest: request)
+-        }
+-        else {
+-            let errorMessage = String(format: "Invalid upload type: '%@'.", options["uploadType"] as? String ?? "")
+-            reject("ERR_FILESYSTEM_INVALID_UPLOAD_TYPE", errorMessage, nil)
++    // Delegate callbacks, registration and cancellation share one serial queue.
++    private let queue = DispatchQueue(label: "com.reactnativecompressor.uploads")
++    private lazy var delegateQueue: OperationQueue = {
++        let operations = OperationQueue()
++        operations.maxConcurrentOperationCount = 1
++        operations.underlyingQueue = queue
++        return operations
++    }()
++    private var uploads: [String: UploadState] = [:]
++    private let responseLimit = 1024 * 1024
++
++    // Purge orphaned multipart bodies once per process, never replay them.
++    private static let temporaryDirectory: URL = {
++        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("compressor-upload-bodies", isDirectory: true)
++        try? FileManager.default.removeItem(at: directory)
++        return directory
++    }()
++
++    func upload(filePath: String, options: [String: Any], resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
++        queue.async {
++            var temporaryFile: URL?
++            do {
++                guard let uuid = options["uuid"] as? String, !uuid.isEmpty,
++                      self.uploads[uuid] == nil else {
++                    throw UploadError(message: "Missing or duplicate upload ID")
++                }
++                guard let remote = options["url"] as? String, let url = URL(string: remote),
++                      ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
++                      url.host != nil,
++                      let method = options["method"] as? String,
++                      let localFile = URL(string: Utils.makeValidUri(filePath: filePath)), localFile.isFileURL else {
++                    throw UploadError(message: "Invalid upload options")
++                }
++                var request = URLRequest(url: url)
++                request.httpMethod = method
++                request.timeoutInterval = 600
++                for (header, value) in options["headers"] as? [String: String] ?? [:] {
++                    request.setValue(value, forHTTPHeaderField: header)
++                }
++                let type = UploaderUploadType(rawValue: options["uploadType"] as? Int ?? 0)
++                let bodyFile: URL
++                switch type {
++                case .UploaderBinaryContent:
++                    bodyFile = localFile
++                case .UploaderMultipart:
++                    let boundary = UUID().uuidString
++                    bodyFile = try self.createMultipartBody(
++                        boundary: boundary, sourceUrl: localFile,
++                        parameters: options["parameters"] as? [String: String],
++                        fieldName: options["fieldName"] as? String ?? "file",
++                        mimeType: options["mimeType"] as? String ?? ""
++                    )
++                    temporaryFile = bodyFile
++                    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
++                default:
++                    throw UploadError(message: "Invalid upload type")
++                }
++                // Background sessions auto-follow redirects; this is foreground-capable only.
++                let config = URLSessionConfiguration.default
++                config.timeoutIntervalForRequest = 600
++                config.timeoutIntervalForResource = 600
++                let session = URLSession(configuration: config, delegate: self, delegateQueue: self.delegateQueue)
++                let task = session.uploadTask(with: request, fromFile: bodyFile)
++                task.taskDescription = uuid
++                self.uploads[uuid] = UploadState(task: task, resolve: resolve, reject: reject, temporaryFile: temporaryFile)
++                task.resume()
++            } catch {
++                if let file = temporaryFile { try? FileManager.default.removeItem(at: file) }
++                reject("failed", "Upload Failed", error)
++            }
+         }
+-        taskManager.registerTask(task, uuid: uuid)
+-        task.resume()
+-     
+     }
+-    
+-    func cancelUpload(uuid:String,shouldCancelAll:Bool) {
+-        if(shouldCancelAll==true)
+-        {
+-            taskManager.cancelAllTasks()
+-        } else if(uuid=="")
+-        {
+-         taskManager.taskPop()?.cancel()
+-        }
+-        else
+-        {
+-            taskManager.uploadTaskForId(uuid)?.cancel()
++
++    func cancelUpload(uuid: String, shouldCancelAll: Bool) {
++        queue.async {
++            if shouldCancelAll {
++                for state in self.uploads.values { state.task.cancel() }
++            } else if uuid.isEmpty {
++                self.uploads.values.first?.task.cancel()
++            } else {
++                self.uploads[uuid]?.task.cancel()
++            }
++            // didCompleteWithError owns settlement and cleanup, including cancellation.
+         }
+-        
+     }
+ 
+-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+-      guard let uuid = session.configuration.identifier else {return}
+-      guard let reject = uploadRejectors[uuid] else{return}
+-      guard let resolve = uploadResolvers[uuid] else{return}
+-      guard error == nil else {
+-        reject("failed", "Upload Failed", error)
+-        uploadRejectors[uuid] = nil
+-        uploadResolvers[uuid] = nil
+-        self.storage[task.taskIdentifier] = nil
+-        return;
+-      }
+-
+-      guard let response = task.response  as? HTTPURLResponse else {
+-        let uploadError = UploadError(message: "Response is not defined")
+-        reject("failed", "Upload Failed", uploadError)
+-        uploadRejectors[uuid] = nil
+-        uploadResolvers[uuid] = nil
+-        self.storage[task.taskIdentifier] = nil
+-        return;
+-      }
+-
+-      let data = self.storage[task.taskIdentifier] ?? Data()
+-      let body = String(data: data, encoding: .utf8) ?? ""
+-      let result: [String : Any] = ["status": response.statusCode, "headers": response.allHeaderFields, "body": body]
+-
+-      resolve(result)
+-      uploadResolvers[uuid] = nil
+-      uploadRejectors[uuid] = nil
+-      self.storage[task.taskIdentifier] = nil
++    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
++        if let uuid = task.taskDescription, uploads[uuid]?.task === task {
++            uploads[uuid]?.redirectResponse = response
++        }
++        completionHandler(nil)
++        // Do not let a stalled redirect body turn a known 3xx into a retryable timeout.
++        task.cancel()
+     }
+ 
+-
+-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+-        var responseData = self.storage[dataTask.taskIdentifier] ?? Data()
+-        responseData.append(data)
+-        self.storage[dataTask.taskIdentifier] = responseData
++    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
++        if let response = response as? HTTPURLResponse, (300..<400).contains(response.statusCode) {
++            if let uuid = dataTask.taskDescription, uploads[uuid]?.task === dataTask {
++                uploads[uuid]?.redirectResponse = response
++            }
++            completionHandler(.cancel)
++        } else {
++            completionHandler(.allow)
++        }
+     }
+ 
+-    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64)
+-    {
+-      guard let uuid = session.configuration.identifier else {return}
+-        EventEmitterHandler.emituploadProgress(uuid,totalBytesSent: totalBytesSent,totalBytesExpectedToSend: totalBytesExpectedToSend)
++    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
++        guard let uuid = task.taskDescription, uploads[uuid]?.task === task,
++              let state = uploads.removeValue(forKey: uuid) else { return }
++        if let file = state.temporaryFile { try? FileManager.default.removeItem(at: file) }
++        session.finishTasksAndInvalidate()
++        // A known redirect remains terminal even if reading its body fails or is cancelled.
++        if let response = state.redirectResponse ?? (task.response as? HTTPURLResponse),
++           state.redirectResponse != nil || error == nil || (300..<400).contains(response.statusCode) {
++            state.resolve([
++                "status": response.statusCode,
++                "headers": response.allHeaderFields,
++                "body": String(data: state.responseData, encoding: .utf8) ?? ""
++            ])
++        } else {
++            state.reject("failed", "Upload Failed", error ?? UploadError(message: "Response is not defined"))
++        }
+     }
+-    
+-    func headersForMultipartParams(_ params: [String: String]?, boundary: String) -> String {
+-      guard let params else {
+-        return ""
+-      }
+-      return params.map { (key: String, value: String) in
+-    """
+-    --\(boundary)
+-    Content-Disposition: form-data; name="\(key)"
+ 
+-    \(value)
+-    """
+-      }
+-      .joined()
++    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
++        guard let uuid = dataTask.taskDescription, let state = uploads[uuid], state.task === dataTask else { return }
++        guard data.count <= responseLimit - state.responseData.count else {
++            dataTask.cancel()
++            return
++        }
++        uploads[uuid]?.responseData.append(data)
+     }
+-    
+-    func createMultipartBody(boundary: String, sourceUrl: URL, parameters: [String: String]? = nil, fieldName: String? = nil, mimeType: String? = nil) throws -> Data {
+-        var body = Data()
+ 
+-        // Add boundary
+-        let boundaryPrefix = "--\(boundary)\r\n"
+-        body.append(boundaryPrefix.data(using: .utf8)!)
+-
+-        // Add content disposition for the file
+-        var contentDisposition = "Content-Disposition: form-data; name=\"file\"; filename=\"\(sourceUrl.lastPathComponent)\"\r\n"
+-        if let fieldName = fieldName {
+-            contentDisposition = "Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(sourceUrl.lastPathComponent)\"\r\n"
+-        }
+-        body.append(contentDisposition.data(using: .utf8)!)
++    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
++        guard let uuid = task.taskDescription, uploads[uuid]?.task === task else { return }
++        EventEmitterHandler.emituploadProgress(uuid, totalBytesSent: totalBytesSent, totalBytesExpectedToSend: totalBytesExpectedToSend)
++    }
+ 
+-        // Add optional MIME type
+-        if let mimeType = mimeType {
+-            let contentType = "Content-Type: \(mimeType)\r\n"
+-            body.append(contentType.data(using: .utf8)!)
++    private func createMultipartBody(boundary: String, sourceUrl: URL, parameters: [String: String]?, fieldName: String, mimeType: String) throws -> URL {
++        let directory = Self.temporaryDirectory
++        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
++        let destination = directory.appendingPathComponent(UUID().uuidString)
++        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
++            throw UploadError(message: "Cannot create upload body")
+         }
+-
+-        // Add blank line
+-        body.append("\r\n".data(using: .utf8)!)
+-
+-        // Add file data
+-        let fileData = try Data(contentsOf: sourceUrl)
+-        body.append(fileData)
+-
+-        // Add parameters, if any
+-        if let parameters = parameters {
+-            for (key, value) in parameters {
+-                body.append("\r\n".data(using: .utf8)!)
+-                body.append(boundaryPrefix.data(using: .utf8)!)
+-                let parameterContentDisposition = "Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n"
+-                body.append(parameterContentDisposition.data(using: .utf8)!)
+-                body.append(value.data(using: .utf8)!)
++        do {
++            let output = try FileHandle(forWritingTo: destination)
++            defer { try? output.close() }
++            let input = try FileHandle(forReadingFrom: sourceUrl)
++            defer { try? input.close() }
++            func append(_ text: String) throws { try output.write(contentsOf: Data(text.utf8)) }
++            try append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(sourceUrl.lastPathComponent)\"\r\n")
++            try append("Content-Type: \(mimeType)\r\n\r\n")
++            while let chunk = try input.read(upToCount: 64 * 1024), !chunk.isEmpty {
++                try output.write(contentsOf: chunk)
+             }
+-        }
+-
+-        // Add closing boundary
+-        let closingBoundary = "\r\n--\(boundary)--\r\n"
+-        body.append(closingBoundary.data(using: .utf8)!)
+-
+-        return body
+-    }
+-    
+-    func findMimeType(forAttachment attachment: URL) -> String {
+-      if let identifier = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, attachment.pathExtension as CFString, nil)?.takeRetainedValue() {
+-        if let type = UTTypeCopyPreferredTagWithClass(identifier, kUTTagClassMIMEType)?.takeRetainedValue() {
+-          return type as String
+-        }
+-      }
+-      return "application/octet-stream"
+-    }
+-    
+-    func getUploadType(from type: Int?) -> UploaderUploadType {
+-        guard let typeValue = type else {
+-            return .UploaderInvalidType
+-        }
+-        
+-        switch typeValue {
+-        case UploaderUploadType.UploaderBinaryContent.rawValue,
+-            UploaderUploadType.UploaderMultipart.rawValue:
+-            return UploaderUploadType(rawValue: typeValue) ?? .UploaderInvalidType
+-        default:
+-            return .UploaderInvalidType
++            for (key, value) in parameters ?? [:] {
++                try append("\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(value)")
++            }
++            try append("\r\n--\(boundary)--\r\n")
++            return destination
++        } catch {
++            try? FileManager.default.removeItem(at: destination)
++            throw error
+         }
+     }
+-
+-    
+ }
+diff --git a/src/utils/Uploader.tsx b/src/utils/Uploader.tsx
+index 3c5025ae8f27745f02069a54c42c36d5cdbdb7dc..65654b30d9bf3391f9d1fe75b61fc218f33c1089 100644
+--- a/src/utils/Uploader.tsx
++++ b/src/utils/Uploader.tsx
+@@ -51,8 +51,11 @@ export const backgroundUpload = async (
+   abortSignal?: AbortSignal,
+ ): Promise<any> => {
+   const uuid = uuidv4();
+-  let subscription: NativeEventSubscription;
++  let subscription: NativeEventSubscription | undefined;
++  let started = false;
++  const onAbort = () => { if (started) cancelUpload(uuid); };
+   try {
++    if (abortSignal?.aborted) throw new Error('Upload aborted');
+     if (onProgress) {
+       subscription = CompressEventEmitter.addListener('uploadProgress', (event: any) => {
+         if (event.uuid === uuid) {
+@@ -64,13 +67,9 @@ export const backgroundUpload = async (
+       fileUrl = fileUrl.replace('file://', '');
+     }
+ 
+-    if (options?.getCancellationId) {
+-      options?.getCancellationId(uuid);
+-    }
+-
+-    abortSignal?.addEventListener('abort', () => cancelUpload(uuid));
+-
+-    const result = await Compressor.upload(fileUrl, {
++    abortSignal?.addEventListener('abort', onAbort, { once: true });
++    if (abortSignal?.aborted) throw new Error('Upload aborted');
++    const upload = Compressor.upload(fileUrl, {
+       uuid,
+       method: options.httpMethod,
+       headers: options.headers,
+@@ -78,12 +77,24 @@ export const backgroundUpload = async (
+       ...options,
+       url,
+     });
+-    return result;
++    started = true;
++    // Register native work before exposing cancellation to callers.
++    void upload.catch(() => undefined);
++    try {
++      options?.getCancellationId?.(uuid);
++      if (abortSignal?.aborted) onAbort();
++      const result = await upload;
++      if (abortSignal?.aborted) throw new Error('Upload aborted');
++      return result;
++    } catch (error) {
++      onAbort();
++      if (abortSignal?.aborted) throw new Error('Upload aborted');
++      throw error;
++    }
+   } finally {
+-    // @ts-ignore
+     if (subscription) {
+       subscription.remove();
+     }
+-    abortSignal?.removeEventListener('abort', () => cancelUpload(uuid));
++    abortSignal?.removeEventListener('abort', onAbort);
+   }
+ };

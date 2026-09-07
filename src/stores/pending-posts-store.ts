@@ -9,6 +9,7 @@ import {
 } from "./wallet-scoped-storage";
 import {
   matchesPendingPostAlias,
+  migratePendingPostsState,
   normalizePendingPost,
   prunePendingPosts,
 } from "./pending-posts-lifecycle";
@@ -100,25 +101,25 @@ export const usePendingPostsStore = create<PendingPostsState>()(
       name: "pending-posts-storage",
       storage: createJSONStorage(() => walletScopedStorage),
       skipHydration: true,
-      version: 3,
+      version: 5,
       migrate: (persistedState) => {
-        const state = persistedState as Partial<PendingPostsState> | undefined;
-        const previousPosts = Array.isArray(state?.posts) ? state.posts : [];
-        const posts = prunePendingPosts(previousPosts);
-        if (posts.length < previousPosts.length) {
+        const migrated = migratePendingPostsState(persistedState);
+        const previousCount = Array.isArray((persistedState as { posts?: unknown })?.posts)
+          ? ((persistedState as { posts: unknown[] }).posts.length)
+          : 0;
+        if (migrated.posts.length < previousCount) {
           Sentry.addBreadcrumb({
             category: "pending-posts",
             message: "Stale persisted pending posts pruned during migration",
             level: "info",
             data: {
-              removedCount: previousPosts.length - posts.length,
-              remainingCount: posts.length,
+              removedCount: previousCount - migrated.posts.length,
+              remainingCount: migrated.posts.length,
             },
           });
         }
         return {
-          ...state,
-          posts,
+          ...migrated,
         } as PendingPostsState;
       },
       onRehydrateStorage: () => (state, error) => {

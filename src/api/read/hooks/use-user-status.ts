@@ -18,7 +18,7 @@ export function useUserStatus(options?: { enabled?: boolean }) {
 
   return useQuery({
     queryKey: queryKeys.userStatus(walletAddress!),
-    queryFn: () => getUserStatus({ address: walletAddress! }),
+    queryFn: ({ signal }) => getUserStatus({ address: walletAddress! }, { signal }),
     enabled:
       !!walletAddress &&
       isLoggedIn &&
@@ -38,7 +38,7 @@ export function useUserStatus(options?: { enabled?: boolean }) {
 export function useUserStatusByAddress(address: string | undefined | null) {
   return useQuery({
     queryKey: queryKeys.userStatus(address!),
-    queryFn: () => getUserStatus({ address: address! }),
+    queryFn: ({ signal }) => getUserStatus({ address: address! }, { signal }),
     enabled: !!address,
     staleTime: 1000 * 30, // 30 seconds
   });

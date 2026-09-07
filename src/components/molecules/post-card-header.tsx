@@ -20,35 +20,35 @@ import { getUsernameColor } from "@/src/utils/tiers";
 
 const MAX_HEADER_LENGTH = 30;
 
-function getTopicUsernameDisplay(topic?: string, username?: string) {
-  if (!topic) return { displayTopic: undefined, showUsername: true };
-  const topicLen = topic.length;
+function getCommunityUsernameDisplay(community?: string, username?: string) {
+  if (!community) return { displayCommunity: undefined, showUsername: true };
+  const communityLen = community.length + 2;
   const usernameLen = username?.length ?? 0;
-  if (topicLen + usernameLen <= MAX_HEADER_LENGTH) {
-    return { displayTopic: topic, showUsername: true };
+  if (communityLen + usernameLen <= MAX_HEADER_LENGTH) {
+    return { displayCommunity: community, showUsername: true };
   }
-  if (topicLen > MAX_HEADER_LENGTH) {
-    return { displayTopic: topic.slice(0, MAX_HEADER_LENGTH) + "...", showUsername: false };
+  if (communityLen > MAX_HEADER_LENGTH) {
+    return { displayCommunity: community.slice(0, MAX_HEADER_LENGTH - 2) + "...", showUsername: false };
   }
-  return { displayTopic: topic, showUsername: false };
+  return { displayCommunity: community, showUsername: false };
 }
 
 const NEW_USER_COLOR = "rgb(94,194,106)";
 
 type PostCardHeaderProps = {
   author: PostAuthor;
-  topic?: string;
+  community?: string;
   createdAt: Date | string | number;
   isOwnPost: boolean;
   isFollowing?: boolean;
-  isTopicFollowed?: boolean;
+  isCommunityJoined?: boolean;
   showFollowButton?: boolean;
   onAuthorPress?: () => void;
-  onTopicPress?: () => void;
+  onCommunityPress?: () => void;
   onFollowUser?: () => void;
-  onFollowTopic?: () => void;
+  onToggleCommunityMembership?: () => void;
   onMorePress?: () => void;
-  topicDisabled?: boolean;
+  communityDisabled?: boolean;
   directFollowUser?: boolean;
   showMoreButton?: boolean;
   disabled?: boolean;
@@ -57,18 +57,18 @@ type PostCardHeaderProps = {
 
 export const PostCardHeader = memo(function PostCardHeader({
   author,
-  topic,
+  community,
   createdAt,
   isOwnPost,
   isFollowing,
-  isTopicFollowed,
+  isCommunityJoined,
   showFollowButton = true,
   onAuthorPress,
-  onTopicPress,
+  onCommunityPress,
   onFollowUser,
-  onFollowTopic,
+  onToggleCommunityMembership,
   onMorePress,
-  topicDisabled = false,
+  communityDisabled = false,
   directFollowUser = false,
   showMoreButton = false,
   disabled = false,
@@ -78,18 +78,18 @@ export const PostCardHeader = memo(function PostCardHeader({
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
-  const isFollowingAll = topic
-    ? !!(isFollowing && isTopicFollowed)
+  const isFollowingAll = community
+    ? !!(isFollowing && isCommunityJoined)
     : !!isFollowing;
 
-  const isFollowingPartial = topic
-    ? !!(isFollowing || isTopicFollowed) && !isFollowingAll
+  const isFollowingPartial = community
+    ? !!(isFollowing || isCommunityJoined) && !isFollowingAll
     : false;
 
   const followMenuMinWidth = Math.max(
     180,
     Math.max(
-      topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
+      community ? `${isCommunityJoined ? "Leave" : "Join"} [${community}]`.length : 0,
       `${isFollowing ? "Unfollow" : "Follow"} @${author.username}`.length,
     ) *
       10 +
@@ -102,11 +102,11 @@ export const PostCardHeader = memo(function PostCardHeader({
     onAuthorPress?.();
   }, [disabled, onAuthorPress]);
 
-  const handleTopicPress = useCallback(() => {
+  const handleCommunityPress = useCallback(() => {
     if (disabled) return;
     triggerHaptic("selection");
-    onTopicPress?.();
-  }, [disabled, onTopicPress]);
+    onCommunityPress?.();
+  }, [disabled, onCommunityPress]);
 
   const handleMorePress = useCallback(() => {
     if (disabled) return;
@@ -120,11 +120,11 @@ export const PostCardHeader = memo(function PostCardHeader({
     onFollowUser?.();
   }, [disabled, onFollowUser]);
 
-  const handleFollowTopic = useCallback(() => {
+  const handleToggleCommunityMembership = useCallback(() => {
     if (disabled) return;
     triggerHaptic("medium");
-    onFollowTopic?.();
-  }, [disabled, onFollowTopic]);
+    onToggleCommunityMembership?.();
+  }, [disabled, onToggleCommunityMembership]);
 
   const handleAuthRequiredFollow = useCallback(() => {
     if (disabled) return;
@@ -132,9 +132,9 @@ export const PostCardHeader = memo(function PostCardHeader({
     showAuthSheet();
   }, [disabled, showAuthSheet]);
 
-  const { displayTopic, showUsername } = useMemo(
-    () => getTopicUsernameDisplay(topic, author.username),
-    [topic, author.username],
+  const { displayCommunity, showUsername } = useMemo(
+    () => getCommunityUsernameDisplay(community, author.username),
+    [community, author.username],
   );
 
   const subtleTextStyle = useMemo(
@@ -288,29 +288,29 @@ export const PostCardHeader = memo(function PostCardHeader({
                   },
                 }}
               >
-                {topic && (
-                  <MenuOption onSelect={handleFollowTopic}>
+                {community && (
+                  <MenuOption onSelect={handleToggleCommunityMembership}>
                     <View style={styles.menuOption}>
                       <Ionicons
-                        name={isTopicFollowed ? "pricetag" : "pricetag-outline"}
+                        name={isCommunityJoined ? "pricetag" : "pricetag-outline"}
                         size={14}
                         color={
-                          isTopicFollowed
+                          isCommunityJoined
                             ? theme.colors.primary[500]
                             : theme.colors.text.subtle
                         }
                       />
                       <Text
                         size="lg"
-                        weight={isTopicFollowed ? "semibold" : "medium"}
+                        weight={isCommunityJoined ? "semibold" : "medium"}
                         numberOfLines={1}
                         style={
-                          isTopicFollowed
+                          isCommunityJoined
                             ? { color: theme.colors.primary[500] }
                             : undefined
                         }
                       >
-                        {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
+                        {isCommunityJoined ? "Leave" : "Join"} [{community}]
                       </Text>
                     </View>
                   </MenuOption>
@@ -352,39 +352,28 @@ export const PostCardHeader = memo(function PostCardHeader({
     <View style={styles.header}>
       <View style={styles.authorSection}>
         <View style={styles.authorRow}>
-          {topic && !topicDisabled && (
+          {!!community && !communityDisabled && (
             <Pressable
-              onPress={handleTopicPress}
+              onPress={handleCommunityPress}
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
             >
-              <Text size="lg" weight="bold" numberOfLines={1}>
-                #{displayTopic}
+              <Text size="sm" weight="medium" numberOfLines={1} style={subtleTextStyle}>
+                [{displayCommunity}]
               </Text>
             </Pressable>
           )}
-          {topic && topicDisabled && (
+          {!!community && communityDisabled && (
             <Text
-              size="lg"
-              weight="bold"
+              size="sm"
+              weight="medium"
               numberOfLines={1}
               style={subtleTextStyle}
             >
-              #{displayTopic}
+              [{displayCommunity}]
             </Text>
           )}
-          {topic && !topicDisabled && (
-            <Text size="sm" style={subtleTextStyle}>
-              •
-            </Text>
-          )}
-          <TimeAgo
-            timestamp={createdAt}
-            showSuffix={false}
-            size="md"
-            style={subtleTextStyle}
-          />
-          {showUsername && (
+          {!!community && (
             <Text size="sm" style={subtleTextStyle}>
               •
             </Text>
@@ -408,6 +397,17 @@ export const PostCardHeader = memo(function PostCardHeader({
               </Text>
             </Pressable>
           )}
+          {showUsername && (
+            <Text size="sm" style={subtleTextStyle}>
+              •
+            </Text>
+          )}
+          <TimeAgo
+            timestamp={createdAt}
+            showSuffix={false}
+            size="sm"
+            style={subtleTextStyle}
+          />
         </View>
       </View>
 
@@ -500,29 +500,29 @@ export const PostCardHeader = memo(function PostCardHeader({
                 },
               }}
             >
-              {topic && (
-                <MenuOption onSelect={handleFollowTopic}>
+              {community && (
+                <MenuOption onSelect={handleToggleCommunityMembership}>
                   <View style={styles.menuOption}>
                     <Ionicons
-                      name={isTopicFollowed ? "pricetag" : "pricetag-outline"}
+                      name={isCommunityJoined ? "pricetag" : "pricetag-outline"}
                       size={14}
                       color={
-                        isTopicFollowed
+                        isCommunityJoined
                           ? theme.colors.primary[500]
                           : theme.colors.text.subtle
                       }
                     />
                     <Text
                       size="lg"
-                      weight={isTopicFollowed ? "semibold" : "medium"}
+                      weight={isCommunityJoined ? "semibold" : "medium"}
                       numberOfLines={1}
                       style={
-                        isTopicFollowed
+                        isCommunityJoined
                           ? { color: theme.colors.primary[500] }
                           : undefined
                       }
                     >
-                      {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
+                      {isCommunityJoined ? "Leave" : "Join"} [{community}]
                     </Text>
                   </View>
                 </MenuOption>

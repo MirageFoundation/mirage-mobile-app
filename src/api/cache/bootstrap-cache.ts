@@ -4,32 +4,56 @@ import type {
   BootstrapParams,
   BootstrapResponse,
 } from "@/src/api/read/endpoints/bootstrap";
+import { normalizeLensIdentity } from "@/src/api/read/request-params";
 import { normalizeAccountIdentity, queryKeys } from "@/src/api/read/query-keys";
 import type { PostsResponse } from "@/src/api/types";
+import type { LensMode } from "@/src/domain/communities";
+import { getServerIdentity, normalizeServerBaseUrl } from "@/src/api/server-runtime";
 
 type BootstrapFeedPreviewKey = {
+  serverIdentity?: string;
   feed?: string;
   by?: string;
-  topic?: string;
+  community?: string;
   allowed_tags?: string;
   address?: string;
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 };
 
-const bootstrapFeedPreviews = new Map<string, PostsResponse>();
+const bootstrapFeedPreviews = new Map<string, { page: PostsResponse; expiresAt: number }>();
+const PREVIEW_TTL = 60_000;
+const MAX_PREVIEWS = 20;
 
 function previewStorageKey({
+  serverIdentity = getServerIdentity(),
   feed,
   by,
-  topic,
+  community,
   allowed_tags,
   address,
+  lens,
+  team_id,
+  scope,
+  lens_picks,
 }: BootstrapFeedPreviewKey): string {
+  const identity = normalizeLensIdentity(
+    { lens, team_id, scope, lens_picks },
+    { community },
+  );
   return JSON.stringify({
+    server: normalizeServerBaseUrl(serverIdentity),
     feed: feed ?? null,
     by: by ?? "magic",
-    topic: topic ?? null,
+    community: community ?? null,
     allowed_tags: allowed_tags ?? null,
     address: normalizeAccountIdentity(address),
+    lens: identity.lens,
+    team_id: identity.team_id,
+    scope: identity.scope,
+    lens_picks: identity.lens_picks,
   });
 }
 
@@ -37,16 +61,24 @@ export function rememberBootstrapFeedPreview(
   key: BootstrapFeedPreviewKey,
   page: PostsResponse,
 ): void {
-  bootstrapFeedPreviews.set(previewStorageKey(key), page);
+  for (const [storedKey, entry] of bootstrapFeedPreviews) {
+    if (entry.expiresAt <= Date.now()) bootstrapFeedPreviews.delete(storedKey);
+  }
+  const storageKey = previewStorageKey(key);
+  bootstrapFeedPreviews.delete(storageKey);
+  bootstrapFeedPreviews.set(storageKey, { page, expiresAt: Date.now() + PREVIEW_TTL });
+  while (bootstrapFeedPreviews.size > MAX_PREVIEWS) {
+    bootstrapFeedPreviews.delete(bootstrapFeedPreviews.keys().next().value!);
+  }
 }
 
 export function consumeBootstrapFeedPreview(
   key: BootstrapFeedPreviewKey,
 ): PostsResponse | null {
   const storageKey = previewStorageKey(key);
-  const page = bootstrapFeedPreviews.get(storageKey) ?? null;
-  if (page) bootstrapFeedPreviews.delete(storageKey);
-  return page;
+  const entry = bootstrapFeedPreviews.get(storageKey);
+  bootstrapFeedPreviews.delete(storageKey);
+  return entry && entry.expiresAt > Date.now() ? entry.page : null;
 }
 
 export function hydrateBootstrapViewCache(
@@ -60,7 +92,7 @@ export function hydrateBootstrapViewCache(
   const feedParams = {
     ...requestParams,
     ...(response.view.feed ? { feed: response.view.feed } : {}),
-    ...(response.view.topic ? { topic: response.view.topic } : {}),
+    ...(response.view.community ? { community: response.view.community } : {}),
   };
   const queryKey = queryKeys.posts({ ...feedParams, page: undefined });
   const existing = queryClient.getQueryData<{
@@ -75,9 +107,13 @@ export function hydrateBootstrapViewCache(
     rememberBootstrapFeedPreview({
       feed: feedParams.feed,
       by: feedParams.by,
-      topic: feedParams.topic,
+      community: feedParams.community,
       allowed_tags: feedParams.allowed_tags,
       address: feedParams.address,
+      lens: feedParams.lens,
+      team_id: feedParams.team_id,
+      scope: feedParams.scope,
+      lens_picks: feedParams.lens_picks,
     }, response.view);
     return;
   }

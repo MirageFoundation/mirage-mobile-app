@@ -18,7 +18,7 @@ import {
   ReportSheetRef,
   type Post,
 } from "@/src/components/molecules";
-import { isTopicFollowed } from "@/src/domain/topics";
+import { isCommunityJoined } from "@/src/domain/communities";
 import {
   getBlockConfirmationMessage,
   useBlockHandler,
@@ -46,7 +46,7 @@ export type PostDetailActionSheetsRef = {
 type PostDetailActionSheetsProps = {
   actualRootPostId?: string | null;
   currentUserId?: string;
-  followedTopics: string[];
+  joinedCommunities: string[];
   followedUsers: string[];
   highlight?: string;
   id: string;
@@ -62,7 +62,7 @@ export const PostDetailActionSheets = forwardRef<
     {
       actualRootPostId,
       currentUserId,
-      followedTopics,
+      joinedCommunities,
       followedUsers,
       highlight,
       id,
@@ -93,8 +93,8 @@ export const PostDetailActionSheets = forwardRef<
     const postFollowOverride = usePostDetailActionStateStore((state) =>
       post?.id ? state.postFollowOverrides[post.id] : undefined,
     );
-    const topicFollowOverride = usePostDetailActionStateStore((state) =>
-      post?.id ? state.topicFollowOverrides[post.id] : undefined,
+    const communityJoinOverride = usePostDetailActionStateStore((state) =>
+      post?.id ? state.communityJoinOverrides[post.id] : undefined,
     );
     const setPostFollowOverride = usePostDetailActionStateStore(
       (state) => state.setPostFollowOverride,
@@ -128,7 +128,7 @@ export const PostDetailActionSheets = forwardRef<
     const reportHandler = useReportHandler({});
     const {
       handleFollowUser: handleFollowUserViaQueue,
-      handleFollowTopic: handleFollowTopicViaQueue,
+      handleToggleCommunityMembership: handleToggleCommunityMembershipViaQueue,
     } = useFollowHandler({
       onOptimisticFollowUser: (_userId, isFollowing) => {
         if (post?.id) setPostFollowOverride(post.id, isFollowing);
@@ -136,10 +136,10 @@ export const PostDetailActionSheets = forwardRef<
       onRollbackFollowUser: () => {
         if (post?.id) clearPostFollowOverride(post.id);
       },
-      onOptimisticFollowTopic: (_topic, isFollowing) => {
+      onOptimisticJoinCommunity: (_topic, isFollowing) => {
         if (post?.id) setTopicFollowOverride(post.id, isFollowing);
       },
-      onRollbackFollowTopic: () => {
+      onRollbackJoinCommunity: () => {
         if (post?.id) clearTopicFollowOverride(post.id);
       },
     });
@@ -374,7 +374,7 @@ export const PostDetailActionSheets = forwardRef<
       );
       const editParams: Record<string, string> = {
         editPostId: post.id,
-        editTopic: post.topic ?? "general",
+        editCommunity: post.community ?? "general",
         editTitle: post.title,
         editBody: post.body ?? rootPost?.content ?? "",
         editTag: rootPost?.tag ?? "",
@@ -386,23 +386,6 @@ export const PostDetailActionSheets = forwardRef<
         editParams.editMedia = JSON.stringify(post.media.map((media) => media.uri));
       }
       router.push({ pathname: "/edit-post", params: editParams });
-    }, [post, rootPost, router]);
-
-    const handleAnnotatePost = useCallback(() => {
-      if (!post) return;
-      const annotateParams: Record<string, string> = {
-        postId: post.id,
-        postTitle: post.title,
-        postTopic: post.topic ?? "",
-        postContent: post.body ?? rootPost?.content ?? "",
-        postTag: rootPost?.tag ?? "",
-        postLikes: String(post.likes ?? 0),
-        postComments: String(post.comments ?? 0),
-      };
-      if (post.media?.[0]?.uri) {
-        annotateParams.postThumbnail = post.media[0].uri;
-      }
-      router.push({ pathname: "/annotate", params: annotateParams });
     }, [post, rootPost, router]);
 
     const presentAward = useCallback(
@@ -473,7 +456,7 @@ export const PostDetailActionSheets = forwardRef<
           ref={postOptionsSheetRef}
           post={post}
           isOwnPost={currentUserId === post?.author.id}
-          isTopicFollowed={topicFollowOverride ?? isTopicFollowed(followedTopics, post?.topic)}
+          isCommunityJoined={communityJoinOverride ?? isCommunityJoined(joinedCommunities, post?.community)}
           isFollowingUser={
             post?.author.id
               ? postFollowOverride ?? followedUsers.includes(post.author.id)
@@ -488,11 +471,11 @@ export const PostDetailActionSheets = forwardRef<
               postFollowOverride ?? post.isFollowing ?? false,
             );
           }}
-          onFollowTopic={() => {
-            if (!post?.topic) return;
-            handleFollowTopicViaQueue(
-              post.topic,
-              topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic),
+          onToggleCommunityMembership={() => {
+            if (!post?.community) return;
+            handleToggleCommunityMembershipViaQueue(
+              post.community,
+              communityJoinOverride ?? isCommunityJoined(joinedCommunities, post.community),
             );
           }}
           onSave={handleSavePost}
@@ -513,7 +496,6 @@ export const PostDetailActionSheets = forwardRef<
             if (!post) return;
             presentGiftSubscription(post.author.id, post.author.username);
           }}
-          onAnnotate={handleAnnotatePost}
           onDismiss={() => {}}
         />
 

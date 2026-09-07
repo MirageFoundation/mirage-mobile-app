@@ -1,8 +1,11 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
+import { useState } from "react";
 
 import { LaunchRouteOrchestrator } from "@/src/navigation/launch-route-orchestrator";
 import { POST_DETAIL_STACK_GESTURE_OPTIONS } from "@/src/navigation/post-detail-route-policy";
+import { ProtectedEntry } from "@/src/navigation/protected-entry";
+import { AuthIntentOrchestrator } from "@/src/navigation/auth-intent-orchestrator";
 
 /**
  * The single app Stack. The root layout only mounts providers around a Slot;
@@ -15,10 +18,19 @@ import { POST_DETAIL_STACK_GESTURE_OPTIONS } from "@/src/navigation/post-detail-
  * is guaranteed to be mounted before any route change fires.
  */
 export default function AppStackLayout() {
+  const [isTransitioning, setIsTransitioning] = useState(false);
   return (
     <>
     <LaunchRouteOrchestrator />
-    <Stack screenOptions={{ headerShown: false }}>
+    <AuthIntentOrchestrator isTransitioning={isTransitioning} />
+    <Stack
+      screenOptions={{ headerShown: false }}
+      screenLayout={({ children, route }) => <ProtectedEntry screenName={route.name}>{children}</ProtectedEntry>}
+      screenListeners={{
+        transitionStart: () => setIsTransitioning(true),
+        transitionEnd: () => setIsTransitioning(false),
+      }}
+    >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
         name="(auth)"
@@ -36,6 +48,10 @@ export default function AppStackLayout() {
           animationDuration: 250,
           ...POST_DETAIL_STACK_GESTURE_OPTIONS,
         }}
+      />
+      <Stack.Screen
+        name="post-media/[id]"
+        options={{ animation: "fade", gestureEnabled: false }}
       />
       <Stack.Screen
         name="p/[id]"
@@ -85,7 +101,31 @@ export default function AppStackLayout() {
         }}
       />
       <Stack.Screen
-        name="topic/[id]"
+        name="c/[slug]/index"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="c/[slug]/teams/index"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="c/[slug]/teams/[teamId]"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="curation-invitations"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="creator-earnings"
         options={{
           animation: "slide_from_right",
         }}
@@ -97,7 +137,7 @@ export default function AppStackLayout() {
         }}
       />
       <Stack.Screen
-        name="topics"
+        name="communities"
         options={{
           animation: "slide_from_right",
         }}
@@ -116,12 +156,6 @@ export default function AppStackLayout() {
       />
       <Stack.Screen
         name="delete-account"
-        options={{
-          animation: "slide_from_right",
-        }}
-      />
-      <Stack.Screen
-        name="agents"
         options={{
           animation: "slide_from_right",
         }}
@@ -145,34 +179,9 @@ export default function AppStackLayout() {
           animation: "slide_from_right",
         }}
       />
-      {/* Rewards family */}
-      <Stack.Screen
-        name="quests"
-        options={{
-          animation: "slide_from_right",
-        }}
-      />
-      <Stack.Screen
-        name="referrals"
-        options={{
-          animation: "slide_from_right",
-        }}
-      />
-      <Stack.Screen
-        name="invite-and-earn"
-        options={{
-          animation: "slide_from_right",
-        }}
-      />
       {/* Compose family — rises from the bottom like create/comment flows. */}
       <Stack.Screen
         name="edit-post"
-        options={{
-          animation: "slide_from_bottom",
-        }}
-      />
-      <Stack.Screen
-        name="annotate"
         options={{
           animation: "slide_from_bottom",
         }}

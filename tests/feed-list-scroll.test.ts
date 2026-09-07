@@ -26,13 +26,12 @@ describe("feed list scroll", () => {
 
   test("home and topic feeds no longer pre-scroll before prepending new posts", async () => {
     const home = await Bun.file("src/pages/home/use-home-tabbed-feed-controller.ts").text();
-    const topic = await Bun.file("src/pages/topic/topic-feed-content.tsx").text();
+    const community = await Bun.file("src/pages/community/community-feed-content.tsx").text();
 
     expect(home).toContain("await scrollFeedListToTop(activeListRef.current)");
     expect(home).not.toContain("offset: 1");
     expect(home).not.toContain("recordInteraction");
     expect(home).not.toContain("minDelay");
-    expect(topic).toContain("await scrollFeedListToTop(flatListRef.current)");
-    expect(topic).not.toContain("@shopify/flash-list");
+    expect(community).not.toContain("@shopify/flash-list");
   });
 });

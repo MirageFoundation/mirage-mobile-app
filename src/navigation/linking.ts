@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/react-native";
 import { Alert } from "react-native";
 
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
+import { useDeferredCampaignStore } from "@/src/stores/deferred-campaign-store";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { setShareScheme } from "@/src/utils/share-scheme";
@@ -14,7 +15,11 @@ import {
   navigateWithAuthGuard,
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
-import { isAppRoute, resolveMirageUrl } from "./route-map";
+import { extractCampaignParams } from "./campaign-linking";
+import { NOT_FOUND_ROUTE, resolveMirageUrl, validatePendingRoute } from "./route-map";
+import { isProtectedEntryReady } from "./auth-entry-policy";
+import { authSessionCoordinator } from "@/src/services/auth-session-coordinator";
+import { normalizeDevelopmentLaunchPath } from "./development-launch-path";
 import {
   navigateBypass,
   pushBypass,
@@ -25,21 +30,32 @@ import {
   resolveStartupRouteAction,
 } from "@/src/navigation/startup-route-policy";
 
-export function showLoginRequiredAlert(): void {
+export function showLoginRequiredAlert(revision = useDeepLinkStore.getState().pendingRevision): void {
+  if (revision !== useDeepLinkStore.getState().pendingRevision) return;
+  const session = authSessionCoordinator.current();
+  const isCurrent = () => authSessionCoordinator.isCurrent(session) &&
+    revision === useDeepLinkStore.getState().pendingRevision;
+  const cancel = () => {
+    if (isCurrent()) useDeepLinkStore.getState().clearPendingRoute(revision);
+  };
   Alert.alert(
     "Login Required",
     "Log in to view this content.",
     [
-      { text: "Cancel", style: "cancel" },
+      { text: "Cancel", style: "cancel", onPress: cancel },
       {
         text: "Log In",
-        onPress: () => router.push("/login" as any),
+        onPress: () => {
+          if (isCurrent()) router.push(useAuthStore.getState().isLoggedIn ? "/change-username" : "/login");
+        },
       },
     ],
+    { cancelable: true, onDismiss: cancel },
   );
 }
 
 function showAlreadyLoggedInForLoginAlert(route: string): void {
+  const session = authSessionCoordinator.current();
   Alert.alert(
     "Already logged in",
     "You are already logged in. Please logout to login to another account.",
@@ -49,9 +65,12 @@ function showAlreadyLoggedInForLoginAlert(route: string): void {
         text: "Log Out",
         style: "destructive",
         onPress: async () => {
+          if (!authSessionCoordinator.isCurrent(session)) return;
           try {
-            await useAuthStore.getState().logout();
-            pushBypass(route as any);
+            const logout = useAuthStore.getState().logout();
+            const outgoing = authSessionCoordinator.current();
+            await logout;
+            if (authSessionCoordinator.isCurrent(outgoing) && !useAuthStore.getState().isLoggedIn) pushBypass(route as any);
           } catch (error) {
             Sentry.captureException(error, {
               tags: { feature: "deep-link", operation: "logout-for-login" },
@@ -65,21 +84,22 @@ function showAlreadyLoggedInForLoginAlert(route: string): void {
 }
 
 function showAlreadyLoggedInAlert(route: string): void {
-  const isInvite = route.includes("invite=");
+  const session = authSessionCoordinator.current();
   Alert.alert(
     "Already logged in",
-    isInvite
-      ? "Please logout to create a new account using the invite code."
-      : "Please logout to create a new account using the referral link.",
+    "Please logout to create a new account.",
     [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log Out",
         style: "destructive",
         onPress: async () => {
+          if (!authSessionCoordinator.isCurrent(session)) return;
           try {
-            await useAuthStore.getState().logout();
-            pushBypass(route as any);
+            const logout = useAuthStore.getState().logout();
+            const outgoing = authSessionCoordinator.current();
+            await logout;
+            if (authSessionCoordinator.isCurrent(outgoing) && !useAuthStore.getState().isLoggedIn) pushBypass(route as any);
           } catch (error) {
             Sentry.captureException(error, {
               tags: { feature: "deep-link", operation: "logout-for-signup" },
@@ -96,11 +116,17 @@ function getAdditionalMirageHosts(): string[] {
   return [usePreferencesStore.getState().apiServer];
 }
 
+function captureDeferredCampaign(value: string): void {
+  const fields = extractCampaignParams(value, getAdditionalMirageHosts());
+  if (!fields) return;
+  useDeferredCampaignStore.getState().captureFirstTouch(fields);
+}
+
 function resolveSelfRoute(route: string): string | null {
-  if (!route.includes("__SELF__")) return route;
+  if (route.split("?", 1)[0] !== "/user-following/__SELF__") return route;
   const walletAddress = useAuthStore.getState().walletAddress;
-  if (!walletAddress) return null;
-  return route.replace("__SELF__", walletAddress);
+  if (!walletAddress) return route;
+  return route.replace("__SELF__", encodeURIComponent(walletAddress));
 }
 
 const LAST_SHARE_PATH_KEY = "last-share-path";
@@ -196,6 +222,9 @@ export async function redirectSystemPath({
   path: string;
   initial: boolean;
 }): Promise<string> {
+  if (__DEV__) path = normalizeDevelopmentLaunchPath(path);
+  captureDeferredCampaign(path);
+
   const scheme = path.match(/^([^:]+):\/\//)?.[1];
   if (scheme) {
     setShareScheme(scheme);
@@ -241,23 +270,12 @@ export async function redirectSystemPath({
     return "/create";
   }
 
-  if (isAppRoute(path)) {
-    if (initial) {
-      const anchor = resolveInitialHomeAnchor(path);
-      if (anchor.pendingRoute) {
-        useDeepLinkStore.getState().setPendingRoute(anchor.pendingRoute);
-      }
-      return anchor.route;
-    }
-    return path;
-  }
-
   const match = resolveMirageUrl(path, getAdditionalMirageHosts());
-  if (!match) {
-    return "";
+  if (!match || match.type === "notFound") {
+    return NOT_FOUND_ROUTE;
   }
 
-  // Cold starts always enter through Home. Auth is resolved there first, and
+  // Valid cold-start targets enter through Home. Auth is resolved there first, and
   // only then is this route pushed/navigated by LaunchRouteOrchestrator. This
   // gives every launch target a deterministic Home back destination.
   if (initial) {
@@ -270,7 +288,7 @@ export async function redirectSystemPath({
 
   const resolvedRoute = resolveSelfRoute(match.route);
   if (!resolvedRoute) {
-    return "";
+    return NOT_FOUND_ROUTE;
   }
 
   if (!match.requiresAuth) {
@@ -287,8 +305,9 @@ export async function redirectSystemPath({
 
   const target = resolveAuthNavigationTarget(resolvedRoute);
   if (target !== resolvedRoute) {
-    setTimeout(() => showLoginRequiredAlert(), 500);
-    return "";
+    const revision = useDeepLinkStore.getState().pendingRevision;
+    setTimeout(() => showLoginRequiredAlert(revision), 500);
+    return "/";
   }
 
   return target;
@@ -305,7 +324,12 @@ export function flushPendingLaunchRoute(state: {
   isLoggedIn: boolean;
   hasSeenAdultPrompt: boolean;
 }): PendingLaunchRouteResult {
-  const pendingRoute = useDeepLinkStore.getState().pendingRoute;
+  const rawRoute = useDeepLinkStore.getState().pendingRoute;
+  const pendingRoute = rawRoute && validatePendingRoute(rawRoute);
+  if (rawRoute && !pendingRoute) {
+    useDeepLinkStore.getState().consumePendingRoute();
+    return "none";
+  }
   const action = resolveStartupRouteAction(pendingRoute, state);
 
   if (action === "none") {
@@ -344,10 +368,7 @@ export function flushPendingLaunchRoute(state: {
 }
 
 export async function handleMirageLink(url: string): Promise<boolean> {
-  if (isAppRoute(url)) {
-    navigateWithAuthGuard(url);
-    return true;
-  }
+  captureDeferredCampaign(url);
 
   const match = resolveMirageUrl(url, getAdditionalMirageHosts());
   if (!match) {
@@ -356,7 +377,8 @@ export async function handleMirageLink(url: string): Promise<boolean> {
 
   const resolvedRoute = resolveSelfRoute(match.route);
   if (!resolvedRoute) {
-    return false;
+    navigateWithAuthGuard(NOT_FOUND_ROUTE);
+    return true;
   }
 
   if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
@@ -369,7 +391,7 @@ export async function handleMirageLink(url: string): Promise<boolean> {
     return true;
   }
 
-  if (match.requiresAuth && !useAuthStore.getState().isLoggedIn) {
+  if (match.requiresAuth && !isProtectedEntryReady(useAuthStore.getState())) {
     resolveAuthNavigationTarget(resolvedRoute);
     showLoginRequiredAlert();
     return true;

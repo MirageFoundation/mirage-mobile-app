@@ -1,8 +1,10 @@
 import { create } from "zustand";
 
 type PostDetailActionState = {
+  commentsRequestedFor: string | null;
+  requestComments: (postId: string | null) => void;
   postFollowOverrides: Record<string, boolean | undefined>;
-  topicFollowOverrides: Record<string, boolean | undefined>;
+  communityJoinOverrides: Record<string, boolean | undefined>;
   setPostFollowOverride: (postId: string, isFollowing: boolean) => void;
   clearPostFollowOverride: (postId: string) => void;
   setTopicFollowOverride: (postId: string, isFollowing: boolean) => void;
@@ -10,8 +12,10 @@ type PostDetailActionState = {
 };
 
 export const usePostDetailActionStateStore = create<PostDetailActionState>((set) => ({
+  commentsRequestedFor: null,
+  requestComments: (commentsRequestedFor) => set({ commentsRequestedFor }),
   postFollowOverrides: {},
-  topicFollowOverrides: {},
+  communityJoinOverrides: {},
   setPostFollowOverride: (postId, isFollowing) =>
     set((state) => ({
       postFollowOverrides: {
@@ -26,14 +30,14 @@ export const usePostDetailActionStateStore = create<PostDetailActionState>((set)
     }),
   setTopicFollowOverride: (postId, isFollowing) =>
     set((state) => ({
-      topicFollowOverrides: {
-        ...state.topicFollowOverrides,
+      communityJoinOverrides: {
+        ...state.communityJoinOverrides,
         [postId]: isFollowing,
       },
     })),
   clearTopicFollowOverride: (postId) =>
     set((state) => {
-      const { [postId]: _removed, ...rest } = state.topicFollowOverrides;
-      return { topicFollowOverrides: rest };
+      const { [postId]: _removed, ...rest } = state.communityJoinOverrides;
+      return { communityJoinOverrides: rest };
     }),
 }));

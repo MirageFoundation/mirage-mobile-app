@@ -1,13 +1,13 @@
-import { Modal, View } from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
 
+import { useAccountStatus, useUserStatus } from "@/src/api/read";
 import {
-  AdultContentPopup,
   FeedHeader,
   NewPostsButton,
   UpdateBanner,
 } from "@/src/components/molecules";
+import { AccountStatusNotices } from "@/src/components/molecules/subscription";
 import { Box } from "@/src/components/ui/primitives";
 import { PostActionOverlays } from "../post/post-action-overlays";
 import { FeedPostCardRuntimeProvider } from "./feed-post-card-runtime";
@@ -21,8 +21,9 @@ type HomeScreenSectionsProps = {
 };
 
 export function HomeScreenSections({ controller }: HomeScreenSectionsProps) {
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const { data: userStatus } = useUserStatus();
+  const { data: accountStatus } = useAccountStatus();
 
   return (
     <FeedPostCardRuntimeProvider config={controller.feedRuntimeConfig}>
@@ -37,11 +38,20 @@ export function HomeScreenSections({ controller }: HomeScreenSectionsProps) {
           feedType={controller.feedType}
           feedOptions={controller.feedOptions}
           onFeedTypeChange={controller.handleFeedTypeChange}
-          borderBottomColor={getHomeHeaderBorderColor(
-            controller.showModerationReminder,
-            theme.colors.error[500],
-          )}
+          borderBottomColor={getHomeHeaderBorderColor()}
         />
+
+        <Box px="md">
+          <AccountStatusNotices
+            quota={null}
+            renewal={accountStatus?.renewal_warning}
+            effectivePaid={userStatus?.effective_paid}
+            userLevel={userStatus?.user_level}
+            showQuota={false}
+            showRenewal
+            compact
+          />
+        </Box>
 
         <HomeTabbedFeed
           ref={controller.tabbedFeedRef}
@@ -57,34 +67,12 @@ export function HomeScreenSections({ controller }: HomeScreenSectionsProps) {
           topOffset={insets.top + 44}
           avatars={controller.newPostAvatars}
           newPostCount={controller.newPostCount}
-          loading={controller.isBannerLoading}
         />
 
         <UpdateBanner
           status={controller.easUpdate.status}
           onInstall={controller.easUpdate.install}
           onDismiss={controller.easUpdate.dismiss}
-        />
-
-        <Modal
-          visible={controller.showModerationReminder}
-          transparent
-          animationType="fade"
-          onRequestClose={() => undefined}
-          statusBarTranslucent
-        >
-          <View style={[styles.moderationModalRoot, { paddingTop: insets.top }]}>
-            <View style={styles.moderationModalCard}>
-              {controller.moderationReminderHeader}
-            </View>
-          </View>
-        </Modal>
-
-        <AdultContentPopup
-          visible={controller.showAdultPopup}
-          onEnable={controller.enableAdultContent}
-          onDecline={controller.declineAdultContent}
-          onGoToSettings={controller.openSettings}
         />
 
         <PostActionOverlays controller={controller.postActions} />

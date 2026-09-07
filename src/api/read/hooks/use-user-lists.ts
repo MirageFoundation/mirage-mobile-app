@@ -8,11 +8,11 @@ import {
 } from "../endpoints/users";
 import { useAuthStore } from "@/src/stores";
 
-/** Follow/agent/community lists can change on another device; keep them fresh. */
+/** Follow lists can change on another device; keep them fresh. */
 export const USER_FOLLOWED_STALE_TIME_MS = 60 * 1000;
 
 /**
- * Get current user's followed users, topics, and enabled agents
+ * Get current user's followed users.
  * Only enabled when wallet is connected
  */
 export function useUserFollowed() {

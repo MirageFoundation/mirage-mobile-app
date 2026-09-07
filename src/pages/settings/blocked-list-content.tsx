@@ -22,11 +22,12 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useUserBlocked, useUsernameFromAddress } from "@/src/api/read";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { UserBlockedResponse } from "@/src/api/types";
-import { useUnblockUser, useUnblockPost, useUnblockTopic } from "@/src/api/write";
+import { useUnblockUser, useUnblockPost, useUnblockCommunity } from "@/src/api/write";
 import { Avatar } from "@/src/components/atoms";
 import { ConfirmationPopup } from "@/src/components/molecules";
 import { Box, Icon, Text } from "@/src/components/ui/primitives";
-import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import { useAuthStore } from "@/src/stores";
+import { LocalHiddenPosts } from "./local-hidden-posts";
 import {
   usePowQueueStore,
   generateActionId,
@@ -110,12 +111,12 @@ function usePagerScrollHandler(handlers: { onPageScroll: (e: any, ctx: any) => v
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
-type BlockedTab = "users" | "posts" | "topics";
+type BlockedTab = "users" | "posts" | "communities";
 
 const TABS: { key: BlockedTab; label: string }[] = [
   { key: "users", label: "Users" },
   { key: "posts", label: "Posts" },
-  { key: "topics", label: "Topics" },
+  { key: "communities", label: "Communities" },
 ];
 
 function SkeletonBox({
@@ -195,12 +196,12 @@ function EmptyState({ tab }: { tab: BlockedTab }) {
   const titles: Record<BlockedTab, string> = {
     users: "No blocked users",
     posts: "No blocked posts",
-    topics: "No blocked topics",
+    communities: "No blocked communities",
   };
   const subtitles: Record<BlockedTab, string> = {
     users: "Users you block will appear here. You can unblock them anytime.",
     posts: "Posts you block will appear here. You can unblock them anytime.",
-    topics: "Topics you block will appear here. You can unblock them anytime.",
+    communities: "Communities you block will appear here. You can unblock them anytime.",
   };
 
   return (
@@ -324,7 +325,7 @@ function BlockedTopicRow({
 
   return (
     <Pressable
-      onPress={() => router.push(`/topic/${topic}`)}
+      onPress={() => router.push(`/c/${topic}` as never)}
       style={styles.row}
     >
       <Icon
@@ -369,8 +370,7 @@ export function BlockedListScreen() {
   const { data: blockedData, isLoading, refetch } = useUserBlocked();
   const unblockUserMutation = useUnblockUser();
   const unblockPostMutation = useUnblockPost();
-  const unblockTopicMutation = useUnblockTopic();
-  const unblockTopicOptimistic = useContentModerationStore((s) => s.unblockTopic);
+  const unblockCommunityMutation = useUnblockCommunity();
   const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [, setActiveTab] = useState<BlockedTab>("users");
@@ -406,15 +406,15 @@ export function BlockedListScreen() {
     [blockedData?.blocked_posts],
   );
   const blockedTopics = useMemo(
-    () => blockedData?.blocked_topics ?? [],
-    [blockedData?.blocked_topics],
+    () => blockedData?.blocked_communities ?? [],
+    [blockedData?.blocked_communities],
   );
 
   const tabCounts: Record<BlockedTab, number> = useMemo(
     () => ({
       users: blockedUsers.length,
       posts: blockedPosts.length,
-      topics: blockedTopics.length,
+      communities: blockedTopics.length,
     }),
     [blockedUsers.length, blockedPosts.length, blockedTopics.length],
   );
@@ -442,7 +442,7 @@ export function BlockedListScreen() {
     setConfirmTarget({ type: "post", id: postId });
   }, []);
 
-  const handleRequestUnblockTopic = useCallback((topic: string) => {
+  const handleRequestUnblockCommunity = useCallback((topic: string) => {
     setConfirmTarget({ type: "topic", id: topic });
   }, []);
 
@@ -458,7 +458,7 @@ export function BlockedListScreen() {
       } else if (type === "post") {
         updated.blocked_posts = prev.blocked_posts.filter((p) => p !== id);
       } else {
-        updated.blocked_topics = (prev.blocked_topics ?? []).filter((t) => t !== id);
+        updated.blocked_communities = (prev.blocked_communities ?? []).filter((t) => t !== id);
       }
       queryClient.setQueryData(qk, updated);
       return prev;
@@ -479,11 +479,9 @@ export function BlockedListScreen() {
           ? "Unblocking post"
           : "Unblocking topic";
 
-    if (type === "topic") {
-      unblockTopicOptimistic(id);
-    }
-
-    const previousData = optimisticallyRemoveFromList(type, id);
+    const previousData = type === "topic"
+      ? undefined
+      : optimisticallyRemoveFromList(type, id);
 
     enqueue({
       id: actionId,
@@ -491,7 +489,7 @@ export function BlockedListScreen() {
       label,
       execute: async () => {
         const qk = walletAddress ? queryKeys.userBlocked(walletAddress) : null;
-        if (qk) {
+        if (qk && type !== "topic") {
           await queryClient.cancelQueries({ queryKey: qk });
         }
         let result;
@@ -500,15 +498,16 @@ export function BlockedListScreen() {
         } else if (type === "post") {
           result = await unblockPostMutation.mutateAsync(id);
         } else {
-          result = await unblockTopicMutation.mutateAsync(id);
+          result = await unblockCommunityMutation.mutateAsync(id);
         }
-        if (qk) {
+        if (qk && type !== "topic") {
           await queryClient.cancelQueries({ queryKey: qk });
           optimisticallyRemoveFromList(type, id);
         }
         return result;
       },
       onSuccess: () => {
+        if (type === "topic") return;
         if (walletAddress) {
           queryClient.cancelQueries({ queryKey: queryKeys.userBlocked(walletAddress) });
           optimisticallyRemoveFromList(type, id);
@@ -529,7 +528,7 @@ export function BlockedListScreen() {
         }
       },
     });
-  }, [confirmTarget, unblockUserMutation, unblockPostMutation, unblockTopicMutation, unblockTopicOptimistic, enqueue, refetch, optimisticallyRemoveFromList, walletAddress, queryClient]);
+  }, [confirmTarget, unblockUserMutation, unblockPostMutation, unblockCommunityMutation, enqueue, refetch, optimisticallyRemoveFromList, walletAddress, queryClient]);
 
   const handleCancelUnblock = useCallback(() => {
     setConfirmTarget(null);
@@ -551,9 +550,9 @@ export function BlockedListScreen() {
 
   const renderTopicItem = useCallback(
     ({ item }: { item: string }) => (
-      <BlockedTopicRow topic={item} onUnblock={handleRequestUnblockTopic} />
+      <BlockedTopicRow topic={item} onUnblock={handleRequestUnblockCommunity} />
     ),
-    [handleRequestUnblockTopic],
+    [handleRequestUnblockCommunity],
   );
 
   const keyExtractor = useCallback((item: string) => item, []);
@@ -569,8 +568,8 @@ export function BlockedListScreen() {
   }, [isLoading]);
 
   const topicsListEmpty = useCallback(() => {
-    if (isLoading) return <ListSkeleton tab="topics" />;
-    return <EmptyState tab="topics" />;
+    if (isLoading) return <ListSkeleton tab="communities" />;
+    return <EmptyState tab="communities" />;
   }, [isLoading]);
 
   const getConfirmTitle = () => {
@@ -651,6 +650,7 @@ export function BlockedListScreen() {
         </View>
       </View>
 
+      <LocalHiddenPosts />
       <AnimatedPagerView
         ref={pagerRef}
         style={{ flex: 1 }}
@@ -684,7 +684,7 @@ export function BlockedListScreen() {
           />
         </View>
 
-        <View key="topics" style={{ flex: 1 }}>
+        <View key="communities" style={{ flex: 1 }}>
           <FlatList
             data={blockedTopics}
             renderItem={renderTopicItem}

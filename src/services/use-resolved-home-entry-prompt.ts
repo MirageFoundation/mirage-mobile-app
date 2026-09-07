@@ -5,8 +5,9 @@ import { canRequestOsPermissions } from "@/src/navigation/auth-flow-policy";
 import { isPowQueueBusy, usePowQueueStore } from "@/src/services/pow-queue";
 import {
   getHomeEntryFocused,
+  getAdultPromptActive,
+  subscribeAdultPromptActive,
   resolveHomeEntryPrompt,
-  selectModerationReminderState,
   subscribeHomeEntryFocused,
   type HomeEntryPromptId,
 } from "@/src/services/home-entry-prompt-orchestrator";
@@ -18,11 +19,23 @@ function subscribeAppActive(onStoreChange: () => void) {
   return () => subscription.remove();
 }
 
+function subscribePreferencesHydration(listener: () => void) {
+  const start = usePreferencesStore.persist.onHydrate(listener);
+  const finish = usePreferencesStore.persist.onFinishHydration(listener);
+  return () => { start(); finish(); };
+}
+
 function getAppActive() {
   return AppState.currentState === "active";
 }
 
 export function useResolvedHomeEntryPrompt(): HomeEntryPromptId | null {
+  const preferencesHydrated = useSyncExternalStore(
+    subscribePreferencesHydration,
+    usePreferencesStore.persist.hasHydrated,
+    () => false,
+  );
+  useSyncExternalStore(subscribeAdultPromptActive, getAdultPromptActive, getAdultPromptActive);
   const isHomeFocused = useSyncExternalStore(
     subscribeHomeEntryFocused,
     getHomeEntryFocused,
@@ -36,29 +49,17 @@ export function useResolvedHomeEntryPrompt(): HomeEntryPromptId | null {
   const isPowBusy = usePowQueueStore(isPowQueueBusy);
   const hasSeenAdultPrompt = usePreferencesStore((state) => state.hasSeenAdultPrompt);
   const analyticsConsentAsked = usePreferencesStore((state) => state.analyticsConsentAsked);
-  const reminderUnderstoodByUser = usePreferencesStore(
-    (state) => state.moderationReminderUnderstoodByUser,
-  );
-  const reminderSnoozedUntilByUser = usePreferencesStore(
-    (state) => state.moderationReminderSnoozedUntilByUser,
-  );
   const timeTick = useTimeTickStore((state) => state.tick);
   void timeTick;
 
-  const reminderState = selectModerationReminderState(
-    currentUserId,
-    reminderUnderstoodByUser,
-    reminderSnoozedUntilByUser,
-  );
   return resolveHomeEntryPrompt({
+    preferencesHydrated,
     isInitializing,
     isAuthenticated: sessionStatus === "authenticated",
     isAppActive,
     isHomeFocused,
     hasCurrentUser: Boolean(currentUserId),
     hasSeenAdultPrompt,
-    moderationReminderUnderstood: reminderState.understood,
-    moderationReminderSnoozedUntil: reminderState.snoozedUntil,
     nowMs: Date.now(),
     analyticsConsentAsked,
     canRequestOsPermissions: canRequestOsPermissions({

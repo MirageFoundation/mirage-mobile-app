@@ -156,7 +156,7 @@ export function useCreateSubmitFlow({
         const actionId = generateActionId();
         const editInput: EditPostMutationInput = {
           postId: editPostId,
-          topic,
+          community: topic,
           title: draft.title.trim(),
           content: content || "",
           tag: selectedContentWarning,
@@ -185,7 +185,7 @@ export function useCreateSubmitFlow({
             usePostEditStore.getState().setOverride(editPostId, {
               title: editInput.title,
               content: editInput.content,
-              topic,
+              community: topic,
               tag: selectedContentWarning || undefined,
               // Always store the media list — an empty array means "all media
               // removed". Storing undefined here made every consumer's
@@ -232,7 +232,7 @@ export function useCreateSubmitFlow({
             })
           : undefined;
         const postInput: CreatePostMutationInput = {
-          topic,
+          community: topic,
           title: draft.title.trim(),
           content: content,
           tag: selectedContentWarning,

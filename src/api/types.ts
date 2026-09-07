@@ -2,6 +2,24 @@
 // Shared API Types
 // ============================================
 
+import type {
+  LensMode,
+  ServedLens,
+} from "@/src/domain/communities";
+
+export type {
+  CommunitiesResponse,
+  CommunityDetail,
+  CommunityPreference,
+  CommunitySummary,
+  CommunityTeamSummary,
+  DailyQuota,
+  LensMode,
+  LensRequest,
+  RenewalWarning,
+  ServedLens,
+} from "@/src/domain/communities";
+
 // Pagination
 export interface PaginatedResponse<T> {
   page: number;
@@ -15,11 +33,15 @@ export interface PaginatedResponse<T> {
 export interface PostFilters {
   limit?: number;
   page?: number;
-  topic?: string;
+  community?: string;
   address?: string;
   allowed_tags?: string;
   feed?: "home" | "following";
   by?: "magic" | "newest" | "top";
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 }
 
 export interface UserFilters {
@@ -38,25 +60,26 @@ export interface ParametersResponse {
   pow_base_bits: number;
   pow_factor: number;
   balance?: number; // umirage, if address provided
-  user_level: number;
 }
 
 export interface TierInfo {
-  period_fee: string;
+  period_fee: string | number;
   vote_weight: number;
-  max_content_length: string;
-  max_followed_users: string;
-  max_followed_topics: string;
-  max_blocked_users: string;
-  max_blocked_posts: string;
-  max_blocked_topics: string;
-  max_enabled_agents: string;
-  can_be_agent: boolean;
-  can_remove_anon: boolean;
+  max_title_length: string | number;
+  max_content_length: string | number;
+  max_followed_users: string | number;
+  max_joined_communities: string | number;
+  max_blocked_users: string | number;
+  max_blocked_posts: string | number;
+  max_blocked_communities: string | number;
+  editing_time_mins: string | number;
   can_have_biography: boolean;
   can_have_avatar: boolean;
   can_have_banner: boolean;
   can_have_flair: boolean;
+  max_biography_length: string | number;
+  max_curation_memberships: string | number;
+  max_daily_relays: string | number;
 }
 
 export interface AwardConfig {
@@ -70,33 +93,17 @@ export interface AwardBadge {
 }
 
 export interface ConfigResponse {
-  // Chain params (from get_chain_config)
   max_username_size: number;
   min_username_size: number;
-  max_topic_size: number;
-  min_topic_size: number;
+  max_community_size: number;
+  min_community_size: number;
   subscription_period: number;
+  subscription_reserve_bps: number;
   mint_interval: number;
-  tiers: TierInfo[];
-
-  // Difficulty snapshot
-  pow_difficulty: number;
-  pow_message_count: number;
-  pow_calm_sequence: number;
-  pow_last_change_height: number;
-  current_height: number;
+  mint_floor_split: number;
+  mint_dynamic_split: number;
   block_time: number;
-
-  // Validator info
-  validator_account_address: string;
-  validator_operator_address: string;
-  validator_consensus_address: string;
-  validator_moniker: string;
-
-  // Misc
-  giphy_api_key: string;
-
-  // Awards
+  tiers: TierInfo[];
   award_configs?: AwardConfig[];
 }
 
@@ -104,12 +111,8 @@ export type ChainConfigResponse = ConfigResponse;
 
 export interface NodeConfigResponse {
   giphy_api_key: string;
-  auto_enabled_agents?: string[];
   open_browsing_enabled?: boolean;
-  quest_payouts_enabled: boolean;
-  quests_enabled: boolean;
   registration_enabled: boolean;
-  registration_invite_code_required: boolean;
   uploads_disabled?: boolean;
   max_video_bytes?: number;
   max_video_size_mb?: number;
@@ -134,13 +137,13 @@ export interface RecentVote {
 export interface UserStatusResponse {
   username: string | null;
   balance: number; // umirage
-  user_level: number; // 0 = free, 1 = subscriber, 10 = agent
+  user_level: number; // 0 = free, 1 = subscriber, >=100 = admin; other values are invalid/Unknown
   subscription_expiry: number; // unix seconds or 0
   auto_renew: boolean;
   reserve_funds: number; // umirage
   profile_registered_at: number | null; // unix seconds
   recent_votes: RecentVote[];
-  referral_precheck_enabled: boolean;
+  effective_paid: boolean;
 }
 
 export interface ProfileResponse {
@@ -157,30 +160,28 @@ export interface ProfileResponse {
   flair: string;
 
   // Lists
-  enabled_agents: string[];
   followed_users: string[];
-  followed_topics: string[];
+  joined_communities: string[];
   blocked_users: string[];
   blocked_posts: string[];
-  blocked_topics: string[];
+  blocked_communities: string[];
   balance: number;
+  effective_paid: boolean;
 }
 
 export interface UserFollowedResponse {
-  enabled_agents: string[];
-  auto_enabled_agents?: string[];
-  followed_topics: string[];
   followed_users: string[];
+  joined_communities?: string[];
 }
 
 export interface UserBlockedResponse {
   blocked_posts: string[]; // txhashes
   blocked_users: string[]; // addresses
-  blocked_topics?: string[]; // topic names
+  blocked_communities?: string[];
 }
 
 export interface PreferencesResponse {
-  topics: { topic: string; weight: number }[];
+  communities: { community: string; weight: number }[];
   authors: { user: string; weight: number }[];
 }
 
@@ -224,8 +225,8 @@ export interface Post {
   new_user?: boolean;
   author_is_new?: boolean;
   timestamp: number;
-  topic: string;
-  root_topic: string;
+  community: string;
+  root_community: string;
   root_post_id: string;
   title: string;
   content: string;
@@ -246,15 +247,15 @@ export interface Post {
   user_vote: number; // -1, 0, 1
   user_weight: number; // viewer's weighted contribution
   awards?: AwardBadge[];
-  agent_edited?: boolean;
-  agent_edits_meta?: Record<string, string>;
+  lens: ServedLens;
+  thread_locked: boolean;
+  protocol_version?: number;
   optimistic_status?: "pending" | "success" | "error";
   optimistic_error?: string;
   optimistic_action_id?: string;
   optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
   optimistic_video_preview_until?: number;
   optimistic_cached_until?: number;
-  appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 
 export interface PostsResponse {
@@ -314,38 +315,23 @@ export interface InboxResponse {
 }
 
 // ============================================
-// Topics Types
-// ============================================
-
-export interface TopicInfo {
-  topic: string;
-  post_count?: number;
-  count?: number;
-  comment_count?: number;
-  flags?: Record<string, boolean>;
-  dominant_tag?: string;
-  dominant_ratio?: number;
-}
-
-export interface TopicsResponse {
-  topics: TopicInfo[];
-}
-
-export interface SearchTopicsResponse {
-  topics: TopicInfo[];
-}
-
-// ============================================
 // Search Types
 // ============================================
+
+export interface SearchCommunityInfo {
+  community: string;
+  post_count?: number;
+  dominant_tag?: string | null;
+  dominant_ratio?: number;
+}
 
 export interface SearchResponse {
   query: string;
   search_type: string;
-  topics: TopicInfo[];
+  communities: SearchCommunityInfo[];
   users: UserInfo[];
   posts: Post[];
-  has_more_topics: boolean;
+  has_more_communities: boolean;
   has_more_users: boolean;
   has_more_posts: boolean;
 }
@@ -374,7 +360,6 @@ export type TxType =
   | "post"
   | "profile"
   | "follow_user"
-  | "follow_topic"
   | "unknown";
 
 export interface VoteDetails {
@@ -387,7 +372,7 @@ export interface VoteDetails {
 
 export interface PostDetails {
   post_id: string;
-  topic: string;
+  community: string;
   title: string;
 }
 
@@ -462,7 +447,7 @@ export interface AppStatsResponse {
   average_posts_per_user: number;
   average_votes_per_user: number;
   average_comments_per_post: number;
-  most_active_topics: string[];
+  most_active_communities: string[];
   tag_counts: Record<string, number>;
   dau_today: number;
   dau_yesterday: number;
@@ -498,83 +483,6 @@ export interface LeaderboardResponse {
   page: number;
   total: number;
   leaderboard: LeaderboardEntry[];
-}
-
-// ============================================
-// Referral
-// ============================================
-
-export interface ReferralNode {
-  address: string;
-  username?: string;
-  children: ReferralNode[];
-}
-
-/** @deprecated Use ReferralSummaryResponse instead */
-export interface ReferralStatsResponse {
-  pending_total: number;
-  paid_total: number;
-  total_referrals: number;
-  referral_tree: ReferralNode;
-  referred_by?: string;
-  last_update_ts: number;
-  next_update_ts: number;
-}
-
-export interface ReferralPrecheckResponse {
-  valid: boolean;
-  available?: number;
-  error?: string;
-}
-
-export interface ReferralPrecheckOptInResponse {
-  ok: boolean;
-  precheck_enabled: boolean;
-  updated_at: number;
-}
-
-export interface ReferralSummaryItem {
-  address: string;
-  username: string;
-  referred_at: number;
-  posts: number;
-  votes: number;
-  total_actions: number;
-}
-
-export interface ReferralSummaryResponse {
-  referrals: ReferralSummaryItem[];
-  total: number;
-  period_start: number;
-  period_end: number;
-  limit: number;
-  offset: number;
-  has_more: boolean;
-}
-
-// ============================================
-// Invite Code
-// ============================================
-
-export interface InviteCode {
-  code: string;
-  used_by: string | null;
-  created_at: number;
-  used_at: number | null;
-  is_used: boolean;
-}
-
-export interface GetInviteCodesResponse {
-  codes: InviteCode[];
-  total: number;
-  available: number;
-}
-
-export interface ValidateInviteCodeResponse {
-  valid: boolean;
-  code: string;
-  error?: "invalid_code" | "already_used" | "expired";
-  message?: string;
 }
 
 // ============================================

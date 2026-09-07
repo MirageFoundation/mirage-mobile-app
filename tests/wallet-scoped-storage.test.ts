@@ -65,6 +65,7 @@ describe("wallet-scoped client persistence", () => {
     expect(PERSISTED_STORE_OWNERSHIP).toEqual({
       "auth-storage": "device",
       "preferences-storage": "device",
+      "deferred-campaign-storage": "device",
       "pending-posts-storage": "wallet",
       "comment-compose-storage": "wallet",
       "inbox-store": "wallet",

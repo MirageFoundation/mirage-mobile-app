@@ -1,4 +1,7 @@
 import { Box, Button, Text } from "@/src/components/ui/primitives";
+import * as Sentry from "@sentry/react-native";
+import { AdultPromptLifecycle, type AdultPromptPresentation } from "@/src/services/adult-prompt-lifecycle";
+import { getAdultPromptActive } from "@/src/services/home-entry-prompt-orchestrator";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -6,13 +9,14 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type AdultContentPopupProps = {
   visible: boolean;
+  sessionKey: string;
   onEnable: () => void;
   onDecline: () => void;
   onGoToSettings?: () => void;
@@ -20,6 +24,7 @@ type AdultContentPopupProps = {
 
 export const AdultContentPopup = ({
   visible,
+  sessionKey,
   onEnable,
   onDecline,
   onGoToSettings,
@@ -27,26 +32,42 @@ export const AdultContentPopup = ({
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const settledRef = useRef(false);
+  const lifecycleRef = useRef<AdultPromptLifecycle | null>(null);
+  const [presentation, setPresentation] = useState<AdultPromptPresentation | null>(null);
   const isAndroid = Platform.OS === "android";
   const bottomPadding = Math.max(insets.bottom, 24);
 
   useEffect(() => {
-    if (!visible) {
-      settledRef.current = false;
-      bottomSheetRef.current?.dismiss();
-      return;
-    }
-    settledRef.current = false;
-    const frame = requestAnimationFrame(() => {
-      bottomSheetRef.current?.present();
+    const lifecycle = new AdultPromptLifecycle({
+      schedule: requestAnimationFrame,
+      cancel: cancelAnimationFrame,
+      present: setPresentation,
+      dismiss: () => bottomSheetRef.current?.dismiss(),
+      onError: (error) => Sentry.captureException(error),
     });
-    return () => cancelAnimationFrame(frame);
-  }, [visible]);
+    lifecycleRef.current = lifecycle;
+    return () => {
+      lifecycle.dispose();
+      lifecycleRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    lifecycleRef.current?.update(visible, sessionKey);
+  }, [visible, sessionKey]);
+
+  useEffect(() => {
+    if (!presentation?.isCurrent()) return;
+    try {
+      bottomSheetRef.current?.present();
+    } catch (error) {
+      presentation.onError(error);
+    }
+  }, [presentation]);
 
   useEffect(() => {
     if (!visible) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    const subscription = BackHandler.addEventListener("hardwareBackPress", getAdultPromptActive);
     return () => subscription.remove();
   }, [visible]);
 
@@ -63,15 +84,10 @@ export const AdultContentPopup = ({
     [],
   );
 
-  const handleSheetDismiss = useCallback(() => {
-    if (settledRef.current || !visible) return;
-    bottomSheetRef.current?.present();
-  }, [visible]);
-
   const complete = useCallback((action: () => void) => {
-    settledRef.current = true;
-    action();
-  }, []);
+    if (presentation?.session !== sessionKey) return;
+    presentation?.complete(action);
+  }, [presentation, sessionKey]);
 
   const handleEnable = useCallback(() => {
     triggerHaptic("success");
@@ -94,6 +110,7 @@ export const AdultContentPopup = ({
   if (isAndroid) {
     return (
       <BottomSheetModal
+        key={presentation?.id ?? "idle"}
         ref={bottomSheetRef}
         enablePanDownToClose={false}
         enableHandlePanningGesture={false}
@@ -107,7 +124,8 @@ export const AdultContentPopup = ({
           backgroundColor: theme.colors.border.default,
           width: 40,
         }}
-        onDismiss={handleSheetDismiss}
+        onDismiss={presentation?.onDismiss}
+        onChange={presentation?.onChange}
       >
         <BottomSheetView style={styles.container}>
           <View style={styles.iconContainer}>
@@ -157,6 +175,7 @@ export const AdultContentPopup = ({
 
   return (
     <BottomSheetModal
+      key={presentation?.id ?? "idle"}
       ref={bottomSheetRef}
       enablePanDownToClose={false}
       enableHandlePanningGesture={false}
@@ -170,7 +189,8 @@ export const AdultContentPopup = ({
         backgroundColor: theme.colors.border.default,
         width: 40,
       }}
-      onDismiss={handleSheetDismiss}
+      onDismiss={presentation?.onDismiss}
+      onChange={presentation?.onChange}
     >
       <BottomSheetView style={styles.container}>
         <View style={styles.iconContainer}>

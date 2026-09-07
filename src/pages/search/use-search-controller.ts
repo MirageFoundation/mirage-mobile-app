@@ -8,9 +8,10 @@ import {
   withTiming,
 } from "react-native-reanimated";
 
-import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
-import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
+import { useCommunities, useDebouncedSearch, usePosts } from "@/src/api/read";
+import type { Post, SearchCommunityInfo, UserInfo } from "@/src/api/types";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { communityLabel } from "@/src/domain/communities";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useContentModerationStore, useSearchStore, type RecentSearch } from "@/src/stores";
@@ -21,7 +22,7 @@ import {
   resolveSearchTab,
   searchIndexToTab,
   searchTabToIndex,
-  selectTrendingTopics,
+  selectTrendingCommunities,
   shouldShowSearchResults,
 } from "./search-state";
 import { SCREEN_WIDTH, type SearchTab } from "./search-utils";
@@ -33,7 +34,7 @@ export function useSearchController() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchTab>(resolveSearchTab(tab));
-  const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
+  const [selectedCommunity, setSelectedCommunity] = useState<SearchCommunityInfo | null>(null);
   const animatedTabIndex = useSharedValue(searchTabToIndex(activeTab));
 
   const hiddenPostIds = useContentModerationStore((state) => state.hiddenPostIds);
@@ -45,22 +46,22 @@ export function useSearchController() {
   );
 
   const search = useDebouncedSearch(searchQuery, 750, { limit: 30 });
-  const topicPostsQuery = usePosts({
-    topic: selectedTopic?.topic,
+  const communityPostsQuery = usePosts({
+    community: selectedCommunity?.community,
     limit: 50,
   });
-  const topicsQuery = useTopics(20);
+  const topicsQuery = useCommunities({ limit: 20 });
 
-  const trendingTopics = useMemo(
-    () => selectTrendingTopics(topicsQuery.data?.topics),
-    [topicsQuery.data?.topics],
+  const trendingCommunities = useMemo(
+    () => selectTrendingCommunities(topicsQuery.data?.items),
+    [topicsQuery.data?.items],
   );
-  const topicPosts = useMemo(
+  const communityPosts = useMemo(
     () =>
-      (topicPostsQuery.data?.posts ?? []).filter(
+      (communityPostsQuery.data?.posts ?? []).filter(
         (post) => !hiddenPostIds.has(post.post_id),
       ),
-    [hiddenPostIds, topicPostsQuery.data?.posts],
+    [hiddenPostIds, communityPostsQuery.data?.posts],
   );
   const searchResults = useMemo(() => {
     if (!search.data) return search.data;
@@ -76,25 +77,25 @@ export function useSearchController() {
   const hasSearchQuery = normalizeSearchQuery(searchQuery).length > 0;
   const tabCounts = getSearchTabCounts({
     postCount: searchResults?.posts.length ?? 0,
-    topicCount: search.data?.topics.length ?? 0,
-    topicPostCount: topicPosts.length,
+    communityCount: search.data?.communities.length ?? 0,
+    communityPostCount: communityPosts.length,
     userCount: search.data?.users.length ?? 0,
-    hasSelectedTopic: !!selectedTopic,
+    hasSelectedCommunity: !!selectedCommunity,
   });
   const discoverySections = useMemo(
     () =>
       buildSearchDiscoverySections(
         recentSearches,
-        trendingTopics,
+        trendingCommunities,
         topicsQuery.isLoading,
       ),
-    [recentSearches, topicsQuery.isLoading, trendingTopics],
+    [recentSearches, topicsQuery.isLoading, trendingCommunities],
   );
 
   const handleSwipeTabChange = useCallback((index: number) => {
     const nextTab = searchIndexToTab(index);
     setActiveTab(nextTab);
-    if (nextTab !== "topics") setSelectedTopic(null);
+    if (nextTab !== "communities") setSelectedCommunity(null);
   }, []);
 
   const {
@@ -130,13 +131,13 @@ export function useSearchController() {
 
   const handleQueryChange = useCallback((query: string) => {
     setSearchQuery(query);
-    setSelectedTopic(null);
+    setSelectedCommunity(null);
   }, []);
 
   const handleClearInput = useCallback(() => {
     triggerHaptic("light");
     setSearchQuery("");
-    setSelectedTopic(null);
+    setSelectedCommunity(null);
     inputRef.current?.focus();
   }, []);
 
@@ -156,7 +157,7 @@ export function useSearchController() {
     (recentSearch: RecentSearch) => {
       triggerHaptic("light");
       setSearchQuery(recentSearch.query);
-      setSelectedTopic(null);
+      setSelectedCommunity(null);
       handleSearch(recentSearch.query);
     },
     [handleSearch],
@@ -175,19 +176,19 @@ export function useSearchController() {
     clearRecentSearches();
   }, [clearRecentSearches]);
 
-  const handleTopicPress = useCallback(
-    (topic: TopicInfo) => {
+  const handleCommunityPress = useCallback(
+    (topic: SearchCommunityInfo) => {
       triggerHaptic("light");
-      addRecentSearch(topic.topic);
+      addRecentSearch(communityLabel(topic.community));
       Keyboard.dismiss();
-      router.push(`/topic/${encodeURIComponent(topic.topic)}`);
+      router.push(`/c/${encodeURIComponent(topic.community)}` as never);
     },
     [addRecentSearch, router],
   );
 
-  const handleBackFromTopic = useCallback(() => {
+  const handleBackFromCommunity = useCallback(() => {
     triggerHaptic("light");
-    setSelectedTopic(null);
+    setSelectedCommunity(null);
   }, []);
 
   const handlePostPress = useCallback(
@@ -235,13 +236,13 @@ export function useSearchController() {
     isFocused,
     setIsFocused,
     activeTab,
-    selectedTopic,
+    selectedCommunity,
     searchResults,
     isSearching: search.isSearching,
     hasSearchQuery,
     showResults,
-    topicPosts,
-    isLoadingTopicPosts: topicPostsQuery.isLoading,
+    communityPosts,
+    isLoadingCommunityPosts: communityPostsQuery.isLoading,
     discoverySections,
     tabCounts,
     swipeGesture,
@@ -254,8 +255,8 @@ export function useSearchController() {
     handleRecentSearchPress,
     handleRemoveRecentSearch,
     handleClearAllRecentSearches,
-    handleTopicPress,
-    handleBackFromTopic,
+    handleCommunityPress,
+    handleBackFromCommunity,
     handlePostPress,
     handleUserPress,
     handleTabPress,

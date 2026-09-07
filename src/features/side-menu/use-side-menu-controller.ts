@@ -3,8 +3,10 @@ import { usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking } from "react-native";
 
+import { selectCommunitySlugs } from "@/src/api/read/endpoints/communities";
 import {
   useBatchUsernamesFromAddresses,
+  useJoinedCommunities,
   useUserFollowed,
   useUserStatus,
 } from "@/src/api/read/hooks";
@@ -23,7 +25,7 @@ import {
   createSideMenuRouteDelegate,
   dismissThenNavigate,
   getBalanceDestination,
-  getFollowedTopicDestination,
+  getJoinedCommunityDestination,
   getFollowedUserDestination,
   type SideMenuAction,
 } from "./side-menu-model";
@@ -51,7 +53,7 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
   const {
     apiServer,
     setShareServer,
-    topicsBeforeShowMore,
+    communitiesBeforeShowMore,
     peopleBeforeShowMore,
   } = usePreferencesStore();
 
@@ -59,14 +61,15 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     enabled: visible && isLoggedIn,
   });
   const { data: followedData, isLoading: isLoadingFollowed } = useUserFollowed();
+  const { data: joinedData, isLoading: isLoadingJoined } = useJoinedCommunities();
   const allFollowedUsers = followedData?.followed_users ?? [];
-  const allFollowedTopics = followedData?.followed_topics ?? [];
+  const allJoinedCommunities = selectCommunitySlugs(joinedData);
   const followedUsers = peopleBeforeShowMore === -1
     ? allFollowedUsers
     : allFollowedUsers.slice(0, peopleBeforeShowMore);
-  const followedTopics = topicsBeforeShowMore === -1
-    ? allFollowedTopics
-    : allFollowedTopics.slice(0, topicsBeforeShowMore);
+  const joinedCommunities = communitiesBeforeShowMore === -1
+    ? allJoinedCommunities
+    : allJoinedCommunities.slice(0, communitiesBeforeShowMore);
   const { data: usernameMap } = useBatchUsernamesFromAddresses(allFollowedUsers, {
     enabled: visible,
   });
@@ -221,9 +224,9 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     triggerHaptic("light");
     router.push(getFollowedUserDestination(address) as never);
   }, [router]);
-  const openTopic = useCallback((topic: string) => {
+  const openCommunity = useCallback((topic: string) => {
     triggerHaptic("light");
-    router.push(getFollowedTopicDestination(topic) as never);
+    router.push(getJoinedCommunityDestination(topic) as never);
   }, [router]);
   const openBalance = useCallback(() => {
     // No dedicated wallet screen yet; the profile tab shows balance and
@@ -245,14 +248,15 @@ export function useSideMenuController({ visible, close }: ControllerOptions) {
     openServerModal,
     switchApiServer,
     followedUsers,
-    followedTopics,
+    joinedCommunities,
     allFollowedUsers,
-    allFollowedTopics,
+    allJoinedCommunities,
     usernameMap,
     isLoadingFollowed,
+    isLoadingJoined,
     showMoreFollowing,
     openUser,
-    openTopic,
+    openCommunity,
     runAction,
     createAccount: () => beginAuth("/username", "Create account started from side menu"),
     login: () => beginAuth("/login", "Login started from side menu"),

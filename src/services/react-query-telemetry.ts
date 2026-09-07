@@ -1,6 +1,4 @@
 const SAFE_MUTATION_OPERATIONS = new Set([
-  "write.agents.set",
-  "write.annotate",
   "write.award.give",
   "write.biography.set",
   "write.block.post",
@@ -9,12 +7,7 @@ const SAFE_MUTATION_OPERATIONS = new Set([
   "write.block.unblock-topic",
   "write.block.unblock-user",
   "write.block.user",
-  "write.follow.disable-agent",
-  "write.follow.enable-agent",
-  "write.follow.topic",
-  "write.follow.toggle-topic",
   "write.follow.toggle-user",
-  "write.follow.unfollow-topic",
   "write.follow.unfollow-user",
   "write.follow.user",
   "write.media.upload",
@@ -25,7 +18,6 @@ const SAFE_MUTATION_OPERATIONS = new Set([
   "write.post.delete",
   "write.post.edit",
   "write.report",
-  "write.rewards.claim",
   "write.tokens.gift-subscription",
   "write.tokens.send",
   "write.tokens.set-auto-renewal",
@@ -37,10 +29,11 @@ const SAFE_MUTATION_OPERATIONS = new Set([
 ]);
 
 const SAFE_QUERY_OPERATIONS = new Set([
-  "agents", "batchUsernames", "comments", "config", "inbox",
-  "inviteCode", "inviteCodes", "leaderboard", "nodeConfig", "parameters", "peers",
-  "posts", "referral", "resolve", "rewards", "search", "stats",
-  "topics", "tx", "user", "users",
+  "batchUsernames", "comments", "config", "inbox",
+  "leaderboard", "nodeConfig", "parameters", "peers",
+  "posts", "resolve", "search", "stats",
+  "communities", "tx", "user", "users",
+  "curation", "creator", "account",
 ]);
 
 export const MAX_REACT_QUERY_METADATA_BYTES = 160;

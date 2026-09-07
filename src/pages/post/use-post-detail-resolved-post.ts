@@ -31,8 +31,6 @@ const METADATA_KEYS: (keyof ApiPost)[] = [
   "user_weight",
   "edited_at",
   "awards",
-  "agent_edited",
-  "appendices",
 ];
 
 export function usePostDetailResolvedPost({

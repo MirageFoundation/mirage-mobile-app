@@ -24,11 +24,11 @@ export function PostActionOverlays({ controller }: PostActionOverlaysProps) {
         ref={overlays.postOptionsSheetRef}
         post={post}
         isOwnPost={selection.isOwnPost}
-        isTopicFollowed={selection.isTopicFollowed}
+        isCommunityJoined={selection.isCommunityJoined}
         isFollowingUser={selection.isFollowingUser}
         onShowFewer={selectedActions.showFewer}
         onFollowUser={selectedActions.followUser}
-        onFollowTopic={selectedActions.followTopic}
+        onToggleCommunityMembership={selectedActions.toggleCommunityMembership}
         onSave={selectedActions.save}
         isSaved={selection.isSaved}
         onCopyText={selectedActions.copyText}

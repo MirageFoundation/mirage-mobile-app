@@ -43,5 +43,5 @@ export function resolvePendingWalletStartup(metadata: {
   hasUsername: boolean;
 } | null): PendingWalletStartupAction {
   if (!metadata?.pending) return "none";
-  return metadata.hasUsername ? "resume" : "wipe";
+  return "resume";
 }

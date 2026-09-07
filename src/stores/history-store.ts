@@ -5,6 +5,7 @@ import {
   walletScopedStorage,
 } from "./wallet-scoped-storage";
 import type { Post } from "@/src/domain/content";
+import { migratePersistedCommunityPost } from "./persisted-community-post";
 
 export type HistoryEntry = Post & {
   viewedAt: number;
@@ -57,7 +58,7 @@ export const useHistoryStore = create<HistoryState>()(
       name: "history-storage",
       storage: createJSONStorage(() => walletScopedStorage),
       skipHydration: true,
-      version: 1,
+      version: 3,
       migrate: (persistedState) => {
         const state = persistedState as {
           entries?: HistoryEntry[];
@@ -65,7 +66,10 @@ export const useHistoryStore = create<HistoryState>()(
 
         return {
           ...state,
-          entries: (state.entries ?? []).map((entry) => normalizeHistoryEntry(entry)),
+          entries: (state.entries ?? [])
+            .map((entry) => migratePersistedCommunityPost(entry as HistoryEntry & Record<string, unknown>))
+            .filter((entry): entry is HistoryEntry & { community: string } => !!entry)
+            .map((entry) => normalizeHistoryEntry(entry as HistoryEntry)),
         };
       },
     },

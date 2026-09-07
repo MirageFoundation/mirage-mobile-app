@@ -1,153 +1,49 @@
 import { EvilIcons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useUserStatus, useConfig } from "@/src/api/read";
-import type { TierInfo, ConfigResponse } from "@/src/api/types";
+import { useAccountStatus, useUserStatus, useConfig } from "@/src/api/read";
 import { useUpgradeLevel, useSetAutoRenewal } from "@/src/api/write/hooks";
 import {
+  AccountStatusNotices,
   ActivePlanCard,
   PlanCard,
-  type Plan,
-  type PlanFeature,
+  SubscriptionPeriodPicker,
 } from "@/src/components/molecules/subscription";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import {
+  clampPeriodCount,
+  hasInsufficientSubscriptionBalance,
+  parseModernTiers,
+  parseUserLevel,
+  projectSubscriptionExpiry,
+  subscriptionDurationSeconds,
+  UMIRAGE_PER_MIRAGE,
+} from "@/src/domain/subscriptions";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import { getErrorMessage } from "@/src/utils/error-messages";
 
 import { SubscriptionSkeleton } from "./subscription/subscription-skeleton";
-import { getTierIndex, TIER_LEVEL_FROM_INDEX } from "@/src/utils/tiers";
-
-const TIER_UI: { id: string; title: string; color: string; icon: string }[] = [
-  { id: "free", title: "Free", color: "#6B7280", icon: "person-outline" },
-  { id: "subscriber", title: "Subscriber", color: "#F59E0B", icon: "shield-checkmark-outline" },
-  { id: "agent", title: "Agent", color: "#EF4444", icon: "diamond-outline" },
-];
-
-const UMIRAGE = 1_000_000;
-
-const formatMirageBalance = (umirage: number): number => {
-  return Math.floor(umirage / UMIRAGE);
-};
-
-const fmt = (n: string | number) => Number(n).toLocaleString();
+import { buildPurchasablePlans, currentPlanIdFromKind } from "./subscription/subscription-plans";
 
 function captureSubscriptionException(
   error: unknown,
   action: string,
-  extra?: Record<string, unknown>
+  extra?: Record<string, unknown>,
 ) {
   Sentry.captureException(error, {
-    tags: {
-      feature: "subscription",
-      action,
-    },
+    tags: { feature: "subscription", action },
     extra,
   });
 }
 
-function buildShortFeatures(tier: TierInfo, isFree: boolean): PlanFeature[] {
-  const features: PlanFeature[] = [];
-
-  if (isFree) {
-    features.push({ text: "PoW for transactions" });
-  } else {
-    features.push({ text: "Instant posting (no PoW)" });
-  }
-
-  features.push({ text: `Up to ${fmt(tier.max_content_length)} characters` });
-  features.push({ text: `Follow up to ${fmt(tier.max_followed_topics)} topics and ${fmt(tier.max_followed_users)} users` });
-
-  if (tier.can_be_agent) {
-    features.push({ text: "Eligible to be Agent" });
-  }
-
-  if (tier.can_remove_anon) {
-    features.push({ text: "Remove Anon- prefix" });
-  }
-
-  if (tier.can_have_avatar || tier.can_have_biography) {
-    const parts: string[] = [];
-    if (tier.can_have_biography) parts.push("biography");
-    if (tier.can_have_avatar) parts.push("avatar");
-    if (tier.can_have_banner) parts.push("banner");
-    features.push({ text: `Profile ${parts.join(", ")}` });
-  }
-
-  return features;
-}
-
-function buildFullFeatures(tier: TierInfo, isFree: boolean, costLabel: string): PlanFeature[] {
-  const features: PlanFeature[] = [];
-
-  if (isFree) {
-    features.push({ text: "Free tier. No MIRAGE needed to keep this plan active." });
-  } else {
-    features.push({ text: `Subscription cost: ${costLabel}.` });
-  }
-
-  features.push({ text: `Enable up to ${fmt(tier.max_enabled_agents)} agents.` });
-  features.push({ text: `Follow up to ${fmt(tier.max_followed_users)} users.` });
-  features.push({ text: `Follow up to ${fmt(tier.max_followed_topics)} topics.` });
-  features.push({ text: `Block up to ${fmt(tier.max_blocked_users)} users.` });
-  features.push({ text: `Block up to ${fmt(tier.max_blocked_posts)} posts.` });
-  features.push({ text: `Block up to ${fmt(tier.max_blocked_topics)} topics.` });
-  features.push({ text: `Post content up to ${fmt(tier.max_content_length)} characters.` });
-  features.push({ text: `Vote weight: ${tier.vote_weight.toFixed(2)}x.` });
-
-  features.push({
-    text: tier.can_be_agent ? "Eligible to be Agent." : "Not eligible to be Agent.",
-  });
-  features.push({
-    text: tier.can_remove_anon ? "Can remove Anon- prefix." : "Cannot remove Anon- prefix.",
-  });
-  features.push({
-    text: tier.can_have_biography ? "Profile biography available." : "Profile biography not available.",
-  });
-  features.push({
-    text: tier.can_have_avatar ? "Profile avatar available." : "Profile avatar not available.",
-  });
-  features.push({
-    text: tier.can_have_banner ? "Profile banner available." : "Profile banner not available.",
-  });
-
-  if (isFree) {
-    features.push({ text: "Uses proof-of-work (PoW) for posts and votes." });
-  } else {
-    features.push({ text: "No PoW required for posts or votes while subscribed." });
-  }
-
-  return features;
-}
-
-function computeMonthlyFee(tier: TierInfo, config: ConfigResponse): number {
-  const periodFeeUmirage = Number(tier.period_fee);
-  if (periodFeeUmirage === 0) return 0;
-  return Math.round(periodFeeUmirage / UMIRAGE);
-}
-
-function buildPlansFromConfig(config: ConfigResponse): Plan[] {
-  return config.tiers.map((tier, index) => {
-    const ui = TIER_UI[index] ?? TIER_UI[0];
-    const isFree = Number(tier.period_fee) === 0;
-    const monthlyFee = computeMonthlyFee(tier, config);
-    const costLabel = isFree ? "Free" : `${formatCompactNumber(monthlyFee)} MIRAGE/month`;
-
-    return {
-      id: ui.id,
-      title: ui.title,
-      color: ui.color,
-      icon: ui.icon,
-      cost: costLabel,
-      costValue: monthlyFee,
-      shortFeatures: buildShortFeatures(tier, isFree),
-      fullFeatures: buildFullFeatures(tier, isFree, costLabel),
-    };
-  });
+function formatMirageBalance(umirage: number): number {
+  return Math.floor(umirage / UMIRAGE_PER_MIRAGE);
 }
 
 export function SubscriptionScreen() {
@@ -155,56 +51,46 @@ export function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const { data: userStatus, isLoading: isLoadingStatus, error: statusError } = useUserStatus();
-  const { data: config, isLoading: isLoadingConfig, error: configError } = useConfig();
+  const { data: userStatus, isLoading: isLoadingStatus, error: statusError, refetch: retryStatus } = useUserStatus();
+  const { data: config, isLoading: isLoadingConfig, error: configError, refetch: retryConfig } = useConfig();
+  const { data: accountStatus, error: accountError, refetch: retryAccount } = useAccountStatus();
+  const detailsError = statusError || configError || accountError;
+  const syncing = (detailsError as { response?: { data?: { error_code?: string } } })?.response?.data?.error_code === "node_catching_up";
   const upgradeMutation = useUpgradeLevel();
   const autoRenewalMutation = useSetAutoRenewal();
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
-  const [optimisticLevel, setOptimisticLevel] = useState<number | null>(null);
+  const [periodCount, setPeriodCount] = useState(1);
   const [optimisticAutoRenew, setOptimisticAutoRenew] = useState<boolean | null>(null);
   const [autoRenewProcessing, setAutoRenewProcessing] = useState(false);
 
-  useEffect(() => {
-    if (!statusError) {
-      return;
-    }
-
-    console.error("[SubscriptionScreen] Failed to fetch user status:", statusError);
-    captureSubscriptionException(statusError, "fetch-user-status");
-  }, [statusError]);
-
-  useEffect(() => {
-    if (!configError) {
-      return;
-    }
-
-    console.error("[SubscriptionScreen] Failed to fetch config/tiers:", configError);
-    captureSubscriptionException(configError, "fetch-config");
-  }, [configError]);
-
-  const plans: Plan[] = useMemo(() => {
-    if (!config?.tiers?.length) return [];
-    return buildPlansFromConfig(config);
-  }, [config]);
-
-  const serverLevel = userStatus?.user_level ?? 0;
-  const userLevel = optimisticLevel ?? serverLevel;
-  const currentPlanId = TIER_UI[getTierIndex(userLevel)]?.id ?? "free";
-
-  const activePlanIndex = plans.findIndex((p) => p.id === currentPlanId);
-
-  const tierIdx = optimisticLevel !== null ? getTierIndex(optimisticLevel) : -1;
-  const optimisticCost = tierIdx >= 0 && config?.tiers?.[tierIdx]
-    ? Number(config.tiers[tierIdx].period_fee)
-    : 0;
-  const balance = userStatus
-    ? formatMirageBalance(userStatus.balance - optimisticCost)
-    : 0;
+  const parsedLevel = parseUserLevel(userStatus?.user_level ?? 0);
+  const tiers = useMemo(() => parseModernTiers(config?.tiers), [config?.tiers]);
+  const selectedPeriodCount = clampPeriodCount(periodCount);
+  const plans = useMemo(
+    () => (tiers ? buildPurchasablePlans(tiers, selectedPeriodCount) : []),
+    [selectedPeriodCount, tiers],
+  );
+  const currentPlanId = currentPlanIdFromKind(parsedLevel.kind);
+  const activePlanIndex = plans.findIndex((plan) => plan.id === currentPlanId);
+  const subscriberFee = tiers ? Number(tiers[1].period_fee) : 0;
+  const periodFeeMirage = Math.round(subscriberFee / UMIRAGE_PER_MIRAGE);
+  const durationSeconds = subscriptionDurationSeconds(
+    config?.subscription_period ?? 0,
+    selectedPeriodCount,
+  );
+  const projectedExpiry = projectSubscriptionExpiry({
+    nowSeconds: Math.floor(Date.now() / 1000),
+    currentExpiry: userStatus?.subscription_expiry,
+    durationSeconds,
+  });
+  const projectedExpiryLabel = new Date(projectedExpiry * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const balance = userStatus ? formatMirageBalance(userStatus.balance) : 0;
   const reserve = userStatus ? formatMirageBalance(userStatus.reserve_funds) : 0;
-
-  const currentPlanData = plans.find((p) => p.id === currentPlanId);
-  const currentPlanTitle = currentPlanData?.title || TIER_UI[getTierIndex(userLevel)]?.title || "Free";
-
+  const currentPlanTitle = parsedLevel.name;
   const effectiveAutoRenew = optimisticAutoRenew ?? userStatus?.auto_renew;
 
   const handleBack = useCallback(() => {
@@ -214,11 +100,9 @@ export function SubscriptionScreen() {
 
   const handleSubscribe = useCallback(
     (planId: string) => {
-      const planIndex = plans.findIndex((p) => p.id === planId);
+      const planIndex = plans.findIndex((plan) => plan.id === planId);
       if (planIndex < 0) return;
-
       const targetPlan = plans[planIndex];
-
       triggerHaptic("medium");
       setSubscribingPlanId(planId);
       Sentry.addBreadcrumb({
@@ -228,6 +112,7 @@ export function SubscriptionScreen() {
         data: {
           planId,
           planIndex,
+          periodCount: selectedPeriodCount,
           isDowngradeToFree: planIndex === 0,
           effectiveAutoRenew,
           targetCost: targetPlan?.cost,
@@ -239,7 +124,7 @@ export function SubscriptionScreen() {
           setSubscribingPlanId(null);
           Alert.alert(
             "Downgrade Already Scheduled",
-            "Auto-renew is already off. Your current perks stay active until the subscription expires."
+            "Auto-renew is already off. Your current perks stay active until the subscription expires.",
           );
           return;
         }
@@ -252,84 +137,45 @@ export function SubscriptionScreen() {
             triggerHaptic("success");
             Alert.alert(
               "Downgrade Scheduled",
-              "Auto-renew is now off. Your current perks stay active until the subscription expires."
+              "Auto-renew is now off. Your current perks stay active until the subscription expires.",
             );
           },
           onError: (error) => {
             setSubscribingPlanId(null);
             setAutoRenewProcessing(false);
-            console.error("[SubscriptionScreen] Failed to cancel auto-renew:", error);
-            captureSubscriptionException(error, "cancel-auto-renew", {
-              planId,
-              planIndex,
-            });
+            captureSubscriptionException(error, "cancel-auto-renew", { planId, planIndex });
             triggerHaptic("error");
-            Alert.alert(
-              "Downgrade Failed",
-              error?.message || "Something went wrong. Please try again."
-            );
+            Alert.alert("Downgrade Failed", error?.message || "Something went wrong. Please try again.");
           },
         });
         return;
       }
 
-      const targetLevel = TIER_LEVEL_FROM_INDEX[planIndex];
-      if (targetLevel === undefined) return;
-
-      setOptimisticLevel(targetLevel);
-      setOptimisticAutoRenew(true);
-
-      upgradeMutation.mutate(targetLevel as 1 | 10, {
+      upgradeMutation.mutate(selectedPeriodCount, {
         onSuccess: () => {
           setSubscribingPlanId(null);
           triggerHaptic("success");
         },
         onError: (error) => {
           setSubscribingPlanId(null);
-          setOptimisticLevel(null);
-          setOptimisticAutoRenew(null);
-          console.error("[SubscriptionScreen] Failed to subscribe:", error);
           captureSubscriptionException(error, "upgrade-plan", {
             planId,
             planIndex,
+            periodCount: selectedPeriodCount,
             targetCost: targetPlan?.cost,
           });
           triggerHaptic("error");
-          Alert.alert(
-            "Subscription Failed",
-            error?.message || "Something went wrong. Please try again."
-          );
+          Alert.alert("Subscription Failed", error?.message || "Something went wrong. Please try again.");
         },
       });
     },
-    [plans, upgradeMutation, autoRenewalMutation, effectiveAutoRenew]
+    [autoRenewalMutation, effectiveAutoRenew, plans, selectedPeriodCount, upgradeMutation],
   );
-
-  useEffect(() => {
-    if (optimisticLevel !== null && userStatus?.user_level === optimisticLevel) {
-      setOptimisticLevel(null);
-    }
-  }, [userStatus?.user_level, optimisticLevel]);
-
-  useEffect(() => {
-    if (optimisticAutoRenew !== null && userStatus?.auto_renew === optimisticAutoRenew) {
-      setOptimisticAutoRenew(null);
-    }
-  }, [userStatus?.auto_renew, optimisticAutoRenew]);
 
   const handleToggleAutoRenew = useCallback(() => {
     const newValue = !effectiveAutoRenew;
     triggerHaptic("medium");
     setAutoRenewProcessing(true);
-    Sentry.addBreadcrumb({
-      category: "subscription",
-      message: "Auto-renew toggled",
-      level: "info",
-      data: {
-        currentValue: effectiveAutoRenew,
-        nextValue: newValue,
-      },
-    });
     autoRenewalMutation.mutate(newValue, {
       onSuccess: () => {
         setAutoRenewProcessing(false);
@@ -338,27 +184,15 @@ export function SubscriptionScreen() {
       },
       onError: (error) => {
         setAutoRenewProcessing(false);
-        console.error("[SubscriptionScreen] Failed to update auto-renew:", error);
         captureSubscriptionException(error, "toggle-auto-renew", {
           currentValue: effectiveAutoRenew,
           nextValue: newValue,
         });
         triggerHaptic("error");
-        Alert.alert(
-          "Failed",
-          error?.message || "Something went wrong. Please try again."
-        );
+        Alert.alert("Failed", error?.message || "Something went wrong. Please try again.");
       },
     });
   }, [autoRenewalMutation, effectiveAutoRenew]);
-
-  const hasInsufficientFunds = useCallback(
-    (planCostValue: number) => {
-      if (planCostValue === 0) return false;
-      return balance < planCostValue;
-    },
-    [balance]
-  );
 
   const isLoading = isLoadingStatus || isLoadingConfig;
 
@@ -376,10 +210,7 @@ export function SubscriptionScreen() {
       >
         <Pressable
           onPress={handleBack}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.7 },
-          ]}
+          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
         >
           <EvilIcons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
@@ -393,10 +224,7 @@ export function SubscriptionScreen() {
         <SubscriptionSkeleton />
       ) : (
         <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
           showsVerticalScrollIndicator={false}
         >
           <Box px="md" mb="lg">
@@ -409,6 +237,32 @@ export function SubscriptionScreen() {
               autoRenewLoading={autoRenewProcessing}
               onToggleAutoRenew={handleToggleAutoRenew}
             />
+            <Box mt="sm">
+              <AccountStatusNotices
+                quota={accountStatus?.daily_quota}
+                renewal={accountStatus?.renewal_warning}
+                effectivePaid={userStatus?.effective_paid}
+                userLevel={userStatus?.user_level}
+              />
+            </Box>
+            {detailsError || accountStatus?.incomplete ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Retry subscription details" onPress={() => {
+                if (statusError) void retryStatus();
+                if (configError) void retryConfig();
+                if (accountError || accountStatus?.incomplete) void retryAccount();
+              }}>
+                <Text size="sm" mode="subtle" style={{ marginTop: 8 }}>
+                  {syncing ? getErrorMessage("node_catching_up") : "Some subscription details are unavailable. Last known details may be shown."} Tap to retry.
+                </Text>
+              </Pressable>
+            ) : null}
+          </Box>
+
+          <Box px="md" mb="md">
+            <SubscriptionPeriodPicker value={selectedPeriodCount} onChange={setPeriodCount} />
+            <Text size="xs" mode="subtle">
+              {formatCompactNumber(periodFeeMirage)} MIRAGE per period · {selectedPeriodCount} selected · projected expiry {projectedExpiryLabel}
+            </Text>
           </Box>
 
           <Box px="md" mb="sm">
@@ -422,10 +276,14 @@ export function SubscriptionScreen() {
               <PlanCard
                 key={plan.id}
                 plan={plan}
-                isActive={plan.id === currentPlanId}
+                isActive={plan.id === currentPlanId && parsedLevel.kind !== "unknown" && parsedLevel.kind !== "admin"}
                 isLowerPlan={activePlanIndex > 0 && index < activePlanIndex}
                 isDowngradeDisabled={index === 0 && !effectiveAutoRenew}
-                hasInsufficientFunds={hasInsufficientFunds(plan.costValue)}
+                hasInsufficientFunds={hasInsufficientSubscriptionBalance({
+                  balance: userStatus?.balance,
+                  periodFee: index === 0 ? 0 : subscriberFee,
+                  periodCount: selectedPeriodCount,
+                })}
                 isSubscribing={subscribingPlanId === plan.id}
                 onSubscribe={handleSubscribe}
               />
@@ -436,10 +294,7 @@ export function SubscriptionScreen() {
             <Box
               p="md"
               rounded="lg"
-              style={[
-                styles.disclaimerBox,
-                { backgroundColor: theme.colors.background.default },
-              ]}
+              style={[styles.disclaimerBox, { backgroundColor: theme.colors.background.default }]}
             >
               <Text size="sm" mode="subtle" style={styles.disclaimerText}>
                 Perks are billed every subscription period in MIRAGE tokens.

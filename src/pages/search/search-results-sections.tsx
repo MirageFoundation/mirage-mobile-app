@@ -11,15 +11,16 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
-import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
+import type { Post, SearchCommunityInfo, UserInfo } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import { communityLabel } from "@/src/domain/communities";
 import { getUsernameColor } from "@/src/utils/tiers";
 import { SearchPostResult } from "./search-post-result";
 import { SearchRecentItem } from "./search-recent-item";
 import type { SearchController } from "./use-search-controller";
 import { styles } from "./search-styles";
-import { formatPostCount, getTopicIcon } from "./search-utils";
+import { formatPostCount, getCommunityIcon } from "./search-utils";
 
 type SearchResultsSectionsProps = {
   controller: SearchController;
@@ -27,7 +28,7 @@ type SearchResultsSectionsProps = {
 };
 
 type EmptyStateProps = {
-  type: "posts" | "topics" | "users";
+  type: "posts" | "communities" | "users";
   iconColor: string;
 };
 
@@ -37,10 +38,10 @@ const emptyStateCopy = {
     title: "No posts found",
     body: "Try searching with different keywords",
   },
-  topics: {
+  communities: {
     icon: "pricetag-outline" as const,
-    title: "No topics found",
-    body: "Try searching for a different topic name",
+    title: "No communities found",
+    body: "Try searching for a different community name",
   },
   users: {
     icon: "people-outline" as const,
@@ -86,8 +87,8 @@ export function SearchResultsSections({
 
   const renderPost = useCallback(
     ({ item, index }: { item: Post; index: number }) => {
-      const totalPosts = controller.selectedTopic
-        ? controller.topicPosts.length
+      const totalPosts = controller.selectedCommunity
+        ? controller.communityPosts.length
         : (controller.searchResults?.posts.length ?? 0);
 
       return (
@@ -104,25 +105,25 @@ export function SearchResultsSections({
     [
       controller.handlePostPress,
       controller.searchResults?.posts.length,
-      controller.selectedTopic,
-      controller.topicPosts.length,
+      controller.selectedCommunity,
+      controller.communityPosts.length,
       theme.colors.border.subtle,
       theme.colors.text.subtle,
     ],
   );
 
   const renderTopic = useCallback(
-    ({ item, index }: { item: TopicInfo; index: number }) => {
-      const { icon, color } = getTopicIcon(item.topic);
+    ({ item, index }: { item: SearchCommunityInfo; index: number }) => {
+      const { icon, color } = getCommunityIcon(item.community);
       const isLast =
-        index === (controller.searchResults?.topics.length ?? 0) - 1;
+        index === (controller.searchResults?.communities.length ?? 0) - 1;
 
       return (
         <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open topic ${item.topic}`}
-            onPress={() => controller.handleTopicPress(item)}
+            accessibilityLabel={`Open community ${item.community}`}
+            onPress={() => controller.handleCommunityPress(item)}
             style={({ pressed }) => [
               styles.topicResultItem,
               pressed && { opacity: 0.7 },
@@ -138,11 +139,11 @@ export function SearchResultsSections({
             </View>
             <View style={styles.topicResultContent}>
               <Text size="md" weight="medium">
-                #{item.topic}
+                {communityLabel(item.community)}
               </Text>
-              {!!(item.post_count || item.count) && (
+              {!!item.post_count && (
                 <Text size="sm" mode="subtle">
-                  {formatPostCount(item.post_count || item.count)}
+                  {formatPostCount(item.post_count)}
                 </Text>
               )}
             </View>
@@ -237,7 +238,7 @@ export function SearchResultsSections({
     ],
   );
 
-  const topicPostsHeader = controller.selectedTopic ? (
+  const communityPostsHeader = controller.selectedCommunity ? (
     <TopicPostsHeader controller={controller} />
   ) : null;
 
@@ -265,19 +266,19 @@ export function SearchResultsSections({
                 ) : null
               }
             />
-          ) : controller.activeTab === "topics" ? (
-            controller.selectedTopic ? (
+          ) : controller.activeTab === "communities" ? (
+            controller.selectedCommunity ? (
               <FlatList
-                data={controller.topicPosts}
+                data={controller.communityPosts}
                 keyExtractor={(item) => `topic-post-${item.post_id}`}
                 renderItem={renderPost}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={contentContainerStyle}
-                ListHeaderComponent={topicPostsHeader}
+                ListHeaderComponent={communityPostsHeader}
                 ListEmptyComponent={
-                  controller.isLoadingTopicPosts ? (
+                  controller.isLoadingCommunityPosts ? (
                     <View style={styles.loadingState}>
                       <ActivityIndicator
                         size="small"
@@ -294,8 +295,8 @@ export function SearchResultsSections({
               />
             ) : (
               <FlatList
-                data={controller.searchResults?.topics ?? []}
-                keyExtractor={(item) => `topic-${item.topic}`}
+                data={controller.searchResults?.communities ?? []}
+                keyExtractor={(item) => `topic-${item.community}`}
                 renderItem={renderTopic}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
@@ -304,7 +305,7 @@ export function SearchResultsSections({
                 ListEmptyComponent={
                   !controller.isSearching ? (
                     <SearchEmptyState
-                      type="topics"
+                      type="communities"
                       iconColor={theme.colors.text.subtle}
                     />
                   ) : null
@@ -385,7 +386,7 @@ export function SearchResultsSections({
               mode="subtle"
               style={styles.sectionTitle}
             >
-              TRENDING TOPICS
+              TRENDING COMMUNITIES
             </Text>
             {section.isLoading ? (
               <View style={styles.loadingState}>
@@ -397,16 +398,16 @@ export function SearchResultsSections({
             ) : section.items.length > 0 ? (
               section.items.map((item, index) => (
                 <TrendingTopicItem
-                  key={`trending-${item.topic}`}
+                  key={`trending-${item.community}`}
                   item={item}
                   index={index}
-                  onPress={controller.handleTopicPress}
+                  onPress={controller.handleCommunityPress}
                 />
               ))
             ) : (
               <View style={styles.emptyTrendingState}>
                 <Text size="sm" mode="subtle">
-                  No trending topics available
+                  No trending communities available
                 </Text>
               </View>
             )}
@@ -422,11 +423,11 @@ function TrendingTopicItem({
   index,
   onPress,
 }: {
-  item: TopicInfo;
+  item: SearchCommunityInfo;
   index: number;
-  onPress: (topic: TopicInfo) => void;
+  onPress: (topic: SearchCommunityInfo) => void;
 }) {
-  const { icon, color } = getTopicIcon(item.topic);
+  const { icon, color } = getCommunityIcon(item.community);
 
   return (
     <Animated.View
@@ -434,7 +435,7 @@ function TrendingTopicItem({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open trending topic ${item.topic}`}
+        accessibilityLabel={`Open trending community ${item.community}`}
         onPress={() => onPress(item)}
         style={({ pressed }) => [
           styles.trendingItem,
@@ -448,10 +449,10 @@ function TrendingTopicItem({
         </View>
         <View style={styles.trendingContent}>
           <Text size="md" weight="medium">
-            #{item.topic}
+            {communityLabel(item.community)}
           </Text>
           <Text size="sm" mode="subtle">
-            {formatPostCount(item.post_count || item.count)}
+            {formatPostCount(item.post_count)}
           </Text>
         </View>
       </Pressable>
@@ -461,16 +462,16 @@ function TrendingTopicItem({
 
 function TopicPostsHeader({ controller }: { controller: SearchController }) {
   const { theme } = useUnistyles();
-  const topic = controller.selectedTopic;
+  const topic = controller.selectedCommunity;
   if (!topic) return null;
-  const { icon, color } = getTopicIcon(topic.topic);
+  const { icon, color } = getCommunityIcon(topic.community);
 
   return (
     <View style={styles.topicHeader}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back to topic results"
-        onPress={controller.handleBackFromTopic}
+        accessibilityLabel="Back to community results"
+        onPress={controller.handleBackFromCommunity}
         style={({ pressed }) => [
           styles.topicBackButton,
           pressed && { opacity: 0.7 },
@@ -488,7 +489,7 @@ function TopicPostsHeader({ controller }: { controller: SearchController }) {
         <Ionicons name={icon} size={16} color={color} />
       </View>
       <Text size="lg" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
-        #{topic.topic}
+        {communityLabel(topic.community)}
       </Text>
     </View>
   );

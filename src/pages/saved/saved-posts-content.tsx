@@ -371,7 +371,7 @@ export function SavedPostsScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const savedComments = useSavedPostsStore((s) => s.savedComments);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
-  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
+  const blockedCommunityNames = useContentModerationStore((s) => s.blockedCommunityNames);
   const shareServer = usePreferencesStore((s) => s.apiServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
@@ -406,7 +406,7 @@ export function SavedPostsScreen() {
         return false;
       }
       if (hiddenPostIds.has(p.id)) return false;
-      if (p.topic && blockedTopicNames.has(p.topic.toLowerCase())) return false;
+      if (p.community && blockedCommunityNames.has(p.community.toLowerCase())) return false;
       return true;
     });
     if (malformed.length > 0) {
@@ -417,7 +417,7 @@ export function SavedPostsScreen() {
       });
     }
     return safe;
-  }, [savedPosts, hiddenPostIds, blockedTopicNames]);
+  }, [savedPosts, hiddenPostIds, blockedCommunityNames]);
 
   const visibleComments = useMemo(() => {
     const malformed: string[] = [];
@@ -609,9 +609,9 @@ export function SavedPostsScreen() {
     [router],
   );
 
-  const handleTopicPress = useCallback(
+  const handleCommunityPress = useCallback(
     (topic: string) => {
-      router.push(`/topic/${encodeURIComponent(topic)}`);
+      router.push(`/c/${encodeURIComponent(topic)}` as never);
     },
     [router],
   );
@@ -728,7 +728,7 @@ export function SavedPostsScreen() {
         allowAutoplay={allowAutoplay}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
-        onTopicPress={handleTopicPress}
+        onCommunityPress={handleCommunityPress}
         onMorePress={handleMorePress}
         onLikePress={handleLikePress}
         onDislikePress={handleDislikePress}
@@ -746,7 +746,7 @@ export function SavedPostsScreen() {
       currentState,
       handlePostPress,
       handleAuthorPress,
-      handleTopicPress,
+      handleCommunityPress,
       handleMorePress,
       handleLikePress,
       handleDislikePress,

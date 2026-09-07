@@ -13,30 +13,30 @@ import type { ShareServer } from "@/src/stores/preferences-store";
 export type FeedPostCardHandlers = {
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
-  onTopicPress?: (topic: string) => void;
+  onCommunityPress?: (topic: string) => void;
   onMorePress?: (post: Post) => void;
   onLikePress?: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
   onDislikePress?: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
   onCommentPress?: (postId: string) => void;
   onFollowUser?: (authorId: string, username: string, isFollowing: boolean) => void;
-  onFollowTopic?: (topic: string, isFollowed: boolean) => void;
+  onToggleCommunityMembership?: (topic: string, isFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
   onBlockUser?: (postId: string, authorId: string, username: string) => void;
   onBlockPost?: (postId: string) => void;
-  onBlockTopic?: (postId: string, topic: string) => void;
+  onBlockCommunity?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
 };
 
 export type FeedPostCardConfig = {
   currentUserId?: string;
   followedUsers: ReadonlySet<string>;
-  followedTopics: ReadonlySet<string>;
+  joinedCommunities: ReadonlySet<string>;
   followUserOverrides: Readonly<Record<string, boolean>>;
   revealedPosts: ReadonlySet<string>;
   shareServer: ShareServer;
   allowAutoplay: boolean;
   active: boolean;
-  disabledTopicName?: string;
+  disabledCommunityName?: string;
   handlers: FeedPostCardHandlers;
 };
 

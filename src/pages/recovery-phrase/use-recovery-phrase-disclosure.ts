@@ -1,12 +1,14 @@
 import { walletService } from "@/src/services/wallet-service";
+import { authSessionCoordinator, type AuthSessionToken } from "@/src/services/auth-session-coordinator";
+import { useAuthStore } from "@/src/stores/auth-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect } from "expo-router/react-navigation";
 import * as Clipboard from "expo-clipboard";
 import * as Crypto from "expo-crypto";
 import * as LocalAuthentication from "expo-local-authentication";
-import * as ScreenCapture from "expo-screen-capture";
+import { acquireSecretScreen, clearSecretClipboardIfUnchanged as clearClipboardIfUnchanged } from "@/src/services/secret-screen";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState } from "react-native";
 
 import {
   RecoveryPhraseDisclosurePolicy,
@@ -14,33 +16,20 @@ import {
   type RecoveryPhraseDisclosureSnapshot,
 } from "./recovery-phrase-disclosure-policy";
 
-const SCREEN_CAPTURE_KEY = "recovery-phrase";
-const CLIPBOARD_CLEAR_TIMEOUT_MS = 30_000;
-
 type CaptureProtectionStatus = "checking" | "ready" | "unavailable";
+
+const isAppActive = () => AppState.currentState === "active";
 
 function sanitizedSecurityError(operation: string): Error {
   return new Error(`Recovery phrase security operation failed: ${operation}`);
 }
 
-async function clearClipboardIfUnchanged(expectedDigest: string): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, CLIPBOARD_CLEAR_TIMEOUT_MS));
-  try {
-    const clipboardValue = await Clipboard.getStringAsync();
-    const clipboardDigest = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      clipboardValue,
-    );
-    if (clipboardDigest === expectedDigest) {
-      await Clipboard.setStringAsync("");
-    }
-  } catch {
-    // Clipboard access can be denied by the OS; never overwrite it without comparison.
-  }
-}
-
 export function useRecoveryPhraseDisclosure() {
   const policyRef = useRef(new RecoveryPhraseDisclosurePolicy());
+  const focusedRef = useRef(false);
+  const sessionRef = useRef<AuthSessionToken | null>(null);
+  const biometricRequestRef = useRef<number | null>(null);
+  const resumeRef = useRef<((active: boolean) => void) | null>(null);
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [snapshot, setSnapshot] = useState<RecoveryPhraseDisclosureSnapshot>(
     policyRef.current.getSnapshot(),
@@ -57,6 +46,10 @@ export function useRecoveryPhraseDisclosure() {
   const clearDisclosure = useCallback(
     (reason: DisclosureClearReason) => {
       policyRef.current.clear(reason);
+      biometricRequestRef.current = null;
+      resumeRef.current?.(false);
+      resumeRef.current = null;
+      sessionRef.current = null;
       if (copyFeedbackTimeoutRef.current) {
         clearTimeout(copyFeedbackTimeoutRef.current);
         copyFeedbackTimeoutRef.current = null;
@@ -70,27 +63,18 @@ export function useRecoveryPhraseDisclosure() {
   useFocusEffect(
     useCallback(() => {
       let focused = true;
-      let appSwitcherProtectionEnabled = false;
+      focusedRef.current = true;
+      let release: (() => Promise<void>) | undefined;
       setCaptureProtection("checking");
 
       const protect = async () => {
         try {
-          if (!(await ScreenCapture.isAvailableAsync())) {
-            if (focused) setCaptureProtection("unavailable");
-            return;
-          }
-          await ScreenCapture.preventScreenCaptureAsync(SCREEN_CAPTURE_KEY);
-          if (Platform.OS === "ios") {
-            await ScreenCapture.enableAppSwitcherProtectionAsync(1);
-            appSwitcherProtectionEnabled = true;
-          }
+          const cleanup = await acquireSecretScreen();
           if (focused) {
+            release = cleanup;
             setCaptureProtection("ready");
           } else {
-            await ScreenCapture.allowScreenCaptureAsync(SCREEN_CAPTURE_KEY);
-            if (appSwitcherProtectionEnabled) {
-              await ScreenCapture.disableAppSwitcherProtectionAsync();
-            }
+            await cleanup();
           }
         } catch {
           if (focused) setCaptureProtection("unavailable");
@@ -104,31 +88,37 @@ export function useRecoveryPhraseDisclosure() {
 
       return () => {
         focused = false;
+        focusedRef.current = false;
         clearDisclosure("blur");
-        void ScreenCapture.allowScreenCaptureAsync(SCREEN_CAPTURE_KEY).catch(() => {});
-        if (appSwitcherProtectionEnabled) {
-          void ScreenCapture.disableAppSwitcherProtectionAsync().catch(() => {});
-        }
+        if (release) void release().catch(() => {});
       };
     }, [clearDisclosure]),
   );
 
   useEffect(() => {
-    const policy = policyRef.current;
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "background") {
         clearDisclosure("background");
       } else if (
         nextState === "inactive" &&
-        policy.getSnapshot().phase !== "authenticating"
+        biometricRequestRef.current === null
       ) {
         clearDisclosure("app-inactive");
+      } else if (nextState === "active") {
+        resumeRef.current?.(true);
+        resumeRef.current = null;
+      }
+    });
+    const unsubscribe = useAuthStore.subscribe(() => {
+      if (sessionRef.current && !authSessionCoordinator.isCurrent(sessionRef.current)) {
+        clearDisclosure("inactivity");
       }
     });
 
     return () => {
       subscription.remove();
-      policy.clear("cleanup");
+      unsubscribe();
+      clearDisclosure("cleanup");
     };
   }, [clearDisclosure]);
 
@@ -149,6 +139,9 @@ export function useRecoveryPhraseDisclosure() {
     setErrorMessage(null);
     setCopied(false);
 
+    if (!focusedRef.current || !isAppActive()) return;
+    const phase = policyRef.current.getSnapshot().phase;
+    if (phase === "authenticating" || phase === "exporting") return;
     if (captureProtection !== "ready") {
       setErrorMessage(
         "Screen protection is unavailable. The recovery phrase will remain hidden.",
@@ -157,6 +150,10 @@ export function useRecoveryPhraseDisclosure() {
     }
 
     const request = policyRef.current.beginAuthentication();
+    const session = authSessionCoordinator.current();
+    sessionRef.current = session;
+    const isCurrent = () => focusedRef.current &&
+      policyRef.current.isCurrent(request) && authSessionCoordinator.isCurrent(session);
     syncSnapshot();
 
     try {
@@ -164,6 +161,7 @@ export function useRecoveryPhraseDisclosure() {
         LocalAuthentication.hasHardwareAsync(),
         LocalAuthentication.isEnrolledAsync(),
       ]);
+      if (!isCurrent() || !isAppActive()) return;
       if (!hasHardware || !isEnrolled) {
         policyRef.current.authenticationFailed(request);
         syncSnapshot();
@@ -173,6 +171,7 @@ export function useRecoveryPhraseDisclosure() {
         return;
       }
 
+      biometricRequestRef.current = request;
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "View recovery phrase",
         promptSubtitle: "Authenticate to reveal your wallet recovery phrase",
@@ -182,16 +181,23 @@ export function useRecoveryPhraseDisclosure() {
         biometricsSecurityLevel: "strong",
       });
 
-      if (!result.success || AppState.currentState !== "active") {
+      if (!isCurrent()) return;
+      if (!result.success) {
         policyRef.current.authenticationFailed(request);
         syncSnapshot();
         setErrorMessage(
-          result.success
-            ? "Return to the app and authenticate again to view your recovery phrase."
-            : "Authentication was not completed. Your recovery phrase remains hidden.",
+          "Authentication was not completed. Your recovery phrase remains hidden.",
         );
         return;
       }
+
+      // iOS can resolve Face ID before its inactive -> active event is delivered.
+      if (AppState.currentState === "inactive") {
+        const active = await new Promise<boolean>((resolve) => { resumeRef.current = resolve; });
+        if (!active) return;
+      }
+      if (!isCurrent() || !isAppActive()) return;
+      biometricRequestRef.current = null;
 
       const exportRequest = policyRef.current.authenticationSucceeded(request);
       if (exportRequest === null) {
@@ -201,6 +207,7 @@ export function useRecoveryPhraseDisclosure() {
       syncSnapshot();
 
       const phrase = await walletService.exportMnemonic();
+      if (!isCurrent() || !isAppActive()) return;
       if (!policyRef.current.completeExport(exportRequest, phrase, Date.now())) {
         if (!phrase) {
           policyRef.current.authenticationFailed(exportRequest);
@@ -211,6 +218,7 @@ export function useRecoveryPhraseDisclosure() {
       }
       syncSnapshot();
     } catch {
+      if (!isCurrent()) return;
       policyRef.current.authenticationFailed(request);
       syncSnapshot();
       setErrorMessage(
@@ -219,12 +227,16 @@ export function useRecoveryPhraseDisclosure() {
       Sentry.captureException(sanitizedSecurityError("authenticate-and-export"), {
         tags: { feature: "recovery-phrase" },
       });
+    } finally {
+      if (biometricRequestRef.current === request) biometricRequestRef.current = null;
     }
   }, [captureProtection, syncSnapshot]);
 
   const copy = useCallback(async () => {
+    const isCurrent = () => focusedRef.current && AppState.currentState === "active" &&
+      sessionRef.current !== null && authSessionCoordinator.isCurrent(sessionRef.current);
     const phrase = policyRef.current.getActivePhrase(Date.now());
-    if (!phrase || AppState.currentState !== "active") {
+    if (!phrase || !isCurrent()) {
       clearDisclosure("inactivity");
       setErrorMessage("Authenticate again before copying the recovery phrase.");
       return;
@@ -235,14 +247,14 @@ export function useRecoveryPhraseDisclosure() {
         Crypto.CryptoDigestAlgorithm.SHA256,
         phrase,
       );
-      if (policyRef.current.getActivePhrase(Date.now()) !== phrase) {
+      if (!isCurrent() || policyRef.current.getActivePhrase(Date.now()) !== phrase) {
         clearDisclosure("inactivity");
         return;
       }
       await Clipboard.setStringAsync(phrase);
       if (
         policyRef.current.getActivePhrase(Date.now()) !== phrase ||
-        AppState.currentState !== "active"
+        !isCurrent()
       ) {
         const clipboardValue = await Clipboard.getStringAsync();
         if (clipboardValue === phrase) {

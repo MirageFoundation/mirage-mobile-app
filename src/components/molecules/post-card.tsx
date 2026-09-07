@@ -1,5 +1,6 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Text } from "@/src/components/ui/primitives";
+import { SwipeBackGuard } from "@/src/components/ui/swipe-back-guard";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
@@ -52,17 +53,17 @@ type PostCardProps = {
   isNearVisible?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
-  /** Whether the topic is followed */
-  isTopicFollowed?: boolean;
+  /** Whether the community is joined */
+  isCommunityJoined?: boolean;
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   /** Whether the screen/feed is active (for pausing videos) */
   screenActive?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
-  onTopicPress?: () => void;
+  onCommunityPress?: () => void;
   onFollowUser?: () => void;
-  onFollowTopic?: () => void;
+  onToggleCommunityMembership?: () => void;
   onMorePress?: () => void;
   onLikePress?: () => void;
   onDislikePress?: () => void;
@@ -70,19 +71,20 @@ type PostCardProps = {
   onSharePress?: () => void;
   onBlockUser?: () => void;
   onBlockPost?: () => void;
-  onBlockTopic?: () => void;
+  onBlockCommunity?: () => void;
   onReport?: () => void;
   onHidePost?: () => void;
   onRevealContent?: () => void;
-  onMediaPress?: () => void;
+  onMediaPress?: (index: number) => void;
   onOptimisticRetryPress?: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
+  onMediaLayout?: (event: LayoutChangeEvent) => void;
   contentRevealed?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
   hideCommentAction?: boolean;
-  topicDisabled?: boolean;
+  communityDisabled?: boolean;
   directFollowUser?: boolean;
   showMoreButton?: boolean;
   isPostDetail?: boolean;
@@ -108,14 +110,14 @@ const PostCardView = memo(function PostCardView({
   isFocused,
   isNearVisible,
   showFollowButton = true,
-  isTopicFollowed = false,
+  isCommunityJoined = false,
   allowAutoplay = true,
   screenActive = true,
   onPress,
   onAuthorPress,
-  onTopicPress,
+  onCommunityPress,
   onFollowUser,
-  onFollowTopic,
+  onToggleCommunityMembership,
   onMorePress,
   onLikePress,
   onDislikePress,
@@ -123,18 +125,19 @@ const PostCardView = memo(function PostCardView({
   onSharePress,
   onBlockUser,
   onBlockPost,
-  onBlockTopic,
+  onBlockCommunity,
   onReport,
   onHidePost,
   onRevealContent,
   onMediaPress: onMediaPressProp,
   onOptimisticRetryPress,
   onLayout,
+  onMediaLayout,
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
   hideCommentAction = false,
-  topicDisabled = false,
+  communityDisabled = false,
   directFollowUser = false,
   showMoreButton = false,
   isPostDetail = false,
@@ -161,7 +164,7 @@ const PostCardView = memo(function PostCardView({
     hasDisliked,
     isFollowing,
     createdAt,
-    topic,
+    community,
   } = post;
 
   const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
@@ -205,7 +208,7 @@ const PostCardView = memo(function PostCardView({
 
   const handleMediaPress = useCallback(() => {
     if (onMediaPressProp) {
-      onMediaPressProp();
+      onMediaPressProp(0);
     } else {
       setSelectedMediaIndex(0);
       setShowMediaPreview(true);
@@ -319,13 +322,13 @@ const PostCardView = memo(function PostCardView({
   }, []);
 
   const handleGalleryMediaPress = useCallback((index: number) => {
-    if (!isPostDetail && onMediaPressProp) {
-      onMediaPressProp();
+    if (onMediaPressProp) {
+      onMediaPressProp(index);
     } else {
       setSelectedMediaIndex(index);
       setShowMediaPreview(true);
     }
-  }, [isPostDetail, onMediaPressProp]);
+  }, [onMediaPressProp]);
 
   return (
     <Pressable
@@ -335,38 +338,32 @@ const PostCardView = memo(function PostCardView({
       disabled={disablePostInteractions}
       style={[styles.container, optimisticCardStyle, style]}
     >
+      <SwipeBackGuard>
       <PostCardHeader
         author={author}
-        topic={topic}
+        community={community}
         createdAt={createdAt}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
-        isTopicFollowed={isTopicFollowed}
+        isCommunityJoined={isCommunityJoined}
         showFollowButton={showFollowButton}
         onAuthorPress={disablePostInteractions ? undefined : onAuthorPress}
-        onTopicPress={disablePostInteractions || topicDisabled ? undefined : onTopicPress}
-        topicDisabled={topicDisabled}
+        onCommunityPress={disablePostInteractions || communityDisabled ? undefined : onCommunityPress}
+        communityDisabled={communityDisabled}
         onFollowUser={disablePostInteractions ? undefined : onFollowUser}
-        onFollowTopic={disablePostInteractions ? undefined : onFollowTopic}
+        onToggleCommunityMembership={disablePostInteractions ? undefined : onToggleCommunityMembership}
         onMorePress={disablePostInteractions ? undefined : onMorePress}
         directFollowUser={directFollowUser}
         showMoreButton={!isPostDetail && (showMoreButton || isOwnPost)}
         disabled={disablePostInteractions}
         isPostDetail={isPostDetail}
       />
+      </SwipeBackGuard>
 
-      {(contentWarnings?.length || post.awards?.length || post.agentEdited) && (
+      {((contentWarnings?.length ?? 0) > 0 || (post.awards?.length ?? 0) > 0) && (
         <View style={styles.badgesRow}>
           {contentWarnings && contentWarnings.length > 0 && (
             <ContentWarningBadge types={contentWarnings} compact />
-          )}
-          {post.agentEdited && (
-            <View style={styles.agentBadge}>
-              <Ionicons name="shield-checkmark" size={12} color="#EF4444" />
-              <Text size="xs" weight="medium" style={styles.agentBadgeText}>
-                Agent modified
-              </Text>
-            </View>
           )}
           {post.awards && post.awards.length > 0 && (
             <View style={styles.awardsPill}>
@@ -448,6 +445,8 @@ const PostCardView = memo(function PostCardView({
       />
 
       {optimisticResolvedMedia && (
+        <SwipeBackGuard nativeChild>
+        <View onLayout={onMediaLayout}>
         <PostCardMedia
           key={mediaComponentKey}
           media={optimisticResolvedMedia}
@@ -477,36 +476,21 @@ const PostCardView = memo(function PostCardView({
           }
           onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
         />
+        </View>
+        </SwipeBackGuard>
       )}
 
-      {bodyText && !shouldBlurContent && (
+      {!!bodyText && !shouldBlurContent && !isPostDetail && (
         <View style={styles.body}>
           <MarkdownContent
-            content={
-              isPostDetail
-                ? bodyText
-                : !isPostDetail && isTruncated
-                ? truncatedBody + "…"
-                : bodyText
-            }
+            content={isTruncated ? truncatedBody + "…" : bodyText}
           />
         </View>
       )}
 
-      {post.appendices && post.appendices.length > 0 &&
-        post.appendices.map((appendix, idx) => (
-          <View key={idx} style={[styles.appendicesContainer, { backgroundColor: theme.colors.background.subtle }]}>
-            <View style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
-              <Text size="xs" weight="semibold" style={{ color: "#EF4444" }}>
-                @{appendix.agentUsername || appendix.agent.slice(0, 12) + "…"}
-              </Text>
-              <MarkdownContent content={appendix.text} />
-            </View>
-          </View>
-        ))
-      }
-
+      <SwipeBackGuard>
       <PostActions
+        moderationTarget={{ postId: post.id, authorId: author.id, community: post.rootCommunity || post.community, lens: post.lens }}
         likes={likes}
         dislikes={dislikes}
         comments={comments}
@@ -522,8 +506,8 @@ const PostCardView = memo(function PostCardView({
         authorUsername={author.username}
         onBlockUser={disablePostInteractions ? undefined : onBlockUser}
         onBlockPost={disablePostInteractions ? undefined : onBlockPost}
-        onBlockTopic={disablePostInteractions ? undefined : onBlockTopic}
-        topic={post.topic}
+        onBlockCommunity={disablePostInteractions ? undefined : onBlockCommunity}
+        community={post.community}
         onReport={disablePostInteractions ? undefined : onReport}
         postId={post.id}
         onHidePost={disablePostInteractions ? undefined : onHidePost}
@@ -531,6 +515,15 @@ const PostCardView = memo(function PostCardView({
         style={styles.actions}
         disabled={disablePostInteractions}
       />
+      </SwipeBackGuard>
+
+      {!!bodyText && !shouldBlurContent && isPostDetail && (
+        <SwipeBackGuard nativeChild>
+        <View style={styles.body}>
+          <MarkdownContent content={bodyText} />
+        </View>
+        </SwipeBackGuard>
+      )}
 
       <MediaPreviewModal
         visible={showMediaPreview}

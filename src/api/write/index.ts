@@ -35,15 +35,31 @@ export {
   // Follow
   useFollowUser,
   useUnfollowUser,
-  useFollowTopic,
-  useUnfollowTopic,
-  useEnableAgent,
-  useDisableAgent,
   useToggleFollowUser,
-  useToggleFollowTopic,
-  // Agents
-  useSetAgents,
-  useAnnotate,
+  // Community
+  useJoinCommunity,
+  useLeaveCommunity,
+  useToggleCommunityMembership,
+  useBlockCommunity,
+  useUnblockCommunity,
+  useSetCommunityPreference,
+  useAcceptCuratorInvite,
+  useCreateCurationTeam,
+  useDeclineCuratorInvite,
+  useDeleteCurationTeam,
+  useInviteCurator,
+  useLeaveCurationTeam,
+  useRemoveCurator,
+  useRevokeCuratorInvite,
+  useSetCurationPostHidden,
+  useSetCurationPostTag,
+  useSetCurationSubscriberOnly,
+  useSetCurationTag,
+  useSetCurationTeamProfile,
+  useSetCurationThreadLocked,
+  useSetCurationUserHidden,
+  useTransferCurationTeam,
+  useClaimCreatorRewards,
   // Biography
   useSetBiography,
   // Block
@@ -51,8 +67,6 @@ export {
   useUnblockUser,
   useBlockPost,
   useUnblockPost,
-  useBlockTopic,
-  useUnblockTopic,
   // Tokens & Subscription
   useSendTokens,
   useUpgradeLevel,
@@ -77,7 +91,10 @@ export type {
   UseSendTokensOptions,
   UseReportOptions,
   ToggleFollowUserParams,
-  ToggleFollowTopicParams,
+  UseCommunityMembershipOptions,
+  JoinCommunityMutationInput,
+  ToggleCommunityMembershipInput,
+  SetCommunityPreferenceInput,
 } from "./hooks";
 
 // ============================================
@@ -99,21 +116,17 @@ export {
   // Social
   followUser,
   unfollowUser,
-  followTopic,
-  unfollowTopic,
-  enableAgent,
-  disableAgent,
-  setAgents,
   blockUser,
   unblockUser,
   blockPost,
   unblockPost,
-  blockTopic,
-  unblockTopic,
+  joinCommunity,
+  leaveCommunity,
+  blockCommunity,
+  unblockCommunity,
+  setCommunityPreference,
   // Biography
   setBiography,
-  // Annotate
-  annotate,
   // Tokens
   sendTokens,
   upgradeLevel,
@@ -124,8 +137,6 @@ export {
   deleteUser,
   // Award
   giveAward,
-  // Referral
-  referralPrecheckOptIn,
 } from "./endpoints";
 
 // Endpoint types
@@ -143,8 +154,6 @@ export type {
   ReportInput,
   DeleteUserInput,
   GiveAwardInput,
-  AnnotateInput,
-  ReferralPrecheckOptInInput,
 } from "./endpoints";
 
 // ============================================
@@ -153,28 +162,25 @@ export type {
 export {
   // Envelope builder
   buildSignedEnvelope,
-  buildEnvelopeWithParams,
   // Canonical byte builders
   canonBaseSetUsername,
   canonBasePost,
   canonBaseEdit,
   canonBaseVote,
   canonBaseDelete,
-  canonBaseEnableAgent,
-  canonBaseDisableAgent,
-  canonBaseSetAgents,
   canonBaseSetBiography,
-  canonBaseAnnotate,
   canonBaseFollowUser,
   canonBaseUnfollowUser,
-  canonBaseFollowTopic,
-  canonBaseUnfollowTopic,
   canonBaseBlockPost,
   canonBaseUnblockPost,
   canonBaseBlockUser,
   canonBaseUnblockUser,
-  canonBaseBlockTopic,
-  canonBaseUnblockTopic,
+  canonBaseJoinCommunity,
+  canonBaseLeaveCommunity,
+  canonBaseBlockCommunity,
+  canonBaseUnblockCommunity,
+  canonBaseSetCommunityPreference,
+  canonBaseClaimCreatorRewards,
   canonBaseSendTokens,
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
@@ -208,15 +214,14 @@ export type {
   EditParams,
   VoteParams,
   DeleteParams,
-  EnableAgentParams,
-  SetAgentsParams,
   SetBiographyParams,
-  AnnotateParams,
   FollowUserParams,
-  FollowTopicParams,
   BlockPostParams,
   BlockUserParams,
-  BlockTopicParams,
+  JoinCommunityParams,
+  LeaveCommunityParams,
+  BlockCommunityParams,
+  SetCurationPreferenceParams,
   SendTokensParams,
   UpgradeLevelParams,
   SetAutoRenewalParams,

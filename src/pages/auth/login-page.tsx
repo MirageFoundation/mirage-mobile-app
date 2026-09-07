@@ -6,13 +6,13 @@ import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useServerList } from "@/src/hooks/use-server-list";
-import { useAuthStore, usePreferencesStore, type ApiServer } from "@/src/stores";
+import { usePreferencesStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { useToast } from "@/src/providers/toast-provider";
-import { isValidMnemonic } from "@/src/wallet";
+import { useSecretScreen } from "@/src/hooks/use-secret-screen";
+import { usePhraseImport } from "./use-phrase-import";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { exitAuthModal } from "@/src/navigation/auth-navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +21,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,13 +36,9 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
-  const importWallet = useAuthStore((s) => s.importWallet);
   const toast = useToast();
-
-  const [words, setWords] = useState<string[]>(Array(12).fill(""));
-  const [errors, setErrors] = useState<Record<number, boolean>>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const protection = useSecretScreen();
+  const { words, errors, isLoading, loginError, isComplete, handleWordsChange, handleInputError, handleLogin } = usePhraseImport(protection.isVisible);
   const savedServer = usePreferencesStore((s) => s.apiServer);
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
@@ -52,7 +49,6 @@ export default function LoginScreen() {
 
   const { servers } = useServerList();
 
-  const isComplete = words.every((w) => w.length > 0);
   const [nodeConfigData, setNodeConfigData] = useState<{ registration_enabled: boolean } | null>(null);
 
   useEffect(() => {
@@ -80,92 +76,7 @@ export default function LoginScreen() {
     router.back();
   }, [router]);
 
-  const handleWordsChange = useCallback((newWords: string[]) => {
-    setWords(newWords);
-    setLoginError(null);
-    setErrors({});
-  }, []);
-
-  const handleComplete = useCallback(() => {
-    // Auto-submit when all words are filled
-    Keyboard.dismiss();
-  }, []);
-
-  const validatePhrase = useCallback(() => {
-    const phrase = words.join(" ").trim().toLowerCase();
-
-    // Validate using BIP39
-    if (!isValidMnemonic(phrase)) {
-      // Try to identify which words are invalid
-      const newErrors: Record<number, boolean> = {};
-
-      // Mark words that are too short as potentially invalid
-      words.forEach((word, index) => {
-        if (word.length < 3) {
-          newErrors[index] = true;
-        }
-      });
-
-      // If no specific errors found, mark all as potentially wrong
-      if (Object.keys(newErrors).length === 0) {
-        words.forEach((_, index) => {
-          newErrors[index] = true;
-        });
-      }
-
-      setErrors(newErrors);
-      return false;
-    }
-
-    return true;
-  }, [words]);
-
-  const handleLogin = useCallback(async () => {
-    if (!isComplete) return;
-
-    const phrase = words.join(" ").trim().toLowerCase();
-
-    if (!validatePhrase()) {
-      triggerHaptic("error");
-      setLoginError("Invalid recovery phrase. Please check your words.");
-      return;
-    }
-
-    setIsLoading(true);
-    triggerHaptic("selection");
-    Keyboard.dismiss();
-
-    try {
-      // Import the wallet using the mnemonic
-      await importWallet(phrase);
-
-      triggerHaptic("success");
-
-      exitAuthModal();
-    } catch (error) {
-      console.error("[Login] Failed to import wallet:", error);
-      triggerHaptic("error");
-
-      if (error instanceof Error) {
-        if (error.message.includes("Invalid mnemonic")) {
-          setLoginError("Invalid recovery phrase. Please check your words.");
-        } else if (error.message.includes("already exists")) {
-          setLoginError("A wallet already exists. Please logout first.");
-        } else {
-          setLoginError("Failed to import wallet. Please try again.");
-        }
-      } else {
-        setLoginError("An unexpected error occurred.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [
-    isComplete,
-    words,
-    validatePhrase,
-    importWallet,
-  ]);
+  const handleComplete = useCallback(() => { Keyboard.dismiss(); }, []);
 
   return (
     <Box flex background="base">
@@ -174,7 +85,7 @@ export default function LoginScreen() {
         <Pressable onPress={handleBack} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
-        <Pressable onPress={() => setShowServerModal(true)}>
+        <Pressable disabled={isLoading} onPress={() => { protection.conceal(); setShowServerModal(true); }}>
           <Text
             size="lg"
             weight="semibold"
@@ -190,7 +101,7 @@ export default function LoginScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.scrollView}>
+      <ScrollView contentContainerStyle={styles.scrollView} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {/* Title section */}
         <View style={styles.titleSection}>
           <Image
@@ -204,19 +115,21 @@ export default function LoginScreen() {
           />
           <Text style={styles.titleText}>Login to Mirage</Text>
           <Text style={styles.subtitleText}>
-            Sign in to your existing Mirage account with your 12-word recovery
-            phrase:
+            Sign in with your 12, 15, 18, 21, or 24-word English recovery phrase:
           </Text>
         </View>
 
         {/* Recovery phrase input */}
         <View style={styles.inputContainer}>
-          <RecoveryPhraseInput
+          {protection.visible ? <RecoveryPhraseInput
             words={words}
             onWordsChange={handleWordsChange}
+            onInputError={handleInputError}
             errors={errors}
             onComplete={handleComplete}
-          />
+          /> : <Button disabled={protection.protection !== "ready"} onPress={protection.reveal}>
+            <Button.Text>{protection.protection === "unavailable" ? "Screen protection unavailable" : "Enter / resume recovery phrase"}</Button.Text>
+          </Button>}
         </View>
 
         {/* Error message */}
@@ -241,7 +154,7 @@ export default function LoginScreen() {
           size="lg"
           rounded="full"
           onPress={handleLogin}
-          disabled={!isComplete || isLoading}
+          disabled={!isComplete || isLoading || !protection.visible}
           loading={isLoading}
           gap="sm"
           style={{
@@ -252,7 +165,7 @@ export default function LoginScreen() {
             {isLoading ? "Logging in..." : "Log in"}
           </Button.Text>
         </Button>
-      </View>
+      </ScrollView>
 
       <Modal
         visible={showServerModal}
@@ -478,8 +391,9 @@ const styles = StyleSheet.create((theme) => ({
     width: 44,
   },
   scrollView: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
     justifyContent: "center",
   },
   titleSection: {

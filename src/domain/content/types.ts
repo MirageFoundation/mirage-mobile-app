@@ -1,4 +1,5 @@
 import type { AwardBadge } from "@/src/api/types";
+import type { ServedLens } from "@/src/domain/communities";
 import type { ContentWarningType } from "./content-warning-options";
 
 export type { ContentWarningType } from "./content-warning-options";
@@ -10,14 +11,13 @@ export type Community = {
   memberCount: number;
   description?: string;
   isSubscribed: boolean;
-  isNewTopic?: boolean;
+  isNewCommunity?: boolean;
 };
 
 export type AttachmentType = "link" | "image" | "video" | "poll" | null;
 
 export type PostDraft = {
   community: Community | null;
-  topic: string | null;
   title: string;
   body: string;
   contentWarning: string[];
@@ -30,7 +30,6 @@ export type PostDraft = {
 
 export const EMPTY_POST_DRAFT: PostDraft = {
   community: null,
-  topic: null,
   title: "",
   body: "",
   contentWarning: [],
@@ -44,7 +43,6 @@ export const EMPTY_POST_DRAFT: PostDraft = {
 export function isClearedPostDraft(draft: PostDraft): boolean {
   return (
     draft.community === null &&
-    draft.topic === null &&
     draft.title === "" &&
     draft.body === "" &&
     draft.contentWarning.length === 0 &&
@@ -80,7 +78,11 @@ export type Post = {
   author: PostAuthor;
   title: string;
   body?: string;
-  topic?: string;
+  community?: string;
+  rootCommunity?: string;
+  lens?: ServedLens;
+  threadLocked?: boolean;
+  protocolVersion?: number;
   media?: PostMedia[];
   contentWarnings?: ContentWarningType[];
   likes: number;
@@ -91,14 +93,11 @@ export type Post = {
   isFollowing?: boolean;
   createdAt: Date | string | number;
   awards?: AwardBadge[];
-  agentEdited?: boolean;
-  agentEditsMeta?: Record<string, string>;
   optimisticStatus?: "pending" | "success" | "error";
   optimisticError?: string;
   optimisticActionId?: string;
   optimisticDraft?: PostDraft;
   optimisticVideoPreviewUntil?: number;
-  appendices?: { agent: string; agentUsername?: string; text: string }[];
 };
 
 export type CommentAuthor = {

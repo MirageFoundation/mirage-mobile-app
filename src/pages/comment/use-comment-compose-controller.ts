@@ -1,8 +1,14 @@
 import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
+import { findCachedThreadRoot } from "@/src/api/cache/content-cache";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { getThreadReplyPolicy, LEGACY_THREAD_NOTICE } from "@/src/domain/content";
+import { getServerIdentity } from "@/src/api/server-runtime";
+import { isReplyRejected, useReplyRejectionStore } from "@/src/stores/reply-rejection-store";
 import { useGiphy } from "@/src/hooks";
 import { useMentionSearch } from "@/src/hooks/use-mention-search";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { useToast } from "@/src/providers/toast-provider";
+import { useQueryClient } from "@tanstack/react-query";
 import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 import { useUserLevel } from "@/src/stores/auth-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
@@ -45,6 +51,8 @@ type CommentComposeParams = {
 
 export function useCommentComposeController() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const params = useLocalSearchParams<CommentComposeParams>();
   const {
     postId,
@@ -71,6 +79,11 @@ export function useCommentComposeController() {
   const setWasDismissed = useCommentComposeStore((state) => state.setWasDismissed);
   const userLevel = useUserLevel();
   const isEditMode = !!editCommentId;
+  const serverIdentity = getServerIdentity();
+  const parentRejected = useReplyRejectionStore((state) =>
+    !isEditMode && isReplyRejected(state, serverIdentity, replyToId ?? postId ?? ""),
+  );
+  const replyNotice = parentRejected ? LEGACY_THREAD_NOTICE : null;
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
   const editability = useMemo(() => {
     if (!isEditMode || !editCreatedAt) return null;
@@ -115,7 +128,7 @@ export function useCommentComposeController() {
 
   const attachmentUrl = selectedImageUri || selectedGifUrl;
   const editExpired = !!(isEditMode && editability && !editability.allowed);
-  const { canSubmit, effectiveMaxLength } = getCommentComposeLimits({
+  const { canSubmit: contentCanSubmit, effectiveMaxLength } = getCommentComposeLimits({
     attachmentUrl,
     editExpired,
     imageError: selectedImageUri ? imageUploadState.error : null,
@@ -126,6 +139,7 @@ export function useCommentComposeController() {
     text,
   });
   const canAddLink = !!linkName.trim() && !!linkUrl.trim() && !linkError;
+  const canSubmit = contentCanSubmit && !parentRejected;
   const showImagePreviewBlockingOverlay =
     isPreparingImage ||
     (!!selectedImageUri && !imageUploadState.done && isMediaLoading && !isPreviewVisible);
@@ -217,6 +231,22 @@ export function useCommentComposeController() {
       }
       return;
     }
+    if (!isEditMode && postId) {
+      const cachedRoot = findCachedThreadRoot(queryClient, postId);
+      const policy = getThreadReplyPolicy(cachedRoot, isReplyRejected(
+        useReplyRejectionStore.getState(), getServerIdentity(), replyToId ?? postId,
+      ));
+      if (!policy.canReply) {
+        Sentry.addBreadcrumb({
+          category: "comment-compose",
+          message: "Blocked compose against served lock or rejected parent",
+          level: "info",
+          data: { postId, reason: policy.reason },
+        });
+        toast.error(policy.notice ?? "This thread is read-only.");
+        return;
+      }
+    }
     didSubmitRef.current = true;
     setIsSubmitting(true);
     triggerHaptic("medium");
@@ -254,7 +284,7 @@ export function useCommentComposeController() {
     }
     if (!isEditMode && postId) clearDraft(postId, replyToId ?? null);
     router.back();
-  }, [canSubmit, clearDraft, editCommentId, editParentId, editSource, imageUploadState.url, isEditMode, postId, replyToId, router, selectedGifUrl, selectedImageUri, setPendingComment, setPendingEdit, text]);
+  }, [canSubmit, clearDraft, editCommentId, editParentId, editSource, imageUploadState.url, isEditMode, postId, queryClient, replyToId, router, selectedGifUrl, selectedImageUri, setPendingComment, setPendingEdit, text, toast]);
 
   const handleModeChange = useCallback((mode: InputMode) => {
     triggerHaptic("selection");
@@ -435,7 +465,7 @@ export function useCommentComposeController() {
     selectedImageUri, selectedGifUrl, isMediaLoading, setIsMediaLoading,
     setIsPreviewVisible, isPreparingImage, isNetworkOnline, isKeyboardVisible,
     showStickerPicker, setShowStickerPicker, imageUploadState, mention, giphy,
-    isEditMode, editability, editExpired, canSubmit, canAddLink, effectiveMaxLength,
+    isEditMode, editability, editExpired, canSubmit, canAddLink, effectiveMaxLength, replyNotice,
     showImagePreviewBlockingOverlay, replyPreview, handleClose, handleSubmit,
     handleModeChange, handleCloseGifMode, handleLinkUrlChange, handleAddLink,
     handleCancelLink, handleRemoveMarkdownLink, handleSelectGif, handlePickImage,

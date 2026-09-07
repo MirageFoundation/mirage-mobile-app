@@ -19,13 +19,14 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   useAddressFromUsername,
+  useInfiniteCommunities,
   usePosts,
   useUserFollowed,
   useUserFollowedByAddress,
   useUsernameFromAddress,
 } from "@/src/api/read";
-import { useAgents } from "@/src/api/read/hooks/use-agents";
 import type { Post as ApiPostType } from "@/src/api/types";
+import { communityLabel } from "@/src/domain/communities";
 import { Avatar } from "@/src/components/atoms";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { getTabLabelColors } from "@/src/components/molecules/tab-label-colors";
@@ -36,21 +37,19 @@ const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-type FollowingTab = "users" | "topics" | "agents";
+type FollowingTab = "users" | "communities";
 
 const TABS: { key: FollowingTab; label: string }[] = [
   { key: "users", label: "Users" },
-  { key: "topics", label: "Topics" },
-  { key: "agents", label: "Agents" },
+  { key: "communities", label: "Communities" },
 ];
 
 const TAB_INDEX_MAP: Record<FollowingTab, number> = {
   users: 0,
-  topics: 1,
-  agents: 2,
+  communities: 1,
 };
 
-const INDEX_TAB_MAP: FollowingTab[] = ["users", "topics", "agents"];
+const INDEX_TAB_MAP: FollowingTab[] = ["users", "communities"];
 
 const formatCount = (
   count: number,
@@ -151,18 +150,6 @@ function TopicRowSkeleton() {
   );
 }
 
-function ModeratorRowSkeleton() {
-  return (
-    <View style={styles.row}>
-      <SkeletonBox width={40} height={40} borderRadius={4} />
-      <View style={{ marginLeft: 12, gap: 6 }}>
-        <SkeletonBox width={140} height={16} />
-        <SkeletonBox width={80} height={12} />
-      </View>
-    </View>
-  );
-}
-
 function TopicPostRowSkeleton() {
   return (
     <View style={styles.topicPostRow}>
@@ -191,10 +178,8 @@ function FollowingListSkeleton({ tab }: { tab: FollowingTab }) {
         switch (tab) {
           case "users":
             return <UserRowSkeleton key={i} />;
-          case "topics":
+          case "communities":
             return <TopicRowSkeleton key={i} />;
-          case "agents":
-            return <ModeratorRowSkeleton key={i} />;
         }
       })}
     </View>
@@ -221,13 +206,9 @@ function FollowingEmptyState({ tab }: { tab: FollowingTab }) {
       title: "Not following any users",
       subtitle: "When you follow users, they'll appear here.",
     },
-    topics: {
-      title: "Not following any topics",
-      subtitle: "When you follow topics, they'll appear here.",
-    },
-    agents: {
-      title: "No enabled agents",
-      subtitle: "When you enable agents, they'll appear here.",
+    communities: {
+      title: "No joined communities",
+      subtitle: "When you join communities, they'll appear here.",
     },
   };
 
@@ -309,45 +290,8 @@ function TopicRow({
         style={{ color: theme.colors.text.default, flex: 1 }}
         numberOfLines={1}
       >
-        #{topic}
+        {communityLabel(topic)}
       </Text>
-      <Icon
-        icon={Ionicons}
-        name="chevron-forward"
-        size={18}
-        color={theme.colors.text.subtle}
-      />
-    </Pressable>
-  );
-}
-
-function ModeratorRow({
-  address,
-  onPress,
-}: {
-  address: string;
-  onPress: (id: string) => void;
-}) {
-  const { theme } = useUnistyles();
-  const { data } = useUsernameFromAddress(address);
-  const displayName = data?.username ?? address.slice(0, 10) + "...";
-
-  return (
-    <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="sm" seed={address} rounded="sm" />
-      <Box style={{ marginLeft: 12, flex: 1 }}>
-        <Text
-          size="md"
-          weight="medium"
-          style={{ color: theme.colors.text.default }}
-          numberOfLines={1}
-        >
-          {displayName}
-        </Text>
-        <Text size="xs" mode="subtle">
-          Moderator
-        </Text>
-      </Box>
       <Icon
         icon={Ionicons}
         name="chevron-forward"
@@ -425,7 +369,7 @@ function TopicPostRow({
 // --- Main screen ---
 
 export function UserFollowingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
@@ -450,60 +394,50 @@ export function UserFollowingScreen() {
   const followedData = isOwnProfile ? ownFollowedData : otherFollowedData;
   const isLoading = isOwnProfile ? isLoadingOwn : isLoadingOther;
 
-  const [activeTab, setActiveTab] = useState<FollowingTab>("users");
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const animatedTabIndex = useSharedValue(0);
+  const initialTab: FollowingTab = tab === "communities" ? "communities" : "users";
+  const [activeTab, setActiveTab] = useState<FollowingTab>(initialTab);
+  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
+  const animatedTabIndex = useSharedValue(TAB_INDEX_MAP[initialTab]);
 
-  const { data: topicPostsData, isLoading: isLoadingTopicPosts } = usePosts({
-    topic: selectedTopic ?? undefined,
+  const { data: communityPostsData, isLoading: isLoadingCommunityPosts } = usePosts({
+    community: selectedCommunity ?? undefined,
     limit: 50,
   });
 
-  const topicPosts = useMemo(() => {
-    if (!topicPostsData?.posts) return [];
-    return topicPostsData.posts;
-  }, [topicPostsData]);
+  const communityPosts = useMemo(() => {
+    if (!communityPostsData?.posts) return [];
+    return communityPostsData.posts;
+  }, [communityPostsData]);
 
-  const { data: allAgentsData } = useAgents();
-  const agentAddressSet = useMemo(
-    () => new Set(allAgentsData?.agents?.map((a) => a.address) ?? []),
-    [allAgentsData?.agents],
+  const {
+    data: joinedCommunitiesData,
+    isLoading: isLoadingJoinedCommunities,
+  } = useInfiniteCommunities(
+    { joined_by: userAddress ?? undefined, limit: 50 },
+    { enabled: !!userAddress },
   );
 
-  const followedAgents = useMemo(
-    () => (followedData?.followed_users ?? []).filter((addr) => agentAddressSet.has(addr)),
-    [followedData?.followed_users, agentAddressSet],
+  const usersData = useMemo(
+    () => followedData?.followed_users ?? [],
+    [followedData?.followed_users],
+  );
+  const topicsData = useMemo(
+    () =>
+      joinedCommunitiesData?.pages.flatMap((page) =>
+        page.items.map((item) => item.community),
+      ) ?? [],
+    [joinedCommunitiesData],
   );
 
-  const nonAgentUsers = useMemo(
-    () => (followedData?.followed_users ?? []).filter((addr) => !agentAddressSet.has(addr)),
-    [followedData?.followed_users, agentAddressSet],
-  );
-
-  const usersCount = nonAgentUsers.length;
-  const topicsCount = followedData?.followed_topics?.length ?? 0;
-  const agentsCount = followedAgents.length;
+  const usersCount = usersData.length;
+  const topicsCount = topicsData.length;
 
   const tabCounts: Record<FollowingTab, number> = useMemo(
     () => ({
       users: usersCount,
-      topics: topicsCount,
-      agents: agentsCount,
+      communities: topicsCount,
     }),
-    [usersCount, topicsCount, agentsCount],
-  );
-
-  const usersData = useMemo(
-    () => nonAgentUsers,
-    [nonAgentUsers],
-  );
-  const topicsData = useMemo(
-    () => followedData?.followed_topics ?? [],
-    [followedData?.followed_topics],
-  );
-  const agentsData = useMemo(
-    () => followedAgents,
-    [followedAgents],
+    [usersCount, topicsCount],
   );
 
   const handleUserPress = useCallback(
@@ -513,15 +447,15 @@ export function UserFollowingScreen() {
     [router],
   );
 
-  const handleTopicPress = useCallback(
+  const handleCommunityPress = useCallback(
     (topic: string) => {
-      router.push(`/topic/${encodeURIComponent(topic)}`);
+      router.push(`/c/${encodeURIComponent(topic)}` as never);
     },
     [router],
   );
 
-  const handleBackFromTopic = useCallback(() => {
-    setSelectedTopic(null);
+  const handleBackFromCommunity = useCallback(() => {
+    setSelectedCommunity(null);
   }, []);
 
   const handleTopicPostPress = useCallback(
@@ -540,8 +474,8 @@ export function UserFollowingScreen() {
     setActiveTab(tab);
     animatedTabIndex.value = withTiming(index, { duration: 200 });
     pagerRef.current?.setPage(index);
-    if (tab !== "topics") {
-      setSelectedTopic(null);
+    if (tab !== "communities") {
+      setSelectedCommunity(null);
     }
   }, [animatedTabIndex]);
 
@@ -552,11 +486,12 @@ export function UserFollowingScreen() {
 
   const handlePageSelected = useCallback((e: any) => {
     const index = e.nativeEvent.position;
-    const tab = INDEX_TAB_MAP[index];
-    setActiveTab(tab);
+    const nextTab = INDEX_TAB_MAP[index];
+    if (!nextTab) return;
+    setActiveTab(nextTab);
     animatedTabIndex.value = index;
-    if (tab !== "topics") {
-      setSelectedTopic(null);
+    if (nextTab !== "communities") {
+      setSelectedCommunity(null);
     }
   }, [animatedTabIndex]);
 
@@ -569,16 +504,9 @@ export function UserFollowingScreen() {
 
   const renderTopicItem = useCallback(
     ({ item }: { item: string }) => (
-      <TopicRow topic={item} onPress={handleTopicPress} />
+      <TopicRow topic={item} onPress={handleCommunityPress} />
     ),
-    [handleTopicPress],
-  );
-
-  const renderModeratorItem = useCallback(
-    ({ item }: { item: string }) => (
-      <ModeratorRow address={item} onPress={handleUserPress} />
-    ),
-    [handleUserPress],
+    [handleCommunityPress],
   );
 
   const renderTopicPostItem = useCallback(
@@ -595,10 +523,10 @@ export function UserFollowingScreen() {
   );
 
   const TopicPostsHeader = useCallback(() => {
-    if (!selectedTopic) return null;
+    if (!selectedCommunity) return null;
     return (
       <View style={styles.topicHeader}>
-        <Pressable onPress={handleBackFromTopic} hitSlop={8}>
+        <Pressable onPress={handleBackFromCommunity} hitSlop={8}>
           <Icon
             icon={Ionicons}
             name="arrow-back"
@@ -612,13 +540,13 @@ export function UserFollowingScreen() {
           numberOfLines={1}
           style={{ flex: 1, marginLeft: 12 }}
         >
-          #{selectedTopic}
+          {communityLabel(selectedCommunity)}
         </Text>
       </View>
     );
-  }, [selectedTopic, theme.colors.text.default, handleBackFromTopic]);
+  }, [selectedCommunity, theme.colors.text.default, handleBackFromCommunity]);
 
-  const showTopicPosts = activeTab === "topics" && selectedTopic !== null;
+  const showTopicPosts = activeTab === "communities" && selectedCommunity !== null;
 
   const usersListEmpty = useCallback(() => {
     if (isLoading) return <FollowingListSkeleton tab="users" />;
@@ -626,19 +554,14 @@ export function UserFollowingScreen() {
   }, [isLoading]);
 
   const topicsListEmpty = useCallback(() => {
-    if (isLoading) return <FollowingListSkeleton tab="topics" />;
-    return <FollowingEmptyState tab="topics" />;
-  }, [isLoading]);
+    if (isLoadingJoinedCommunities) return <FollowingListSkeleton tab="communities" />;
+    return <FollowingEmptyState tab="communities" />;
+  }, [isLoadingJoinedCommunities]);
 
-  const agentsListEmpty = useCallback(() => {
-    if (isLoading) return <FollowingListSkeleton tab="agents" />;
-    return <FollowingEmptyState tab="agents" />;
-  }, [isLoading]);
-
-  const topicPostsEmpty = useCallback(() => {
-    if (isLoadingTopicPosts) return <TopicPostsListSkeleton />;
-    return <FollowingEmptyState tab="topics" />;
-  }, [isLoadingTopicPosts]);
+  const communityPostsEmpty = useCallback(() => {
+    if (isLoadingCommunityPosts) return <TopicPostsListSkeleton />;
+    return <FollowingEmptyState tab="communities" />;
+  }, [isLoadingCommunityPosts]);
 
   const singleTabWidth = SCREEN_WIDTH / TABS.length;
   const tabIndicatorStyle = useAnimatedStyle(() => ({
@@ -675,7 +598,9 @@ export function UserFollowingScreen() {
           <View style={styles.tabBar}>
             {TABS.map((tab, index) => {
               const count = tabCounts[tab.key];
-              const hasCount = !isLoading && followedData;
+              const hasCount = tab.key === "users"
+                ? !isLoading && !!followedData
+                : !isLoadingJoinedCommunities;
               const label = `${tab.label}${hasCount ? ` (${count})` : ""}`;
               return (
                 <Pressable
@@ -712,7 +637,7 @@ export function UserFollowingScreen() {
       <PagerView
         ref={pagerRef}
         style={{ flex: 1 }}
-        initialPage={0}
+        initialPage={TAB_INDEX_MAP[initialTab]}
         onPageScroll={handlePageScroll}
         onPageSelected={handlePageSelected}
       >
@@ -729,18 +654,18 @@ export function UserFollowingScreen() {
           />
         </View>
 
-        <View key="topics" style={{ flex: 1 }}>
+        <View key="communities" style={{ flex: 1 }}>
           {showTopicPosts ? (
             <FlatList
-              data={topicPosts}
+              data={communityPosts}
               renderItem={renderTopicPostItem}
               keyExtractor={topicPostKeyExtractor}
               contentContainerStyle={{
                 paddingBottom: insets.bottom + 20,
-                flexGrow: topicPosts.length === 0 ? 1 : undefined,
+                flexGrow: communityPosts.length === 0 ? 1 : undefined,
               }}
               ListHeaderComponent={TopicPostsHeader}
-              ListEmptyComponent={topicPostsEmpty}
+              ListEmptyComponent={communityPostsEmpty}
             />
           ) : (
             <FlatList
@@ -754,19 +679,6 @@ export function UserFollowingScreen() {
               ListEmptyComponent={topicsListEmpty}
             />
           )}
-        </View>
-
-        <View key="agents" style={{ flex: 1 }}>
-          <FlatList
-            data={agentsData}
-            renderItem={renderModeratorItem}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={{
-              paddingBottom: insets.bottom + 20,
-              flexGrow: agentsData.length === 0 ? 1 : undefined,
-            }}
-            ListEmptyComponent={agentsListEmpty}
-          />
         </View>
       </PagerView>
     </Box>

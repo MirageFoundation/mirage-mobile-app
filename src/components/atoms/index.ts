@@ -5,7 +5,7 @@ export { VoteButton } from "./vote-button";
 export { TimeAgo, useTimeAgo } from "./time-ago";
 export { FollowButton } from "./follow-button";
 export { Badge, BadgeWrapper } from "./badge";
-export { TopicChip } from "./topic-chip";
+export { CommunityChip } from "./community-chip";
 export { WordChip } from "./word-chip";
 export { StatusStep } from "./status-step";
 export { ContentWarningBadge, ContentWarningChip, type ContentWarningType } from "./content-warning-badge";

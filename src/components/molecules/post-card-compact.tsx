@@ -37,18 +37,18 @@ const THUMB_SIZE = 72;
 type PostCardCompactProps = {
   post: Post;
   isOwnPost?: boolean;
-  isTopicFollowed?: boolean;
+  isCommunityJoined?: boolean;
   contentRevealed?: boolean;
   shareUrl?: string;
   showFollowButton?: boolean;
   showMoreButton?: boolean;
-  topicDisabled?: boolean;
+  communityDisabled?: boolean;
   hideCommentAction?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
-  onTopicPress?: () => void;
+  onCommunityPress?: () => void;
   onFollowUser?: () => void;
-  onFollowTopic?: () => void;
+  onToggleCommunityMembership?: () => void;
   onMorePress?: () => void;
   onLikePress?: () => void;
   onDislikePress?: () => void;
@@ -56,7 +56,7 @@ type PostCardCompactProps = {
   onSharePress?: () => void;
   onBlockUser?: () => void;
   onBlockPost?: () => void;
-  onBlockTopic?: () => void;
+  onBlockCommunity?: () => void;
   onReport?: () => void;
   onHidePost?: () => void;
   onRevealContent?: () => void;
@@ -72,17 +72,17 @@ export const PostCardCompact = memo(function PostCardCompact({
   contentRevealed = false,
   shareUrl,
   hideCommentAction = false,
-  topicDisabled = false,
+  communityDisabled = false,
   onPress,
   onAuthorPress,
-  onTopicPress,
+  onCommunityPress,
   onLikePress,
   onDislikePress,
   onCommentPress,
   onSharePress,
   onBlockUser,
   onBlockPost,
-  onBlockTopic,
+  onBlockCommunity,
   onReport,
   onHidePost,
   onRevealContent,
@@ -106,7 +106,7 @@ export const PostCardCompact = memo(function PostCardCompact({
     hasLiked,
     hasDisliked,
     createdAt,
-    topic,
+    community,
     optimisticStatus,
     optimisticError,
   } = post;
@@ -192,11 +192,11 @@ export const PostCardCompact = memo(function PostCardCompact({
     onAuthorPress?.();
   }, [disableInteractions, onAuthorPress]);
 
-  const handleTopicPress = useCallback(() => {
-    if (disableInteractions || topicDisabled || !topic) return;
+  const handleCommunityPress = useCallback(() => {
+    if (disableInteractions || communityDisabled || !community) return;
     triggerHaptic("selection");
-    onTopicPress?.();
-  }, [disableInteractions, onTopicPress, topic, topicDisabled]);
+    onCommunityPress?.();
+  }, [disableInteractions, onCommunityPress, community, communityDisabled]);
 
   const optimisticStatusColor =
     optimisticStatus === "error"
@@ -280,23 +280,23 @@ export const PostCardCompact = memo(function PostCardCompact({
 
         <View style={styles.content}>
           <View style={styles.metaRow}>
-            {topic ? (
+            {community ? (
               <Pressable
-                onPress={handleTopicPress}
+                onPress={handleCommunityPress}
                 hitSlop={4}
-                disabled={disableInteractions || topicDisabled}
+                disabled={disableInteractions || communityDisabled}
               >
                 <Text
                   size="sm"
-                  weight="semibold"
+                  weight="medium"
                   numberOfLines={1}
                   style={{ color: theme.colors.text.subtle }}
                 >
-                  #{topic}
+                  [{community}]
                 </Text>
               </Pressable>
             ) : null}
-            {topic ? (
+            {community ? (
               <Text size="sm" style={{ color: theme.colors.text.subtle }}>
                 ·
               </Text>
@@ -341,6 +341,7 @@ export const PostCardCompact = memo(function PostCardCompact({
           </Text>
 
           <PostActions
+            moderationTarget={{ postId: post.id, authorId: author.id, community: post.rootCommunity || post.community, lens: post.lens }}
             likes={likes}
             dislikes={dislikes}
             comments={comments}
@@ -356,8 +357,8 @@ export const PostCardCompact = memo(function PostCardCompact({
             authorUsername={author.username}
             onBlockUser={disableInteractions ? undefined : onBlockUser}
             onBlockPost={disableInteractions ? undefined : onBlockPost}
-            onBlockTopic={disableInteractions ? undefined : onBlockTopic}
-            topic={topic}
+            onBlockCommunity={disableInteractions ? undefined : onBlockCommunity}
+            community={community}
             onReport={disableInteractions ? undefined : onReport}
             postId={post.id}
             onHidePost={disableInteractions ? undefined : onHidePost}

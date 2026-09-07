@@ -1,29 +1,10 @@
 const ERROR_MESSAGES: Record<string, string> = {
  registration_disabled: "Registration is currently disabled on this node.",
- invite_code_required: "An invite code is required to create an account.",
- invite_code_invalid: "That invite code is not valid.",
- invite_code_used: "That invite code has already been used.",
- invite_code_check_failed: "Could not validate the invite code. Please try again.",
- invite_code_invalid_format: "Invite code format is invalid.",
- invite_codes_not_required: "Invite codes are not required on this node.",
- invite_codes_main_site_only: "Invite codes only work on mirage.talk.",
 
  username_required: "A username is required.",
  username_too_short: "Your username is too short.",
  username_too_long: "Your username is too long.",
  username_invalid_format: "Usernames can only contain letters, numbers, and hyphens.",
-
- referral_requires_invite_codes: "Referral links require invite codes to be enabled.",
- invalid_week_format: "Invalid week format (use YYYY-Www).",
- referral_data_incomplete: "Referral data is incomplete.",
- referrer_not_found: "Referrer not found.",
- referrer_not_opted_in: "This referrer has not enabled referral links.",
- referrer_no_codes: "This referrer has no invite codes left.",
- referrer_already_used: "You already used this referrer.",
- referrer_username_too_long: "Referrer username is too long.",
- referrer_username_invalid_format: "Invalid referrer username format.",
- referrer_check_failed: "Could not validate the referrer. Please try again.",
- self_referral: "You cannot refer yourself.",
 
  missing_fields: "Missing required fields.",
  invalid_pubkey: "Invalid public key.",
@@ -59,7 +40,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 
  pow_required: "Proof-of-work is required.",
  insufficient_pow_precheck: "Proof-of-work is insufficient. Please try again.",
- pow_not_allowed_agents: "Proof-of-work is not allowed for agents.",
  pow_not_allowed_for_award: "Proof-of-work is not allowed for awards.",
  pow_not_allowed_for_set_auto_renewal: "Proof-of-work is not allowed for auto-renewal.",
  pow_not_allowed_for_subscribers: "Proof-of-work is not allowed for subscribers.",
@@ -106,20 +86,9 @@ const ERROR_MESSAGES: Record<string, string> = {
  topic_already_followed: "You already follow this topic.",
  user_must_be_mirage1: "User must be a valid mirage1 address.",
 
- invalid_agent_address: "Invalid agent address.",
- duplicate_agent: "Duplicate agent in the list.",
- agents_must_be_array: "Agents must be provided as a list.",
- agent_already_enabled: "This agent is already enabled.",
- cannot_enable_self_as_agent: "You cannot enable yourself as an agent.",
- cannot_set_self_as_agent: "You cannot set yourself as an agent.",
- too_many_agents: "You have too many agents enabled.",
- agent_tier_required: "Agent features require a higher subscription tier.",
- missing_tier_config: "Agent tier configuration is missing.",
- missing_profile_level: "Profile level is missing.",
- missing_max_agents: "Max enabled agents configuration is missing.",
  invalid_user_level: "Invalid user level.",
 
- not_subscriber: "This action requires an active subscription.",
+ not_subscriber: "Active subscription required",
  invalid_level: "Invalid subscription level.",
  insufficient_balance: "Insufficient balance to complete this transaction.",
  admin_insufficient_balance: "Your account balance is too low to cover the transaction fee.",
@@ -153,13 +122,6 @@ const ERROR_MESSAGES: Record<string, string> = {
  invalid_max_depth: "Invalid max depth.",
  unsupported_sort_mode: "Unsupported sort mode.",
 
- quest_id_required: "Quest ID is required.",
- unknown_quest_id: "Unknown quest ID.",
- quest_not_assigned: "Quest is not assigned for today.",
- quest_already_completed: "Quest already completed.",
- no_rewards: "No rewards available.",
- pool_not_configured: "Reward pool is not configured.",
- payout_failed: "Payout failed. Please try again.",
  stats_event_disabled: "Stats events are disabled on this node.",
  retry: "Please retry the request.",
  not_configured: "Service is not configured.",
@@ -204,6 +166,9 @@ const ERROR_MESSAGES: Record<string, string> = {
  media_unknown_provider: "The configured media provider is not supported.",
  media_edge_unauthorized: "Media upload authorization failed.",
 
+ subscriber_daily_limit_reached: "Daily no-PoW allowance used. Try again after reset.",
+ legacy_thread_read_only: "This older thread is read-only.",
+
  transaction_rejected: "Transaction was rejected by the chain.",
  out_of_gas: "Transaction ran out of gas.",
  fee_payer_insufficient_funds: "Fee payer has insufficient funds.",
@@ -215,8 +180,6 @@ const RETRYABLE_CODES = new Set([
  "envelope_expired",
  "backend_not_initialized",
  "indexer_unavailable",
- "pool_not_configured",
- "payout_failed",
  "retry",
 ]);
 

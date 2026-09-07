@@ -1,5 +1,23 @@
 export type HomeFeedType = "magic" | "latest";
 
+export function getHomeEntryState({
+  isLoggedIn,
+  isInitializing,
+  openBrowsingEnabled,
+  isConfigError,
+}: {
+  isLoggedIn: boolean;
+  isInitializing: boolean;
+  openBrowsingEnabled: boolean | undefined;
+  isConfigError: boolean;
+}): "feed" | "welcome" | "loading" | "error" {
+  if (isLoggedIn) return "feed";
+  if (isInitializing) return "loading";
+  if (openBrowsingEnabled === true) return "feed";
+  if (openBrowsingEnabled === false) return "welcome";
+  return isConfigError ? "error" : "loading";
+}
+
 export const HOME_FEED_OPTIONS: { label: string; value: HomeFeedType }[] = [
   { label: "Magic", value: "magic" },
   { label: "Latest", value: "latest" },
@@ -31,9 +49,6 @@ export function applyFollowUserOverrides(
   return Array.from(result);
 }
 
-export function getHomeHeaderBorderColor(
-  showModerationReminder: boolean,
-  errorColor: string,
-): string | undefined {
-  return showModerationReminder ? `${errorColor}40` : undefined;
+export function getHomeHeaderBorderColor(): string | undefined {
+  return undefined;
 }

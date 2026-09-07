@@ -13,6 +13,10 @@ import { Text } from "@/src/components/ui/primitives";
 import { unregisterPush, registerPush } from "@/src/services/push-notifications";
 import { walletService } from "@/src/services/wallet-service";
 import { primeBootstrap } from "@/src/services/bootstrap";
+import {
+  requestVisitorAttributionDelivery,
+  startVisitorAttributionLifecycle,
+} from "@/src/services/visitor-attribution";
 
 type ApiServerContextType = {
   isRefreshing: boolean;
@@ -37,6 +41,8 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const initializedRef = useRef(false);
   const previousServerRef = useRef<ApiServer>(apiServer);
   const refreshingCountRef = useRef(0);
+
+  useEffect(() => startVisitorAttributionLifecycle(), []);
 
   useEffect(() => {
     const baseUrl = getApiBaseUrl(apiServer);
@@ -114,6 +120,8 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setApiServer(previousServer);
         },
       });
+
+      requestVisitorAttributionDelivery();
 
       const walletAfterSwitch = await walletService.getWallet();
       if (walletAfterSwitch) {

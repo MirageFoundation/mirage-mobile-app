@@ -3,7 +3,6 @@ import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import type { CommentsResponse } from "@/src/api/types";
-import { MediaPostDetailSkeleton } from "@/src/components/molecules";
 import { useAuthGuard } from "@/src/hooks";
 import {
   useAuthStore,
@@ -15,133 +14,26 @@ import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getLastPressedPostY } from "@/src/utils/post-transition";
 import { useQueryClient } from "@tanstack/react-query";
-import MediaPostDetailScreen from "@/src/pages/post/media-post-detail-screen";
 import { PostDetailSections } from "./post-detail-sections";
-import { usePostDetailMediaRoute } from "./use-post-detail-media-route";
 import { usePostDetailController } from "./use-post-detail-controller";
 import { usePostDetailCommentsLifecycle } from "./use-post-detail-comments-lifecycle";
 import { usePostDetailFocusedThread } from "./use-post-detail-focused-thread";
 import { usePostDetailPostState } from "./use-post-detail-post-state";
 import { usePostDetailResolvedPost } from "./use-post-detail-resolved-post";
 import { isInboxNotificationNavigationActive } from "@/src/services/inbox-notifications";
+import { MediaPostDetailSkeleton } from "@/src/components/molecules";
 
 export default function PostDetailScreen() {
-  const params = useLocalSearchParams<{
-    id: string;
-    highlight?: string;
-    depth?: string;
-    fromNotification?: string;
-  }>();
-
-  const {
-    isResolvingFocusedMediaRoute,
-    routeHighlightCommentId,
-    routeRootPostId,
-    useImmersive,
-  } = usePostDetailMediaRoute(params);
-
-  // Exact in-flight flag only. The previous 10s wall-clock window suppressed
-  // legitimate post detail opens that happened shortly after a notification.
-  const isNotificationNavigationActive = isInboxNotificationNavigationActive();
-  const shouldSuppressStalePostDetail =
-    isNotificationNavigationActive && !params.fromNotification;
-  const stalePostDetailKey = `${params.id}:${params.highlight ?? ""}`;
-  const reportedStalePostDetailRef = useRef<string | null>(null);
-
-  console.log("[InboxNotifFlow] post detail route", {
-    id: params.id,
-    highlight: params.highlight,
-    fromNotification: params.fromNotification,
-    isNotificationNavigationActive,
-    routeRootPostId,
-    routeHighlightCommentId,
-    useImmersive,
-    isResolvingFocusedMediaRoute,
-  });
-
-  useEffect(() => {
-    if (!params.fromNotification && !isNotificationNavigationActive) {
-      reportedStalePostDetailRef.current = null;
-      return;
-    }
-    Sentry.addBreadcrumb({
-      category: "navigation",
-      message: "Post detail rendered during notification flow",
-      level: "info",
-      data: {
-        id: params.id,
-        highlight: params.highlight,
-        fromNotification: params.fromNotification,
-        isNotificationNavigationActive,
-        routeRootPostId,
-        routeHighlightCommentId,
-        useImmersive,
-        isResolvingFocusedMediaRoute,
-      },
-    });
-    if (
-      shouldSuppressStalePostDetail &&
-      reportedStalePostDetailRef.current !== stalePostDetailKey
-    ) {
-      reportedStalePostDetailRef.current = stalePostDetailKey;
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Stale post detail suppressed during notification flow",
-        level: "warning",
-        data: {
-          id: params.id,
-          highlight: params.highlight,
-          routeRootPostId,
-          routeHighlightCommentId,
-          useImmersive,
-          isResolvingFocusedMediaRoute,
-        },
-      });
-    }
-  }, [
-    isNotificationNavigationActive,
-    isResolvingFocusedMediaRoute,
-    params.fromNotification,
-    params.highlight,
-    params.id,
-    routeHighlightCommentId,
-    routeRootPostId,
-    shouldSuppressStalePostDetail,
-    stalePostDetailKey,
-    useImmersive,
-  ]);
-
-  if (shouldSuppressStalePostDetail) {
-    console.log("[InboxNotifFlow] suppressing stale post detail during notification", {
-      id: params.id,
-      highlight: params.highlight,
-    });
+  const { fromNotification } = useLocalSearchParams<{ fromNotification?: string }>();
+  if (isInboxNotificationNavigationActive() && !fromNotification) {
     return <MediaPostDetailSkeleton />;
   }
-
-  if (useImmersive) {
-    return (
-      <MediaPostDetailScreen
-        rootPostId={routeRootPostId ?? undefined}
-        highlightCommentId={routeHighlightCommentId}
-        initialSheetOpen={!!routeHighlightCommentId}
-      />
-    );
-  }
-
-  return <LegacyPostDetailScreen />;
+  return <PostDetailContent />;
 }
 
-function LegacyPostDetailScreen() {
+function PostDetailContent() {
   const { id, highlight, reveal, syncContext, depth } = useLocalSearchParams<{
     id: string;
     highlight?: string;
@@ -152,28 +44,6 @@ function LegacyPostDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const videoSyncScope = syncContext ?? (id ? `post:${id}` : undefined);
-
-  const pressedY = useMemo(() => getLastPressedPostY(), []);
-  const headerHeight = insets.top + 40;
-  const initialTranslateY = pressedY > 0 ? pressedY - headerHeight : 0;
-
-  const postTranslateY = useSharedValue(initialTranslateY);
-  const postOpacity = useSharedValue(pressedY > 0 ? 0 : 1);
-
-  useEffect(() => {
-    if (pressedY > 0) {
-      postOpacity.value = withTiming(1, { duration: 200 });
-      postTranslateY.value = withTiming(0, {
-        duration: 400,
-        easing: Easing.out(Easing.cubic),
-      });
-    }
-  }, [postOpacity, postTranslateY, pressedY]);
-
-  const postEnteringStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: postTranslateY.value }],
-    opacity: postOpacity.value,
-  }));
   const { requireAuth, isLoggedIn } = useAuthGuard();
 
   const currentUser = useAuthStore((s) => s.user);
@@ -194,7 +64,6 @@ function LegacyPostDetailScreen() {
     error: commentsError,
     isFetching: isFetchingComments,
     refetch: refetchComments,
-    isRefetching: isRefetchingComments,
   } = useComments(id, { enabled: isFocused });
 
   const commentsApiError = useMemo(() => {
@@ -294,7 +163,6 @@ function LegacyPostDetailScreen() {
 
   useEffect(() => {
     if (!id || !shouldUseOptimisticRootFallback) return;
-
     let cancelled = false;
     const retryDelays = [1500, 5000, 15000, 30000];
     const timers = retryDelays.map((delay) =>
@@ -390,8 +258,8 @@ function LegacyPostDetailScreen() {
     () => followedData?.followed_users ?? [],
     [followedData],
   );
-  const followedTopics = useMemo(
-    () => followedData?.followed_topics ?? [],
+  const joinedCommunities = useMemo(
+    () => followedData?.joined_communities ?? [],
     [followedData],
   );
   const [followUserOverrides, setFollowUserOverrides] = useState<
@@ -480,17 +348,15 @@ function LegacyPostDetailScreen() {
       isViewingComment={isViewingComment}
       effectiveCommentsData={effectiveCommentsData}
       focusedThread={focusedThread}
-      followedTopics={followedTopics}
+      joinedCommunities={joinedCommunities}
       followedUsers={displayFollowedUsers}
       isCommentsError={isCommentsError}
       isFetchingComments={isFetchingComments}
       isLoadingComments={isLoadingComments}
-      isRefetchingComments={isRefetchingComments}
       shouldUseOptimisticRootFallback={shouldUseOptimisticRootFallback}
       screenActive={screenActive}
       shareServer={shareServer}
       videoSyncScope={videoSyncScope}
-      postEnteringStyle={postEnteringStyle}
       isLoggedIn={isLoggedIn}
       showAuthSheet={showAuthSheet}
       requireAuth={requireAuth}

@@ -148,7 +148,7 @@ describe("stale query recovery selection", () => {
     const keys = [
       [...root, "parameters", ...viewer],
       [...root, "config"],
-      [...root, "topics", ...viewer, 20],
+      [...root, "communities", "list", { joined_by: VIEWER }],
       [...root, "resolve", "address", "alice"],
       [...root, "stats", "network"],
       [...root, "tx", "hash"],

@@ -11,6 +11,15 @@ export type {
 } from "./types";
 export { EMPTY_POST_DRAFT, isClearedPostDraft } from "./types";
 export {
+  LEGACY_THREAD_NOTICE,
+  SERVED_LOCK_NOTICE,
+  getThreadReplyPolicy,
+  threadReplyNotice,
+  type ThreadReplyPolicy,
+  type ThreadReplyReason,
+  type ThreadReplyRoot,
+} from "./thread-reply-policy";
+export {
   clearContentWarningSelection,
   CONTENT_WARNING_CONFIG,
   CONTENT_WARNING_IDS,

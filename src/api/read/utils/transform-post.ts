@@ -130,7 +130,7 @@ export function transformApiPost(
   const editOverride = usePostEditStore.getState().overrides[apiPost.post_id];
   const title = editOverride?.title ?? apiPost.title;
   const content = editOverride?.content ?? apiPost.content;
-  const topic = editOverride?.topic ?? apiPost.topic;
+  const community = editOverride?.community ?? apiPost.community;
   const mediaList = editOverride?.media ?? apiPost.media;
 
   return {
@@ -149,7 +149,13 @@ export function transformApiPost(
     },
     title,
     body: content || undefined,
-    topic: topic || undefined,
+    community: community || undefined,
+    rootCommunity: apiPost.root_community || undefined,
+    lens: apiPost.lens,
+    threadLocked: apiPost.thread_locked,
+    protocolVersion: typeof apiPost.protocol_version === "number"
+      ? apiPost.protocol_version
+      : undefined,
     media: mediaList && mediaList.length > 0
       ? mediaList.map((url, i) => {
           const meta = editOverride?.media ? undefined : apiPost.media_meta?.[i];
@@ -204,14 +210,7 @@ export function transformApiPost(
     isFollowing,
     createdAt: apiPost.timestamp * 1000, // Convert seconds to milliseconds
     awards: apiPost.awards ?? [],
-    agentEdited: apiPost.agent_edited ?? false,
-    agentEditsMeta: apiPost.agent_edits_meta,
     ...transformOptimisticPostState(apiPost),
-    appendices: apiPost.appendices?.map((a) => ({
-      agent: a.agent,
-      agentUsername: a.agent_username,
-      text: a.text,
-    })),
   };
 }
 

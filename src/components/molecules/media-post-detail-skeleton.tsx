@@ -12,7 +12,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const SCREEN_HEIGHT = Dimensions.get("window").height;
 const SHIMMER_WIDTH = SCREEN_WIDTH * 0.7;
 
 const SkeletonBox = ({
@@ -84,12 +83,6 @@ type MediaPostDetailSkeletonProps = {
   showHeader?: boolean;
 };
 
-/**
- * Full-screen skeleton mirroring the immersive MediaPostDetailScreen layout:
- *   - header row (close / topic pill / more)
- *   - large media placeholder filling the middle
- *   - footer with author row, title lines, and action row
- */
 export const MediaPostDetailSkeleton = ({
   embedded = false,
   showHeader = true,
@@ -97,12 +90,7 @@ export const MediaPostDetailSkeleton = ({
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const mediaHeight = embedded
-    ? Math.min(SCREEN_WIDTH * 0.55, 260)
-    : Math.min(
-        SCREEN_HEIGHT - insets.top - insets.bottom - 220,
-        SCREEN_HEIGHT * 0.55,
-      );
+  const mediaHeight = Math.min(SCREEN_WIDTH * 0.55, 260);
 
   return (
     <View
@@ -128,16 +116,6 @@ export const MediaPostDetailSkeleton = ({
         </View>
       )}
 
-      {/* Media */}
-      <View style={[styles.mediaWrap, embedded && styles.embeddedMediaWrap]}>
-        <SkeletonBox
-          width="100%"
-          height={mediaHeight}
-          borderRadius={theme.radius.md}
-        />
-      </View>
-
-      {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.authorRow}>
           <SkeletonBox
@@ -157,14 +135,7 @@ export const MediaPostDetailSkeleton = ({
           <SkeletonBox width="70%" height={18} />
         </View>
 
-        <View style={styles.bodyBlock}>
-          <SkeletonBox
-            width="100%"
-            height={12}
-            style={{ marginBottom: 6 }}
-          />
-          <SkeletonBox width="85%" height={12} />
-        </View>
+        <SkeletonBox width="100%" height={mediaHeight} borderRadius={theme.radius.md} />
 
         <View style={styles.actionsRow}>
           <View style={styles.actionGroup}>
@@ -173,6 +144,10 @@ export const MediaPostDetailSkeleton = ({
             <SkeletonBox width={60} height={28} borderRadius={14} />
           </View>
           <SkeletonBox width={28} height={28} borderRadius={14} />
+        </View>
+        <View style={styles.bodyBlock}>
+          <SkeletonBox width="100%" height={12} style={{ marginBottom: 6 }} />
+          <SkeletonBox width="85%" height={12} />
         </View>
       </View>
     </View>
@@ -193,15 +168,6 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-  },
-  mediaWrap: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-  },
-  embeddedMediaWrap: {
-    flex: 0,
-    paddingTop: theme.spacing.md,
   },
   footer: {
     paddingHorizontal: theme.spacing.md,

@@ -29,6 +29,7 @@ export function resolveAuthSignupScreenAccess(state: {
   screen: AuthSignupScreen;
   sessionStatus: AuthSessionStatus;
   hasRecoveryPhrase: boolean;
+  hasConfirmedUsername?: boolean;
   isCompletingSignup: boolean;
   isInitializing?: boolean;
 }): AuthSignupScreenAccess {
@@ -43,13 +44,8 @@ export function resolveAuthSignupScreenAccess(state: {
     return "redirect_home";
   }
 
-  if (state.sessionStatus === "pending_signup" && state.hasRecoveryPhrase) {
-    if (state.screen === "recovery-phrase") return "show";
-    return "redirect_recovery_phrase";
-  }
-
   if (state.screen === "recovery-phrase") {
-    if (state.hasRecoveryPhrase || state.isCompletingSignup) {
+    if ((state.sessionStatus === "pending_signup" && state.hasRecoveryPhrase && state.hasConfirmedUsername) || state.isCompletingSignup) {
       return "show";
     }
     return "redirect_username";

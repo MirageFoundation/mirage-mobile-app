@@ -3,16 +3,15 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateAccountSnapshot } from "@/src/api/cache/account-status-cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
-import { useAuthStore } from "@/src/stores";
 import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import {
   sendTokens,
   upgradeLevel,
   setAutoRenewal,
   type SendTokensInput,
-  type SubscriptionLevel,
 } from "../endpoints/tokens";
 import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
@@ -64,29 +63,16 @@ export function useSendTokens(options: UseSendTokensOptions = {}) {
 export function useUpgradeLevel() {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
-  const setUserLevel = useAuthStore((s) => s.setUserLevel);
 
   return useMutation({
     mutationKey: mutationKeys.tokens.upgradeLevel(),
-    mutationFn: async (level: SubscriptionLevel) => {
+    mutationFn: async (periodCount: number) => {
       const wallet = await getWallet();
-      return upgradeLevel(wallet, level);
+      return upgradeLevel(wallet, periodCount);
     },
-    onSuccess: (data, level) => {
+    onSuccess: () => {
       if (!address || !isCurrentAuthWallet(address)) return;
-      // Update local state
-      setUserLevel(level, address);
-
-      // Invalidate user status
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.userStatus(address),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.profile(address),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.parameters(address),
-      });
+      void invalidateAccountSnapshot(queryClient, address);
     },
   });
 }
@@ -107,12 +93,7 @@ export function useSetAutoRenewal() {
     },
     onSuccess: () => {
       if (!address || !isCurrentAuthWallet(address)) return;
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.userStatus(address),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.profile(address),
-      });
+      void invalidateAccountSnapshot(queryClient, address);
     },
   });
 }

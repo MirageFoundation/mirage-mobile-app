@@ -3,13 +3,13 @@ import { Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import * as Sentry from "@sentry/react-native";
-import { useCallback, useRef, useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { applyPhraseInput, resizePhraseInput, PHRASE_WORD_COUNTS } from "@/src/domain/auth/phrase-input";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type RecoveryPhraseInputProps = {
-  /** Current words array (12 items, empty strings for unfilled) */
+  /** Empty strings represent unfilled words. */
   words: string[];
   /** Callback when words change */
   onWordsChange: (words: string[]) => void;
@@ -17,6 +17,7 @@ type RecoveryPhraseInputProps = {
   errors?: Record<number, boolean>;
   /** Callback when all words are entered */
   onComplete?: () => void;
+  onInputError?: (message: string | null) => void;
 };
 
 export const RecoveryPhraseInput = ({
@@ -24,88 +25,47 @@ export const RecoveryPhraseInput = ({
   onWordsChange,
   errors = {},
   onComplete,
+  onInputError,
 }: RecoveryPhraseInputProps) => {
   const { theme } = useUnistyles();
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-  const inputRefs = useRef<(TextInput | null)[]>([]);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const reportInputError = useCallback((message: string | null) => {
+    setInputError(message);
+    onInputError?.(message);
+  }, [onInputError]);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; }, []);
 
-  const handleWordChange = useCallback(
-    (index: number, text: string) => {
-      // Handle paste of full phrase
-      const trimmedText = text.trim();
-      const pastedWords = trimmedText.split(/\s+/);
-
-      if (pastedWords.length > 1) {
-        // User pasted multiple words - fill in from current index
-        const newWords = [...words];
-        pastedWords.forEach((word, i) => {
-          const targetIndex = index + i;
-          if (targetIndex < 12) {
-            newWords[targetIndex] = word.toLowerCase();
-          }
-        });
-        onWordsChange(newWords);
-        triggerHaptic("success");
-
-        // Focus the next empty slot or last filled slot
-        const nextEmptyIndex = newWords.findIndex((w) => !w);
-        if (nextEmptyIndex !== -1 && nextEmptyIndex < 12) {
-          inputRefs.current[nextEmptyIndex]?.focus();
-        } else {
-          // All filled, check if complete
-          if (newWords.every((w) => w.length > 0)) {
-            onComplete?.();
-          }
-        }
-        return;
-      }
-
-      // Single word entry
-      const newWords = [...words];
-      newWords[index] = text.toLowerCase().replace(/[^a-z]/g, "");
-      onWordsChange(newWords);
-    },
-    [words, onWordsChange, onComplete]
-  );
+  const handleWordChange = useCallback((index: number, text: string) => {
+    generation.current += 1;
+    const result = applyPhraseInput(words, index, text);
+    reportInputError(result.error ?? null);
+    if (result.error) return;
+    onWordsChange(result.words);
+    if (result.words.every(Boolean)) onComplete?.();
+  }, [words, onWordsChange, onComplete, reportInputError]);
 
   const handlePaste = useCallback(async () => {
+    const request = ++generation.current;
     try {
       const clipboardText = await Clipboard.getStringAsync();
-      const pastedWords = clipboardText.trim().split(/\s+/);
-
-      if (pastedWords.length === 12) {
-        triggerHaptic("success");
-        onWordsChange(pastedWords.map((w) => w.toLowerCase()));
-        onComplete?.();
-      } else if (pastedWords.length > 0) {
-        triggerHaptic("warning");
-        // Partial paste from first empty slot
-        const firstEmptyIndex = words.findIndex((w) => !w);
-        const startIndex = firstEmptyIndex === -1 ? 0 : firstEmptyIndex;
-
-        const newWords = [...words];
-        pastedWords.forEach((word, i) => {
-          const targetIndex = startIndex + i;
-          if (targetIndex < 12) {
-            newWords[targetIndex] = word.toLowerCase();
-          }
-        });
-        onWordsChange(newWords);
-      }
-    } catch (error) {
-      Sentry.addBreadcrumb({ category: "wallet", message: "Clipboard paste failed for recovery phrase", data: { error: String(error) }, level: "warning" });
-      triggerHaptic("error");
+      if (request !== generation.current || AppState.currentState !== "active") return;
+      const firstEmpty = words.findIndex((word) => !word);
+      handleWordChange(firstEmpty < 0 ? 0 : firstEmpty, clipboardText);
+    } catch {
+      if (request === generation.current && AppState.currentState === "active") reportInputError("Clipboard unavailable. Enter the words manually.");
     }
-  }, [words, onWordsChange, onComplete]);
+  }, [words, handleWordChange, reportInputError]);
 
   const handleClear = useCallback(() => {
+    generation.current += 1;
     triggerHaptic("selection");
-    onWordsChange(Array(12).fill(""));
-    inputRefs.current[0]?.focus();
-  }, [onWordsChange]);
+    reportInputError(null);
+    onWordsChange(Array(words.length).fill(""));
+  }, [onWordsChange, words.length, reportInputError]);
 
-  // Split words into rows of 4
-  const rows = [words.slice(0, 4), words.slice(4, 8), words.slice(8, 12)];
+  const rows = Array.from({ length: Math.ceil(words.length / 4) }, (_, index) => words.slice(index * 4, index * 4 + 4));
 
   const filledCount = words.filter((w) => w.length > 0).length;
 
@@ -114,7 +74,7 @@ export const RecoveryPhraseInput = ({
       {/* Header with paste button */}
       <View style={styles.header}>
         <Text size="sm" style={{ color: theme.colors.neutral[600] }}>
-          Enter your 12-word recovery phrase
+          Enter your {words.length}-word recovery phrase
         </Text>
         <Button size="sm" variant="ghost" onPress={handlePaste}>
           <Button.Icon>
@@ -130,6 +90,17 @@ export const RecoveryPhraseInput = ({
         </Button>
       </View>
 
+      <View style={[styles.row, { flexWrap: "wrap" }]}>
+        {PHRASE_WORD_COUNTS.map((count) => (
+          <Button key={count} size="sm" variant={words.length === count ? "outline" : "ghost"} onPress={() => {
+            generation.current += 1;
+            const result = resizePhraseInput(words, count);
+            reportInputError(result.error ?? null);
+            if (!result.error) onWordsChange(result.words);
+          }}><Button.Text>{count} words</Button.Text></Button>
+        ))}
+      </View>
+      {inputError && <Text size="sm" accessibilityRole="alert">{inputError}</Text>}
       {/* Word grid */}
       <View style={styles.grid}>
         {rows.map((row, rowIndex) => (
@@ -161,12 +132,12 @@ export const RecoveryPhraseInput = ({
           <View
             style={[
               styles.progressBar,
-              { width: `${(filledCount / 12) * 100}%` },
+              { width: `${(filledCount / words.length) * 100}%` },
             ]}
           />
         </View>
         <Text size="xs" style={{ color: theme.colors.neutral[600] }}>
-          {filledCount}/12 words
+          {filledCount}/{words.length} words
         </Text>
         {filledCount > 0 && (
           <Pressable onPress={handleClear} style={styles.clearButton}>

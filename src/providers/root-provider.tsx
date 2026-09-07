@@ -1,4 +1,5 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
+import { HomeEntryAdultPrompt } from "@/src/components/home-entry-adult-prompt";
 import React, { memo, useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -182,7 +183,10 @@ export const RootProvider = memo(
                 <PowQueueToast />
                <NetworkMonitor />
                <CloudflareErrorToast />
-                <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+                <BottomSheetModalProvider>
+                  {children}
+                  <HomeEntryAdultPrompt />
+                </BottomSheetModalProvider>
               </ToastProvider>
             </AuthProviders>
             </KeyboardProvider>

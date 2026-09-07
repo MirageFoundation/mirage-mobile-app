@@ -40,6 +40,9 @@ import { PreviewVideoItem } from "./media-preview-video-item";
 import { PreviewYouTubeItem } from "./media-preview-youtube-item";
 import { usePreviewZoomGesture } from "./use-preview-zoom-gesture";
 import { StyleSheet } from "react-native-unistyles";
+import { getVideoSourceUri, isVideoPlayerControlledElsewhere } from "@/src/utils/video-player-handoff";
+import { useVideoSourceRecovery } from "./use-video-source-recovery";
+import { VideoUnavailableOverlay } from "./video-unavailable-overlay";
 
 type MediaPreviewModalProps = {
   visible: boolean;
@@ -119,7 +122,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     };
   }, [visible, videoHandoffKey, singleVideoUri]);
   const controllerPlayer = useVideoPlayerController(
-    isSingleVideo && !adoptedLease ? media.uri : null,
+    isSingleVideo && visible && !adoptedLease ? media.uri : null,
     {
       loop: true,
       muted: isMuted,
@@ -132,30 +135,32 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     },
   );
   const videoPlayer = adoptedPlayer ?? controllerPlayer;
+  const recovery = useVideoSourceRecovery({ uri: singleVideoUri ?? "", player: videoPlayer, lease: adoptedLease, enabled: isSingleVideo && mediaSurfaceActive, shouldPlay: isVideoPlaying && mediaSurfaceActive });
+  const videoLoading = isVideoPlaying && (recovery.phase === "loading" || recovery.phase === "recovering");
+  const { acceptsEvent } = recovery;
 
   // An adopted player bypasses the controller's option effects; as the top
   // lease holder the modal applies its settings directly.
   useEffect(() => {
-    if (!adoptedPlayer) return;
+    if (!adoptedPlayer || isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       adoptedPlayer.loop = true;
       adoptedPlayer.timeUpdateEventInterval = 0.1;
-      setIsLoading(false);
     } catch {
       // Native player was released underneath us.
       setAdoptedLease(null);
     }
-  }, [adoptedPlayer]);
+  }, [adoptedPlayer, adoptedLease]);
   useEffect(() => {
-    if (!adoptedPlayer) return;
+    if (!adoptedPlayer || isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       adoptedPlayer.muted = isMuted;
     } catch {
       setAdoptedLease(null);
     }
-  }, [adoptedPlayer, isMuted]);
+  }, [adoptedPlayer, adoptedLease, isMuted]);
   useEffect(() => {
-    if (!adoptedPlayer) return;
+    if (!adoptedPlayer || isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       if (isVideoPlaying && mediaSurfaceActive) {
         if (adoptedPlayer.status === "readyToPlay") {
@@ -169,7 +174,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     } catch {
       setAdoptedLease(null);
     }
-  }, [adoptedPlayer, isVideoPlaying, mediaSurfaceActive]);
+  }, [adoptedPlayer, adoptedLease, isVideoPlaying, mediaSurfaceActive]);
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);
@@ -199,8 +204,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, [visible]);
 
   useEffect(() => {
-    const restorePosition = () => {
-      if (hasGallery || hasRestoredVideoRef.current || !media?.uri) return;
+    const restorePosition = (sourceUri?: string | null) => {
+      if (!acceptsEvent(sourceUri) || hasGallery || hasRestoredVideoRef.current || !media?.uri) return;
       const saved = useVideoPositionStore.getState().getPosition(videoPositionKey);
       if (saved > 0.5) {
         hasRestoredVideoRef.current = true;
@@ -208,25 +213,24 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       }
     };
     const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+      if (!acceptsEvent()) return;
       currentVideoPositionRef.current = currentTime;
     });
     const statusSubscription = videoPlayer.addListener("statusChange", ({ status }) => {
       if (status === "readyToPlay") {
-        setIsLoading(false);
         restorePosition();
       }
     });
     const playingSubscription = videoPlayer.addListener("playingChange", ({ isPlaying }) => {
-      if (mediaSurfaceActive && !hasGallery && isPlaying) {
+      if (acceptsEvent() && mediaSurfaceActive && !hasGallery && isPlaying) {
         setIsVideoPlaying(true);
       }
     });
-    const sourceSubscription = videoPlayer.addListener("sourceLoad", () => {
-      setIsLoading(false);
-      restorePosition();
+    const sourceSubscription = videoPlayer.addListener("sourceLoad", ({ videoSource }) => {
+      if (getVideoSourceUri(videoSource) !== media?.uri) return;
+      restorePosition(getVideoSourceUri(videoSource));
     });
     if (!hasGallery && videoPlayer.status === "readyToPlay") {
-      setIsLoading(false);
       restorePosition();
     }
 
@@ -236,7 +240,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       playingSubscription.remove();
       sourceSubscription.remove();
     };
-  }, [hasGallery, media?.uri, mediaSurfaceActive, videoPlayer, videoPositionKey]);
+  }, [hasGallery, media?.uri, mediaSurfaceActive, videoPlayer, videoPositionKey, acceptsEvent]);
 
   const handleVideoToggle = useCallback(() => {
     setIsVideoPlaying((playing) => !playing);
@@ -388,6 +392,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
               onPress={handleVideoToggle}
             >
               <VideoView
+                key={`${singleVideoUri}:${recovery.revision}`}
                 player={videoPlayer}
                 style={styles.fullMedia}
                 contentFit="contain"
@@ -395,15 +400,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
                 fullscreenOptions={{ enable: false }}
                 allowsPictureInPicture={false}
                 surfaceType={Platform.OS === "android" ? "textureView" : undefined}
-                onFirstFrameRender={() => setIsLoading(false)}
+                onFirstFrameRender={recovery.firstFrame}
               />
-              {!isVideoPlaying && !isLoading && (
+              {!isVideoPlaying && !videoLoading && recovery.phase !== "terminal" && (
                 <View style={styles.playOverlay}>
                   <View style={styles.playButton}>
                     <Ionicons name="play" size={40} color="#fff" />
                   </View>
                 </View>
               )}
+              <VideoUnavailableOverlay visible={recovery.phase === "terminal"} onRetry={recovery.retry} />
             </Pressable>
           )}
 
@@ -411,7 +417,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={mediaSurfaceActive} videoSyncScope={videoSyncScope} />
           )}
 
-          {!isYouTube && isLoading && (
+          {!isYouTube && (isVideo ? videoLoading : isLoading) && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#fff" />
             </View>

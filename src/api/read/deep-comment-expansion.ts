@@ -1,10 +1,15 @@
 import type { CommentsResponse, PostWithChildren } from "../types";
+import type { LensMode } from "@/src/domain/communities";
 
 const MAX_DEEP_RESOLVE_DEPTH = 3;
 
 export type CommentRequestParams = {
   post_id: string;
   address?: string;
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 };
 
 export type CommentTreeFetcher = (
@@ -78,9 +83,19 @@ export function classifyDeepCommentExpansionFailure(
   return "unknown";
 }
 
+function nestedCommentParams(
+  params: CommentRequestParams,
+  postId: string,
+): CommentRequestParams {
+  return {
+    ...params,
+    post_id: postId,
+  };
+}
+
 async function resolveDeepComments(
   nodes: PostWithChildren[],
-  address: string | undefined,
+  params: CommentRequestParams,
   fetcher: CommentTreeFetcher,
   signal: AbortSignal | undefined,
   depth: number = 0,
@@ -94,7 +109,7 @@ async function resolveDeepComments(
     truncated.map(async (node) => {
       try {
         const subTree = await fetcher(
-          { post_id: node.post_id, address },
+          nestedCommentParams(params, node.post_id),
           signal,
         );
         node.children = subTree.children;
@@ -112,7 +127,7 @@ async function resolveDeepComments(
     }),
   );
 
-  await resolveDeepComments(nodes, address, fetcher, signal, depth + 1);
+  await resolveDeepComments(nodes, params, fetcher, signal, depth + 1);
 }
 
 export async function fetchCompleteCommentTree(
@@ -121,6 +136,6 @@ export async function fetchCompleteCommentTree(
   signal?: AbortSignal,
 ): Promise<CommentsResponse> {
   const data = await fetcher(params, signal);
-  await resolveDeepComments(data.children, params.address, fetcher, signal);
+  await resolveDeepComments(data.children, params, fetcher, signal);
   return data;
 }

@@ -4,6 +4,14 @@ export type SecureWalletStore = {
   remove: (key: string) => Promise<void>;
 };
 
+export class WalletRecoveryError extends Error {
+  readonly code = "wallet_recovery_required";
+  constructor(message = "Wallet recovery is required. Retry on this device; do not reinstall or clear app data.") {
+    super(message);
+    this.name = "WalletRecoveryError";
+  }
+}
+
 export type WalletMetadataStore<T> = {
   get: () => T | null;
   set: (metadata: T) => void;
@@ -55,10 +63,14 @@ export async function replaceWalletTransaction<T extends { address: string }>({
 }: ReplacementOptions<T>): Promise<PreparedWallet<T>> {
   // Candidate validation and key derivation must finish before storage is read or written.
   const candidate = prepare();
+  await recoverWalletReplacement({
+    deriveAddress, secureStore, metadataStore, primaryKey, candidateKey, backupKey,
+  });
   const previousMnemonic = await secureStore.get(primaryKey);
   const previousMetadata = metadataStore.get();
   let previousAddress: string | null = null;
   let primaryPromoted = false;
+  let cleanupSafe = true;
 
   try {
     if (previousMnemonic) {
@@ -98,6 +110,9 @@ export async function replaceWalletTransaction<T extends { address: string }>({
       deriveAddress,
     );
     metadataStore.set(candidate.metadata);
+    if (JSON.stringify(metadataStore.get()) !== JSON.stringify(candidate.metadata)) {
+      throw new WalletRecoveryError("Wallet metadata commit could not be verified");
+    }
     return candidate;
   } catch (error) {
     if (primaryPromoted) {
@@ -113,6 +128,7 @@ export async function replaceWalletTransaction<T extends { address: string }>({
           );
         } else {
           await secureStore.remove(primaryKey);
+          if (await secureStore.get(primaryKey)) throw new WalletRecoveryError();
         }
 
         if (previousMetadata) {
@@ -120,19 +136,21 @@ export async function replaceWalletTransaction<T extends { address: string }>({
         } else {
           metadataStore.remove();
         }
+        if (JSON.stringify(metadataStore.get()) !== JSON.stringify(previousMetadata)) {
+          throw new WalletRecoveryError("Wallet metadata restoration could not be verified");
+        }
       } catch (rollbackError) {
-        throw new AggregateError(
-          [error, rollbackError],
-          "Wallet replacement and rollback both failed",
-        );
+        cleanupSafe = false;
+        onCleanupError?.(rollbackError);
+        throw new WalletRecoveryError("Wallet replacement and rollback both failed. Recovery material has been retained; retry on this device.");
       }
     }
     throw error;
   } finally {
-    const cleanupResults = await Promise.allSettled([
+    const cleanupResults = cleanupSafe ? await Promise.allSettled([
       secureStore.remove(candidateKey),
       secureStore.remove(backupKey),
-    ]);
+    ]) : [];
     for (const result of cleanupResults) {
       if (result.status === "rejected") {
         onCleanupError?.(result.reason);
@@ -169,7 +187,7 @@ export async function recoverWalletReplacement<T extends { address: string }>({
     deriveAddress(primaryMnemonic) === metadata.address;
 
   if (!primaryIsCommitted) {
-    if (backupMnemonic) {
+    if (backupMnemonic && metadata && deriveAddress(backupMnemonic) === metadata.address) {
       const backupAddress = deriveAddress(backupMnemonic);
       await secureStore.set(primaryKey, backupMnemonic);
       await verifyMnemonic(
@@ -179,8 +197,8 @@ export async function recoverWalletReplacement<T extends { address: string }>({
         backupAddress,
         deriveAddress,
       );
-    } else if (primaryMnemonic) {
-      await secureStore.remove(primaryKey);
+    } else {
+      throw new WalletRecoveryError();
     }
   }
 
@@ -207,8 +225,9 @@ export async function migrateWalletAccessibility({
   const legacyMnemonic = await secureStore.get(legacyKey);
 
   if (currentMnemonic) {
-    deriveAddress(currentMnemonic);
+    const address = deriveAddress(currentMnemonic);
     if (legacyMnemonic) {
+      if (deriveAddress(legacyMnemonic) !== address) throw new WalletRecoveryError();
       await secureStore.remove(legacyKey);
     }
     setMigrated();

@@ -93,6 +93,7 @@ export default function CommentComposeScreen() {
           onSubmit={handleSubmit}
         />
         <CommentComposeReplyBanner username={replyToUsername} />
+        {controller.replyNotice && <Text size="sm">{controller.replyNotice}</Text>}
 
         <View
           style={[

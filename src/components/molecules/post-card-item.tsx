@@ -18,7 +18,7 @@ type PostCardItemProps = {
  isNearVisible?: boolean;
  screenActive?: boolean;
  isOwnPost?: boolean;
- isTopicFollowed?: boolean;
+ isCommunityJoined?: boolean;
  contentRevealed?: boolean;
  shareUrl?: string;
   showFollowButton?: boolean;
@@ -46,13 +46,13 @@ type PostCardItemProps = {
     authorUsername: string,
     isCurrentlyFollowing: boolean
   ) => void;
-  onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
+  onToggleCommunityMembership?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
   onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
   onBlockPost?: (postId: string) => void;
-  onBlockTopic?: (postId: string, topic: string) => void;
+  onBlockCommunity?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
-  onTopicPress?: (topic: string) => void;
+  onCommunityPress?: (topic: string) => void;
 };
 
 export const PostCardItem = memo(function PostCardItem({
@@ -62,7 +62,7 @@ isFocused,
 isNearVisible,
 screenActive = true,
 isOwnPost = false,
-isTopicFollowed = false,
+isCommunityJoined = false,
 contentRevealed = false,
 shareUrl,
   showFollowButton = true,
@@ -76,13 +76,13 @@ onPostPress,
   onDislikePress,
   onCommentPress,
   onFollowUser,
-  onFollowTopic,
+  onToggleCommunityMembership,
   onRevealContent,
   onBlockUser,
   onBlockPost,
-  onBlockTopic,
+  onBlockCommunity,
   onReport,
-  onTopicPress,
+  onCommunityPress,
 }: PostCardItemProps) {
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
   const voteOverride = useVoteOverride(post.id);
@@ -115,7 +115,7 @@ onPostPress,
       ...result,
       title: editOverride.title,
       body: editOverride.content || undefined,
-      topic: editOverride.topic ?? result.topic,
+      community: editOverride.community ?? result.community,
       media: editOverride.media
         ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
         : result.media,
@@ -165,11 +165,11 @@ onPostPress,
     onFollowUser?.(post.author.id, post.author.username, displayPost.isFollowing ?? false);
   }, [onFollowUser, post.id, post.author.id, post.author.username, displayPost.isFollowing]);
 
-  const handleFollowTopic = useCallback(() => {
-    if (!post.topic) return;
+  const handleToggleCommunityMembership = useCallback(() => {
+    if (!post.community) return;
     logPress({ name: "post_follow_topic", postId: post.id });
-    onFollowTopic?.(post.topic, isTopicFollowed);
-  }, [onFollowTopic, post.topic, post.id, isTopicFollowed]);
+    onToggleCommunityMembership?.(post.community, isCommunityJoined);
+  }, [onToggleCommunityMembership, post.community, post.id, isCommunityJoined]);
 
   const handleRevealContent = useCallback(() => {
     logPress({ name: "post_reveal", postId: post.id });
@@ -187,29 +187,29 @@ onPostPress,
     onBlockPost?.(post.id);
   }, [onBlockPost, post.id]);
 
-  const handleBlockTopic = useCallback(() => {
-    if (!post.topic) return;
+  const handleBlockCommunity = useCallback(() => {
+    if (!post.community) return;
     logPress({ name: "post_block_topic", postId: post.id });
-    onBlockTopic?.(post.id, post.topic);
-  }, [onBlockTopic, post.id, post.topic]);
+    onBlockCommunity?.(post.id, post.community);
+  }, [onBlockCommunity, post.id, post.community]);
 
   const handleReport = useCallback(() => {
     logPress({ name: "post_report", postId: post.id });
     onReport?.(post.id);
   }, [onReport, post.id]);
 
-  const handleTopicPress = useCallback(() => {
-    if (!post.topic) return;
+  const handleCommunityPress = useCallback(() => {
+    if (!post.community) return;
     logPress({ name: "post_topic_press", postId: post.id });
-    onTopicPress?.(post.topic);
-  }, [onTopicPress, post.topic, post.id]);
+    onCommunityPress?.(post.community);
+  }, [onCommunityPress, post.community, post.id]);
 
  if (feedDensity === "compact") {
    return (
      <PostCardCompact
        post={displayPost}
        isOwnPost={isOwnPost}
-       isTopicFollowed={isTopicFollowed}
+       isCommunityJoined={isCommunityJoined}
        showFollowButton={showFollowButton}
        contentRevealed={contentRevealed}
        shareUrl={shareUrl}
@@ -220,13 +220,13 @@ onPostPress,
        onDislikePress={handleDislikePress}
        onCommentPress={handleCommentPress}
        onFollowUser={handleFollowUser}
-       onFollowTopic={handleFollowTopic}
+       onToggleCommunityMembership={handleToggleCommunityMembership}
        onRevealContent={handleRevealContent}
        onBlockUser={handleBlockUser}
        onBlockPost={handleBlockPost}
-       onBlockTopic={handleBlockTopic}
+       onBlockCommunity={handleBlockCommunity}
        onReport={handleReport}
-       onTopicPress={handleTopicPress}
+       onCommunityPress={handleCommunityPress}
        onMediaPress={handlePostPress}
      />
    );
@@ -239,7 +239,7 @@ onPostPress,
      isVisible={isVisible}
      isFocused={isFocused ?? isVisible}
      isNearVisible={isNearVisible}
-     isTopicFollowed={isTopicFollowed}
+     isCommunityJoined={isCommunityJoined}
       showFollowButton={showFollowButton}
      screenActive={screenActive}
      allowAutoplay={allowAutoplay}
@@ -251,13 +251,13 @@ onPostPress,
      onDislikePress={handleDislikePress}
      onCommentPress={handleCommentPress}
      onFollowUser={handleFollowUser}
-    onFollowTopic={handleFollowTopic}
+    onToggleCommunityMembership={handleToggleCommunityMembership}
     onRevealContent={handleRevealContent}
     onBlockUser={handleBlockUser}
     onBlockPost={handleBlockPost}
-    onBlockTopic={handleBlockTopic}
+    onBlockCommunity={handleBlockCommunity}
     onReport={handleReport}
-    onTopicPress={handleTopicPress}
+    onCommunityPress={handleCommunityPress}
      onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
      shareUrl={shareUrl}

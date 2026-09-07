@@ -5,6 +5,7 @@ import {
   DeepCommentExpansionError,
   classifyDeepCommentExpansionFailure,
   fetchCompleteCommentTree,
+  type CommentRequestParams,
   type CommentTreeFetcher,
 } from "../src/api/read/deep-comment-expansion";
 import type {
@@ -26,18 +27,45 @@ function response(children: PostWithChildren[]): CommentsResponse {
 
 describe("deep comment expansion", () => {
   test("returns the complete tree when every required subtree succeeds", async () => {
-    const fetcher: CommentTreeFetcher = async ({ post_id }) => {
-      if (post_id === "root") return response([comment("child", 1)]);
-      if (post_id === "child") return response([comment("leaf", 0)]);
+    const seen: CommentRequestParams[] = [];
+    const fetcher: CommentTreeFetcher = async (params) => {
+      seen.push(params);
+      if (params.post_id === "root") return response([comment("child", 1)]);
+      if (params.post_id === "child") return response([comment("leaf", 0)]);
       throw new Error("unexpected request");
     };
 
     const result = await fetchCompleteCommentTree(
-      { post_id: "root" },
+      {
+        post_id: "root",
+        address: "mirage1viewer",
+        lens: "team",
+        team_id: 3,
+        scope: "current",
+        lens_picks: "bitcoin:raw",
+      },
       fetcher,
     );
 
     expect(result.children[0]?.children[0]?.post_id).toBe("leaf");
+    expect(seen).toEqual([
+      {
+        post_id: "root",
+        address: "mirage1viewer",
+        lens: "team",
+        team_id: 3,
+        scope: "current",
+        lens_picks: "bitcoin:raw",
+      },
+      {
+        post_id: "child",
+        address: "mirage1viewer",
+        lens: "team",
+        team_id: 3,
+        scope: "current",
+        lens_picks: "bitcoin:raw",
+      },
+    ]);
   });
 
   test("rejects instead of returning a partial success when a child fails", async () => {

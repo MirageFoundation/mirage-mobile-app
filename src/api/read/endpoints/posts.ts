@@ -1,7 +1,14 @@
 import { api } from "../../client";
-import type { PostsResponse, CommentsResponse } from "../../types";
+import type { PostsResponse, CommentsResponse, PostFilters } from "../../types";
+import type { LensMode } from "@/src/domain/communities";
 import { fetchCompleteCommentTree } from "../deep-comment-expansion";
-import { normalizeUserPostsQueryParams } from "../request-params";
+import {
+  applyLensHttpParams,
+  normalizeUserPostsQueryParams,
+} from "../request-params";
+import {
+  withSignedContentReadParams,
+} from "../signed-content-read";
 
 export {
   normalizeUserPostsQueryParams,
@@ -12,25 +19,29 @@ export {
 // Posts & Feed
 // ============================================
 
-export interface GetPostsParams {
-  limit?: number; // max 100
-  page?: number;
-  topic?: string; // topic name or 'all'
-  address?: string; // viewer address for filtering/votes
-  allowed_tags?: string; // comma-separated, default 'sensitive'
-  feed?: "home" | "following";
-  by?: "magic" | "newest" | "top"; // sort mode
-}
+export type GetPostsParams = PostFilters;
 
 /**
  * Get main feed posts
  * Without address: public feed, no user_vote data
- * With address: includes user_vote, blocked content filtering
+ * With address: includes user_vote, blocked content filtering, and a complete signed proof
  */
 export async function getPosts(
-  params?: GetPostsParams
+  params?: GetPostsParams,
+  options?: { signal?: AbortSignal },
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/get_posts", params);
+  const paramsFactory = () => withSignedContentReadParams(
+    applyLensHttpParams(
+      params as Record<string, unknown> | undefined,
+      { community: params?.community },
+    ),
+    "get_posts",
+  );
+  return api.get<PostsResponse>(
+    "/get_posts",
+    undefined,
+    { ...options, paramsFactory },
+  );
 }
 
 // ============================================
@@ -44,18 +55,27 @@ export interface GetUserPostsParams {
   page?: number;
   limit?: number; // max 50
   allowed_tags?: string;
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 }
 
 /**
  * Get user's submissions or comments
  */
 export async function getUserPosts(
-  params: GetUserPostsParams
+  params: GetUserPostsParams,
+  options?: { signal?: AbortSignal },
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/get_user_posts", {
-    ...params,
-    ...normalizeUserPostsQueryParams(params),
-  });
+  const paramsFactory = () => withSignedContentReadParams(
+    applyLensHttpParams({
+      ...params,
+      ...normalizeUserPostsQueryParams(params),
+    } as Record<string, unknown>),
+    "get_posts",
+  );
+  return api.get<PostsResponse>("/get_user_posts", undefined, { ...options, paramsFactory });
 }
 
 // ============================================
@@ -65,6 +85,10 @@ export async function getUserPosts(
 export interface GetCommentsParams {
   post_id: string; // Required post OR comment txhash
   address?: string; // Viewer address
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 }
 
 /**
@@ -81,8 +105,16 @@ export async function getComments(
 ): Promise<CommentsResponse> {
   return fetchCompleteCommentTree(
     params,
-    (requestParams, signal) =>
-      api.get<CommentsResponse>("/get_comments", requestParams, { signal }),
+    async (requestParams, signal) => {
+      const paramsFactory = () => withSignedContentReadParams(
+        applyLensHttpParams(
+          requestParams as Record<string, unknown>,
+          { allowTeamWithoutCommunity: true },
+        ),
+        "get_comments",
+      );
+      return api.get<CommentsResponse>("/get_comments", undefined, { signal, paramsFactory });
+    },
     options?.signal,
   );
 }

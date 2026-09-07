@@ -6,11 +6,9 @@ import {
   getAppStats,
   getWelcomeStats,
   getLeaderboard,
-  getReferralStats,
   getPeers,
   type GetLeaderboardParams,
 } from "../endpoints/stats";
-import { useAuthStore } from "@/src/stores";
 
 /**
  * Get network statistics including difficulty history
@@ -74,34 +72,6 @@ export function useLeaderboard(params?: GetLeaderboardParams) {
     queryFn: () => getLeaderboard(params),
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60, // 1 hour
-  });
-}
-
-/**
- * Get current user's referral statistics
- * Only enabled when wallet is connected
- */
-export function useReferralStats() {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-
-  return useQuery({
-    queryKey: queryKeys.referralStats(walletAddress!),
-    queryFn: () => getReferralStats({ address: walletAddress! }),
-    enabled: !!walletAddress,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 60, // 1 hour
-  });
-}
-
-/**
- * Get referral statistics for a specific address
- */
-export function useReferralStatsByAddress(address: string | undefined | null) {
-  return useQuery({
-    queryKey: queryKeys.referralStats(address!),
-    queryFn: () => getReferralStats({ address: address! }),
-    enabled: !!address,
-    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 }
 

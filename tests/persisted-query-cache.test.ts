@@ -11,12 +11,14 @@ import {
   getHydratablePersistedQueryClient,
   isLaunchCriticalFeedQuery,
   isLaunchPersistedQuery,
-  isPersistedRewardSummaryQuery,
+  isLegacyPersistedQueryCacheKey,
   preparePersistedQueryClient,
+  removeLegacyPersistedQueryCaches,
   restorePersistedQueryClient,
 } from "../src/api/cache/persisted-post-cache";
 import { queryKeys } from "../src/api/read/query-keys";
 import { ServerRequestCoordinator } from "../src/api/server-runtime";
+import { UNSPECIFIED_SERVED_LENS } from "../src/domain/communities";
 
 new ServerRequestCoordinator("https://node.example");
 
@@ -27,6 +29,10 @@ function post(id: string, content = "content") {
     username: "author",
     timestamp: 1,
     content,
+    community: "bitcoin",
+    root_community: "bitcoin",
+    lens: UNSPECIFIED_SERVED_LENS,
+    thread_locked: false,
   };
 }
 
@@ -48,31 +54,6 @@ function persistedQuery(
           has_more: index < ids.length - 1,
         })),
         pageParams: ids.map((_, index) => index + 1),
-      },
-    },
-  };
-}
-
-function persistedRewardSummaryQuery(updatedAt = 1) {
-  const key = queryKeys.rewardSummary("mirage1viewer");
-  return {
-    queryKey: key,
-    queryHash: JSON.stringify(key),
-    state: {
-      status: "success",
-      dataUpdatedAt: updatedAt,
-      data: {
-        suspended: false,
-        daily_quests: [{ id: "daily-post", progress: 1, target: 1 }],
-        flash_quest: null,
-        pending_rewards: [],
-        seconds_until_reset: 100,
-        reward_multiplier: 1,
-        total_mirage: 10,
-        total_mirage_after_multiplier: 10,
-        pending_invite_codes: 0,
-        claiming_available: false,
-        debug: false,
       },
     },
   };
@@ -130,34 +111,54 @@ describe("persisted launch query allowlist", () => {
         queryKeys.posts({ feed: "home", by: "newest" }),
       ),
     ).toBe(false);
+    expect(
+      isLaunchCriticalFeedQuery(
+        queryKeys.posts({ feed: "home", by: "magic", community: "bitcoin" }),
+      ),
+    ).toBe(false);
+    expect(
+      isLaunchCriticalFeedQuery(
+        queryKeys.posts({ feed: "home", by: "magic", lens: "raw" }),
+      ),
+    ).toBe(false);
+    expect(
+      isLaunchCriticalFeedQuery(
+        queryKeys.posts({ feed: "home", by: "magic", lens_picks: "bitcoin:raw" }),
+      ),
+    ).toBe(false);
+    expect(isLaunchCriticalFeedQuery([
+      "server",
+      "https://node.example",
+      "posts",
+      "viewer",
+      "mirage1viewer",
+      { feed: "home", by: "magic", topic: "bitcoin" },
+    ])).toBe(false);
     expect(isLaunchCriticalFeedQuery(queryKeys.profile("mirage1viewer"))).toBe(
       false,
     );
   });
 
-  test("persists reward summaries for the current server and viewer", () => {
-    const rewardSummary = persistedRewardSummaryQuery();
-    expect(isPersistedRewardSummaryQuery(rewardSummary.queryKey)).toBe(true);
-    expect(isLaunchPersistedQuery(rewardSummary.queryKey)).toBe(true);
-
+  test("does not persist retired reward summaries", () => {
     const prepared = preparePersistedQueryClient(
-      client([persistedQuery(launchKey, ["first"]), rewardSummary]),
+      client([
+        persistedQuery(launchKey, ["first"]),
+        {
+          queryKey: ["server", "https://node.example", "rewards", "summary", "mirage1viewer"],
+          queryHash: "rewards",
+          state: {
+            status: "success",
+            dataUpdatedAt: 1,
+            data: { daily_quests: [], pending_rewards: [] },
+          },
+        },
+      ]),
       namespace,
     );
-
-    expect(prepared.client.clientState.queries).toHaveLength(2);
-    expect(prepared.client.clientState.queries[0].queryKey).toEqual(
-      rewardSummary.queryKey,
-    );
-    expect(
-      prepared.client.clientState.queries[0].state.data.daily_quests[0].id,
-    ).toBe("daily-post");
-
-    const wrongViewer = preparePersistedQueryClient(
-      client([rewardSummary]),
-      buildPersistedQueryNamespace("https://node.example", "mirage1other"),
-    );
-    expect(wrongViewer.metrics.queryCount).toBe(0);
+    expect(prepared.client.clientState.queries).toHaveLength(1);
+    expect(isLaunchPersistedQuery(
+      ["server", "https://node.example", "rewards", "summary", "mirage1viewer"],
+    )).toBe(false);
   });
 
   test("drops arbitrary queries and caps infinite data to the first page", () => {
@@ -227,7 +228,6 @@ describe("persisted launch query allowlist", () => {
       queryKeys.posts({
         feed: "home",
         by: "magic",
-        topic: "new",
         address: "mirage1viewer",
       }),
       ["new"],
@@ -238,7 +238,6 @@ describe("persisted launch query allowlist", () => {
       queryKeys.posts({
         feed: "following",
         by: "magic",
-        topic: "old",
         address: "mirage1viewer",
       }),
       ["old"],
@@ -344,5 +343,90 @@ describe("persisted payload restore", () => {
       "pageCount",
       "queryCount",
     ]);
+  });
+
+  test("rejects v4 envelopes and does not alias them to v5", () => {
+    const v4 = JSON.stringify({
+      schemaVersion: 4,
+      namespace,
+      client: client([persistedQuery(launchKey, ["first"])]),
+    });
+    expect(restorePersistedQueryClient(v4, namespace)).toBeNull();
+    expect(PERSISTED_QUERY_SCHEMA_VERSION).toBe(5);
+    expect(PERSISTED_QUERY_BUSTER).toBe("launch-feed-cache-v5");
+    expect(namespace.startsWith("v5|")).toBe(true);
+  });
+
+  test("strips additive topic aliases from mixed valid modern v5 posts on persist and restore", () => {
+    const mixed = persistedQuery(launchKey, ["server"]);
+    mixed.state.data.pages[0].posts[0] = {
+      ...post("server"),
+      topic: "bitcoin",
+      root_topic: "bitcoin",
+      agent_edited: true,
+      agent_edits_meta: { bot: "1" },
+      appendices: [{ agent: "mirage1agent" }],
+    };
+
+    const prepared = preparePersistedQueryClient(client([mixed]), namespace);
+    const persistedPost = prepared.client.clientState.queries[0].state.data.pages[0].posts[0];
+    expect(persistedPost).toEqual(post("server"));
+    expect(persistedPost).not.toHaveProperty("topic");
+    expect(persistedPost).not.toHaveProperty("root_topic");
+    expect(persistedPost).not.toHaveProperty("agent_edited");
+
+    const restored = restorePersistedQueryClient(prepared.serialized, namespace);
+    const restoredPost = restored?.client.clientState.queries[0].state.data.pages[0].posts[0];
+    expect(restoredPost).toEqual(post("server"));
+    expect(restoredPost).not.toHaveProperty("topic");
+    expect(restoredPost).not.toHaveProperty("root_topic");
+  });
+
+  test("drops topic-only posts from restored launch feeds", () => {
+    const mixed = persistedQuery(launchKey, ["server"]);
+    mixed.state.data.pages[0].posts.push({
+      post_id: "topic-only",
+      user_id: "mirage1author",
+      username: "author",
+      timestamp: 1,
+      topic: "bitcoin",
+    });
+    const prepared = preparePersistedQueryClient(client([mixed]), namespace);
+    expect(prepared.client.clientState.queries[0].state.data.pages[0].posts).toEqual([
+      post("server"),
+    ]);
+  });
+});
+
+describe("legacy persisted query cache removal", () => {
+  test("removes only v1/v2/v3/v4 namespaces and the broad legacy key", () => {
+    const records = new Map([
+      ["mirage-query-cache", "broad"],
+      [buildPersistedQueryStorageKey("v1|https://node.example|anonymous"), "v1"],
+      [buildPersistedQueryStorageKey("v2|https://node.example|anonymous"), "v2"],
+      [buildPersistedQueryStorageKey("v3|https://node.example|mirage1viewer"), "v3"],
+      [buildPersistedQueryStorageKey("v4|https://node.example|mirage1viewer"), "v4"],
+      [buildPersistedQueryStorageKey(namespace), "v5"],
+      ["unrelated-key", "keep"],
+    ]);
+    const store = {
+      getAllKeys: () => [...records.keys()],
+      remove: (key: string) => {
+        records.delete(key);
+      },
+    };
+
+    expect(isLegacyPersistedQueryCacheKey("mirage-query-cache")).toBe(true);
+    expect(isLegacyPersistedQueryCacheKey(
+      buildPersistedQueryStorageKey("v4|https://node.example|mirage1viewer"),
+    )).toBe(true);
+    expect(isLegacyPersistedQueryCacheKey(buildPersistedQueryStorageKey(namespace))).toBe(false);
+
+    removeLegacyPersistedQueryCaches(store);
+
+    expect([...records.keys()].sort()).toEqual([
+      buildPersistedQueryStorageKey(namespace),
+      "unrelated-key",
+    ].sort());
   });
 });

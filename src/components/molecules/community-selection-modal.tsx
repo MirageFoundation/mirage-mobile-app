@@ -23,20 +23,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
-  useDebouncedSearchTopics,
-  useTopics,
-} from "@/src/api/read/hooks/use-topics";
-import type { TopicInfo } from "@/src/api/types";
+  useCommunities,
+  useDebouncedSearchCommunities,
+} from "@/src/api/read";
+import type { CommunitySummary, SearchCommunityInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { type Community } from "@/src/stores/draft-store";
-import { validateTopic, TOPIC_MAX_LENGTH } from "@/src/utils/topic-validation";
+import {
+  communityLabel,
+  isReservedCommunitySlug,
+  isRoutableCommunitySlug,
+  isValidCommunitySlug,
+  normalizeCommunitySlug,
+} from "@/src/domain/communities";
 
-const topicToCommunity = (topic: TopicInfo): Community => ({
-  id: topic.topic.toLowerCase(),
-  name: topic.topic.toLowerCase(),
+const topicToCommunity = (
+  item: CommunitySummary | SearchCommunityInfo,
+): Community => ({
+  id: item.community.toLowerCase(),
+  name: item.community.toLowerCase(),
   avatar: undefined,
-  memberCount: topic.post_count ?? topic.count ?? 0,
+  memberCount: item.post_count ?? 0,
   description: undefined,
   isSubscribed: false,
 });
@@ -76,7 +84,7 @@ const CreateTopicItem = ({
           weight="semibold"
           style={{ color: theme.colors.brand[500] }}
         >
-          Create #{topicName.toLowerCase()}
+          Create {communityLabel(topicName)}
         </Text>
       </Box>
     </Pressable>
@@ -117,7 +125,7 @@ const CommunityItem = ({
         <View style={styles.communityInfo}>
           <View style={styles.communityHeader}>
             <Text size="lg" weight="semibold" numberOfLines={1}>
-              #{community.name.toLowerCase()}
+              {communityLabel(community.name)}
             </Text>
           </View>
           {community.memberCount > 0 && (
@@ -158,30 +166,32 @@ export const CommunitySelectionModal = ({
 
   const searchExpandProgress = useSharedValue(0);
 
-  const { data: topicsData, isLoading: isLoadingTopics } = useTopics(100);
+  const { data: topicsData, isLoading: isLoadingCommunities } = useCommunities({
+    limit: 100,
+  });
 
   const {
     data: searchData,
     isSearching,
     isDebouncing,
-  } = useDebouncedSearchTopics(
+  } = useDebouncedSearchCommunities(
     searchText.length >= 2 ? searchText : null,
     750,
-    { limit: 50 },
+    50,
   );
 
   const filteredCommunities = useMemo(() => {
-    if (searchText.length >= 2 && searchData?.topics) {
-      return searchData.topics.map(topicToCommunity);
+    if (searchText.length >= 2 && searchData?.communities) {
+      return searchData.communities.map(topicToCommunity);
     }
 
-    if (searchText.trim() && topicsData?.topics) {
+    if (searchText.trim() && topicsData?.items) {
       const query = searchText.toLowerCase();
-      const apiCommunities = topicsData.topics.map(topicToCommunity);
+      const apiCommunities = topicsData.items.map(topicToCommunity);
       return apiCommunities.filter((c) => c.name.toLowerCase().includes(query));
     }
 
-    return topicsData?.topics?.map(topicToCommunity) ?? [];
+    return topicsData?.items?.map(topicToCommunity) ?? [];
   }, [searchText, topicsData, searchData]);
 
   const exactTopicExists = useMemo(() => {
@@ -195,34 +205,37 @@ export const CommunitySelectionModal = ({
 
   const topicValidation = useMemo(() => {
     if (!searchText.trim()) return { isValid: false, error: null };
-    const result = validateTopic(searchText.trim());
-    if (!result.error && searchText.trim().length >= TOPIC_MAX_LENGTH) {
-      return { isValid: result.isValid, error: `Topic cannot exceed ${TOPIC_MAX_LENGTH} characters` };
+    const slug = normalizeCommunitySlug(searchText);
+    if (!isValidCommunitySlug(slug)) {
+      return {
+        isValid: false,
+        error: "Community names use lowercase letters, numbers, and hyphens",
+      };
     }
-    return result;
+    if (isReservedCommunitySlug(slug) || !isRoutableCommunitySlug(slug)) {
+      return { isValid: false, error: "That community name is reserved" };
+    }
+    return { isValid: true, error: null };
   }, [searchText]);
 
   const createTopicOption: Community | null = useMemo(() => {
     if (!searchText.trim() || exactTopicExists || isDebouncing || isSearching)
       return null;
-    const cleanName = searchText
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-    if (!cleanName || !topicValidation.isValid) return null;
+    const slug = normalizeCommunitySlug(searchText);
+    if (!topicValidation.isValid || !isRoutableCommunitySlug(slug)) return null;
 
     return {
-      id: cleanName,
-      name: cleanName,
+      id: slug,
+      name: slug,
       avatar: undefined,
       memberCount: 0,
       description: undefined,
       isSubscribed: false,
-      isNewTopic: true,
+      isNewCommunity: true,
     };
   }, [searchText, exactTopicExists, isDebouncing, isSearching, topicValidation.isValid]);
 
-  const isLoading = isLoadingTopics || isDebouncing || isSearching;
+  const isLoading = isLoadingCommunities || isDebouncing || isSearching;
 
   const handleSearchFocus = useCallback(() => {
     searchExpandProgress.value = withTiming(1, { duration: 200 });
@@ -366,7 +379,7 @@ export const CommunitySelectionModal = ({
                 onBlur={handleSearchBlur}
                 autoCapitalize="none"
                 autoCorrect={false}
-                maxLength={TOPIC_MAX_LENGTH}
+                maxLength={64}
               />
               {searchText.length > 0 && (
                 <Animated.View

@@ -12,7 +12,7 @@ const post = {
   id: "post-1",
   title: "Post",
   author: { id: "author-1", username: "alice" },
-  topic: "news",
+  community: "news",
 };
 
 describe("post action controller adapters", () => {
@@ -33,14 +33,14 @@ describe("post action controller adapters", () => {
   test("follow state is derived from explicit screen-owned collections", () => {
     expect(
       getSelectedPostFollowState(post, ["author-1"], ["news"]),
-    ).toEqual({ isFollowingUser: true, isTopicFollowed: true });
+    ).toEqual({ isFollowingUser: true, isCommunityJoined: true });
     expect(getSelectedPostFollowState(post, [], [])).toEqual({
       isFollowingUser: false,
-      isTopicFollowed: false,
+      isCommunityJoined: false,
     });
     expect(getSelectedPostFollowState(null, ["author-1"], ["news"])).toEqual({
       isFollowingUser: false,
-      isTopicFollowed: false,
+      isCommunityJoined: false,
     });
   });
 
@@ -56,26 +56,26 @@ describe("post action controller adapters", () => {
     const actions = createPostCardActionAdapters({
       openOptions: (value) => calls.push(["open", value.id]),
       followUser: (...args) => calls.push(["follow-user", ...args]),
-      followTopic: (...args) => calls.push(["follow-topic", ...args]),
+      toggleCommunityMembership: (...args) => calls.push(["join-community", ...args]),
       upvote: (...args) => calls.push(["upvote", ...args]),
       downvote: (...args) => calls.push(["downvote", ...args]),
       requestBlockUser: (...args) => calls.push(["block-user", ...args]),
       requestBlockPost: (...args) => calls.push(["block-post", ...args]),
-      requestBlockTopic: (...args) => calls.push(["block-topic", ...args]),
+      requestBlockCommunity: (...args) => calls.push(["block-community", ...args]),
       requestReportPost: (...args) => calls.push(["report", ...args]),
     });
 
     actions.openOptions(post);
     actions.blockUser("post-1", "author-1", "alice");
     actions.blockPost("post-1");
-    actions.blockTopic("post-1", "news");
+    actions.blockCommunity("post-1", "news");
     actions.report("post-1");
 
     expect(calls).toEqual([
       ["open", "post-1"],
       ["block-user", "author-1", "alice"],
       ["block-post", "post-1"],
-      ["block-topic", "news"],
+      ["block-community", "news"],
       ["report", "post-1"],
     ]);
   });

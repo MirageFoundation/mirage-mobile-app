@@ -145,7 +145,7 @@ export function useProfileController(headerInset: number, windowHeight: number) 
             ...post,
             title: override.title,
             content: override.content,
-            topic: override.topic ?? post.topic,
+            community: override.community ?? post.community,
             media: override.media ?? post.media,
           } : post;
         });
@@ -319,8 +319,8 @@ export function useProfileController(headerInset: number, windowHeight: number) 
   );
   const handlePostPress = useCallback((postId: string) => router.push(`/post/${postId}`), [router]);
   const handleAuthorPress = useCallback((authorId: string) => router.push(`/user/${authorId}`), [router]);
-  const handleTopicPress = useCallback(
-    (topic: string) => router.push(`/topic/${encodeURIComponent(topic)}`),
+  const handleCommunityPress = useCallback(
+    (topic: string) => router.push(`/c/${encodeURIComponent(topic)}` as never),
     [router],
   );
   const handleCommentPress = useCallback((commentId: string, rootPostId: string) => {
@@ -392,7 +392,7 @@ export function useProfileController(headerInset: number, windowHeight: number) 
     handleBlockedPress, handleCommentPress, handleDownvote, handleEditUsernamePress,
     handleEndReached, handleFollowersPress, handlePostMorePress, handlePostPress,
     handleProfileMomentumScrollEnd, handleSettingsPress, handleTabChange,
-    handleTabDoubleTap, handleTopicPress, handleUpvote, headerHeight, isFetchingNextPage,
+    handleTabDoubleTap, handleCommunityPress, handleUpvote, headerHeight, isFetchingNextPage,
     isFocused, isLoading, isLoadingPosts, isRefreshing, isTabsSticky, listData,
     minimumContentHeight, nearbyVideoPostIds, onProfileViewableItemsChanged,
     postActionSheetsRef, postsWithoutWarnings, profileData, profileViewabilityConfig,

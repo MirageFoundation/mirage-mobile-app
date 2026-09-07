@@ -7,7 +7,7 @@ import { formatCompactNumber } from "@/src/utils/format-number";
 import { Text } from "@/src/components/ui/primitives";
 import { LogoutConfirmationPopup } from "@/src/components/molecules/logout-confirmation-popup";
 import {
-  FollowedTopicsSection,
+  JoinedCommunitiesSection,
   FollowedUsersSection,
   LogoutMenuItem,
   MenuItem,
@@ -102,12 +102,12 @@ function LoggedInContent({ controller }: { controller: Controller }) {
         onShowMore={controller.showMoreFollowing}
         onUserPress={controller.openUser}
       />
-      <FollowedTopicsSection
-        topics={controller.followedTopics}
-        loading={controller.isLoadingFollowed}
-        canShowMore={controller.allFollowedTopics.length > controller.followedTopics.length}
+      <JoinedCommunitiesSection
+        topics={controller.joinedCommunities}
+        loading={controller.isLoadingJoined}
+        canShowMore={controller.allJoinedCommunities.length > controller.joinedCommunities.length}
         onShowMore={controller.showMoreFollowing}
-        onTopicPress={controller.openTopic}
+        onCommunityPress={controller.openCommunity}
       />
       <SectionHeader title="Account" />
       <LogoutMenuItem onPress={() => controller.setShowLogoutPopup(true)} />

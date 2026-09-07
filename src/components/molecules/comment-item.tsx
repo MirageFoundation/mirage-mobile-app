@@ -5,6 +5,7 @@ import {
 import { AwardBadges } from "@/src/components/atoms/award-badges";
 import { TimeAgo, FollowButton, Avatar } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import { ModerationButton } from "@/src/features/moderation/moderation-provider";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { MediaPreviewModal } from "./media-preview-modal";
@@ -710,6 +711,7 @@ export const CommentItem = ({
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
+              <ModerationButton target={{ postId: comment.id, authorId: comment.author.id }} />
               {/* More options (three dots) */}
               <AnimatedPressable
                 scaleAmount={0.85}
@@ -725,6 +727,7 @@ export const CommentItem = ({
               </AnimatedPressable>
 
               {/* Reply */}
+              {onReplyPress ? (
               <AnimatedPressable
                 scaleAmount={0.85}
                 onPress={handleReplyPress}
@@ -751,6 +754,7 @@ export const CommentItem = ({
                   </Text>
                 )}
               </AnimatedPressable>
+              ) : null}
 
               {/* Vote group: upvote + count + downvote */}
               <View style={styles.voteGroup}>

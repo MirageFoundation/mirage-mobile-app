@@ -1,11 +1,13 @@
 import * as Sentry from "@sentry/react-native";
 
-import { getUserStatus } from "@/src/api/read/endpoints/users";
+import { fetchAuthUserStatus } from "@/src/api/read/auth-status-query";
+import { apiClient } from "@/src/api/client";
+import { isCompletedApiRead, isReadCancellation } from "@/src/api/read-retry-policy";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
 import { queryClient } from "@/src/providers/query-client";
 import { getTierName } from "@/src/utils/tiers";
-import { primeBootstrap } from "@/src/services/bootstrap";
+import { isBootstrapResponseCurrent, primeBootstrap } from "@/src/services/bootstrap";
 import { walletService } from "@/src/services/wallet-service";
 
 export type AuthUserStatusSnapshot = {
@@ -63,11 +65,14 @@ export async function resolveAndCacheAuthUserStatus(
   bootstrapResponse?: BootstrapResponse | null,
   isCurrent: () => boolean = () => true,
 ): Promise<AuthUserStatusSnapshot | null> {
+  const context = apiClient.getCurrentServerContext();
+  const isActive = () => isCurrent() && apiClient.getCurrentServerContext().generation === context.generation;
+  if (!isActive() || (bootstrapResponse && !isBootstrapResponseCurrent(bootstrapResponse))) return null;
   const userStatus =
-    bootstrapResponse?.user_status ?? (await getUserStatus({ address }));
+    bootstrapResponse?.user_status ?? (await fetchAuthUserStatus(queryClient, address, isActive));
 
-  if (!isCurrent()) return null;
-  queryClient.setQueryData(queryKeys.userStatus(address), userStatus);
+  if (!isActive()) return null;
+  if (bootstrapResponse?.user_status) queryClient.setQueryData(queryKeys.userStatus(address), userStatus);
 
   if (userStatus.username) {
     walletService.updateMetadata({ hasUsername: true });
@@ -97,7 +102,8 @@ export function startAuthUserStatusBootstrap(
     })
     .catch((error) => {
       if (!isCurrent()) return;
-      Sentry.captureException(error, {
+      addAuthBootstrapBreadcrumb("Auth status bootstrap failed");
+      if (!isCompletedApiRead(error) && !isReadCancellation(error)) Sentry.captureException(error, {
         tags: {
           feature: "auth-bootstrap",
           operation: label.toLowerCase().replace(/\s+/g, "-"),

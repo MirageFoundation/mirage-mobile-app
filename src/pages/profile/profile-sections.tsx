@@ -59,7 +59,7 @@ const OwnProfilePost = memo(function OwnProfilePost({
     ...post,
     title: editOverride.title,
     body: editOverride.content || undefined,
-    topic: editOverride.topic ?? post.topic,
+    community: editOverride.community ?? post.community,
     media: editOverride.media
       ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
       : post.media,
@@ -81,7 +81,7 @@ const OwnProfilePost = memo(function OwnProfilePost({
       onMorePress={controller.handlePostMorePress}
       onLikePress={controller.handleUpvote}
       onDislikePress={controller.handleDownvote}
-      onTopicPress={controller.handleTopicPress}
+      onCommunityPress={controller.handleCommunityPress}
     />
   );
 });

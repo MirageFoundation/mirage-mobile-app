@@ -34,7 +34,7 @@ export function CreateCommunitySelector() {
             weight="bold"
             style={{ color: theme.colors.text.default }}
           >
-            #
+            [
           </Text>
         )}
         <Text
@@ -42,7 +42,9 @@ export function CreateCommunitySelector() {
           weight="semibold"
           style={{ color: theme.colors.text.default }}
         >
-          {selectedCommunity?.name?.toLowerCase() ?? "Select a topic"}
+          {selectedCommunity
+            ? `${selectedCommunity.name.toLowerCase()}]`
+            : "Select a community"}
         </Text>
         <Box style={{ marginLeft: 5 }}>
           <Entypo
@@ -59,7 +61,7 @@ export function CreateCommunitySelector() {
         </Box>
       </Pressable>
 
-      {selectedCommunity?.isNewTopic && (
+      {selectedCommunity?.isNewCommunity && (
         <View
           style={[
             styles.newTopicWarning,
@@ -67,8 +69,8 @@ export function CreateCommunitySelector() {
           ]}
         >
           <Text size="xs" style={{ lineHeight: 16, color: theme.colors.warning[500] }}>
-            Topics are communities centered around specific interests.
-            Posting in the wrong topic may affect your overall trust status
+            Communities are spaces centered around specific interests.
+            Posting in the wrong community may affect your overall trust status
             on Mirage. Make sure to post into the right category!
           </Text>
         </View>

@@ -1,5 +1,4 @@
-import { api, apiClient } from "../../client";
-import * as Sentry from "@sentry/react-native";
+import { api } from "../../client";
 import type {
   UserStatusResponse,
   ProfileResponse,
@@ -10,13 +9,7 @@ import type {
   UsersResponse,
   AddressFromUsernameResponse,
   UsernameFromAddressResponse,
-  ValidateInviteCodeResponse,
-  GetInviteCodesResponse,
-  NodeConfigResponse,
 } from "../../types";
-import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
-import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
-import type { MirageWallet } from "@/src/wallet";
 
 // ============================================
 // User Status & Profile
@@ -30,9 +23,10 @@ export interface GetUserStatusParams {
  * Get user tier, balance, subscription status, recent votes
  */
 export async function getUserStatus(
-  params: GetUserStatusParams
+  params: GetUserStatusParams,
+  options?: { signal?: AbortSignal },
 ): Promise<UserStatusResponse> {
-  return api.get<UserStatusResponse>("/get_user_status", params);
+  return api.get<UserStatusResponse>("/get_user_status", params, options);
 }
 
 export interface GetProfileParams {
@@ -56,84 +50,18 @@ export interface GetUserFollowedParams {
   address: string;
 }
 
-interface MergeUserFollowedOptions {
-  source: "bootstrap" | "get_user_followed" | "node_config_fallback";
-  nodeConfigAutoEnabledAgents?: string[];
-}
-
-export function mergeUserFollowedEnabledAgents(
-  response: UserFollowedResponse,
-  options: MergeUserFollowedOptions,
-): UserFollowedResponse {
-  const enabledAgents = Array.from(new Set([
-    ...(response.enabled_agents ?? []),
-    ...(response.auto_enabled_agents ?? []),
-    ...(options.nodeConfigAutoEnabledAgents ?? []),
-  ]));
-
-  if (__DEV__) {
-    console.log("[auto-enabled-agents] merge", {
-      source: options.source,
-      user_followed_enabled_agents: response.enabled_agents ?? [],
-      user_followed_auto_enabled_agents: response.auto_enabled_agents ?? [],
-      node_config_auto_enabled_agents: options.nodeConfigAutoEnabledAgents ?? [],
-      merged_enabled_agents: enabledAgents,
-    });
-  }
-
-  Sentry.addBreadcrumb({
-    category: "auto-enabled-agents",
-    message: "Enabled agents merged",
-    level: options.nodeConfigAutoEnabledAgents ? "info" : "warning",
-    data: {
-      source: options.source,
-      userFollowedEnabledAgentsCount: response.enabled_agents?.length ?? 0,
-      userFollowedAutoEnabledAgentsCount: response.auto_enabled_agents?.length ?? 0,
-      nodeConfigAutoEnabledAgentsCount: options.nodeConfigAutoEnabledAgents?.length ?? 0,
-      mergedEnabledAgentsCount: enabledAgents.length,
-      usedNodeConfig: Boolean(options.nodeConfigAutoEnabledAgents),
-    },
-  });
-
-  return {
-    ...response,
-    enabled_agents: enabledAgents,
-  };
-}
-
 /**
- * Get user's followed users, topics, and enabled agents
+ * Get user's followed users. Joined communities are owned by
+ * GET /communities?joined_by= and must not be merged from this payload.
  */
 export async function getUserFollowed(
   params: GetUserFollowedParams,
-  options?: { nodeConfig?: NodeConfigResponse | null },
+  options?: { signal?: AbortSignal },
 ): Promise<UserFollowedResponse> {
-  const nodeConfigPromise = options && "nodeConfig" in options
-    ? Promise.resolve(options.nodeConfig)
-    : getNodeConfig().catch((error) => {
-      if (__DEV__) {
-        console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
-      }
-      Sentry.addBreadcrumb({
-        category: "auto-enabled-agents",
-        message: "Node config unavailable during user_followed merge",
-        level: "warning",
-        data: {
-          source: "get_user_followed",
-          ...getSafeApiErrorContext(error),
-        },
-      });
-      return null;
-    });
-  const [response, nodeConfig] = await Promise.all([
-    api.get<UserFollowedResponse>("/get_user_followed", params),
-    nodeConfigPromise,
-  ]);
-
-  return mergeUserFollowedEnabledAgents(response, {
-    source: "get_user_followed",
-    nodeConfigAutoEnabledAgents: nodeConfig?.auto_enabled_agents,
-  });
+  const response = await api.get<UserFollowedResponse>("/get_user_followed", params, options);
+  return {
+    followed_users: response.followed_users ?? [],
+  };
 }
 
 export interface GetUserBlockedParams {
@@ -144,9 +72,10 @@ export interface GetUserBlockedParams {
  * Get user's blocked users and posts
  */
 export async function getUserBlocked(
-  params: GetUserBlockedParams
+  params: GetUserBlockedParams,
+  options?: { signal?: AbortSignal },
 ): Promise<UserBlockedResponse> {
-  return api.get<UserBlockedResponse>("/get_user_blocked", params);
+  return api.get<UserBlockedResponse>("/get_user_blocked", params, options);
 }
 
 // ============================================
@@ -265,48 +194,4 @@ export async function getUsers(
   params?: GetUsersParams
 ): Promise<UsersResponse> {
   return api.get<UsersResponse>("/get_users", params);
-}
-
-// ============================================
-// Invite Code Validation
-// ============================================
-
-export async function getInviteCodes(
- wallet: MirageWallet,
-): Promise<GetInviteCodesResponse> {
-  const address = wallet.address.toLowerCase();
-  const signed = buildSimpleSignedPayload(
-    wallet,
-    `get_invite_codes:${address}:{timestamp}:{nonce}`,
-  );
-  return api.get<GetInviteCodesResponse>("/get_invite_codes", {
-    address,
-    ...signed,
-  });
-}
-
-export interface ValidateInviteCodeParams {
-  code: string;
-}
-
-export async function validateInviteCode(
-  params: ValidateInviteCodeParams
-): Promise<ValidateInviteCodeResponse> {
-  const trimmed = params.code.trim();
-  const isValidFormat = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(trimmed);
-  if (!isValidFormat) {
-    return { valid: false, code: trimmed, error: "invalid_code" };
-  }
-
-  try {
-    const response = await apiClient.post<ValidateInviteCodeResponse>("/validate_invite_code", { code: trimmed });
-    return response;
-  } catch (error: any) {
-    const status = error?.response?.status;
-    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status }, level: "warning" });
-    if (status === 404 || status === 405) {
-      return { valid: true, code: trimmed };
-    }
-    return { valid: false, code: trimmed, error: "invalid_code" as const };
-  }
 }

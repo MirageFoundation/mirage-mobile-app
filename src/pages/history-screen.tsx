@@ -14,6 +14,7 @@ import {
   FeedDensityToggle,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
+import { ModerationProvider } from "@/src/features/moderation/moderation-provider";
 import { Text } from "@/src/components/ui/primitives";
 import {
   useAuthGuard,
@@ -36,6 +37,10 @@ const emptyInfoImage = require("@/assets/images/empty-info.png");
 const HISTORY_FEED_CONTEXT = "history:posts";
 
 export function HistoryScreen() {
+  return <ModerationProvider><HistoryContent /></ModerationProvider>;
+}
+
+function HistoryContent() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();

@@ -31,25 +31,69 @@ export type { VoteInput, VoteDirection } from "./vote";
 export {
   followUser,
   unfollowUser,
-  followTopic,
-  unfollowTopic,
-  enableAgent,
-  disableAgent,
-  setAgents,
   blockUser,
   unblockUser,
   blockPost,
   unblockPost,
-  blockTopic,
-  unblockTopic,
 } from "./social";
+
+export {
+  joinCommunity,
+  leaveCommunity,
+  blockCommunity,
+  unblockCommunity,
+  setCommunityPreference,
+  joinCommunitySettled,
+  leaveCommunitySettled,
+  blockCommunitySettled,
+  unblockCommunitySettled,
+  setCommunityPreferenceSettled,
+  mapPersistedLensChoice,
+  resolveJoinWriteFields,
+} from "./community-membership";
+
+export {
+  acceptCuratorInvite,
+  acceptCuratorInviteSettled,
+  createCurationTeam,
+  createCurationTeamSettled,
+  declineCuratorInvite,
+  declineCuratorInviteSettled,
+  deleteCurationTeam,
+  deleteCurationTeamSettled,
+  inviteCurator,
+  inviteCuratorSettled,
+  leaveCurationTeam,
+  leaveCurationTeamSettled,
+  removeCurator,
+  removeCuratorSettled,
+  revokeCuratorInvite,
+  revokeCuratorInviteSettled,
+  setCurationPostHidden,
+  setCurationPostHiddenSettled,
+  setCurationPostTag,
+  setCurationPostTagSettled,
+  setCurationSubscriberOnly,
+  setCurationSubscriberOnlySettled,
+  setCurationTag,
+  setCurationTagSettled,
+  setCurationTeamProfile,
+  setCurationTeamProfileSettled,
+  setCurationThreadLocked,
+  setCurationThreadLockedSettled,
+  setCurationUserHidden,
+  setCurationUserHiddenSettled,
+  transferCurationTeam,
+  transferCurationTeamSettled,
+} from "./curation";
+export type {
+  CommunityWriteFields,
+  PersistedLensChoice,
+  SettledCommunityWriteResult,
+} from "./community-membership";
 
 // Biography
 export { setBiography } from "./biography";
-
-// Annotate (Agent-only)
-export { annotate } from "./annotate";
-export type { AnnotateInput } from "./annotate";
 
 // Tokens & Subscription
 export { sendTokens, upgradeLevel, setAutoRenewal, giftSubscription } from "./tokens";
@@ -59,9 +103,11 @@ export type { SendTokensInput, SubscriptionLevel, GiftSubscriptionInput } from "
 export { report } from "./moderation";
 export type { ReportInput } from "./moderation";
 
-// Rewards
-export { claimReward } from "./rewards";
-export type { ClaimRewardResponse } from "./rewards";
+export {
+  claimCreatorRewards,
+  claimCreatorRewardsSettled,
+} from "./creator-earnings";
+export type { ClaimCreatorRewardsInput } from "./creator-earnings";
 
 // Inbox
 export { markInboxViewed } from "./inbox";
@@ -71,6 +117,16 @@ export type { MarkInboxViewedResponse } from "./inbox";
 export { registerPushToken, unregisterPushToken } from "./push-token";
 export type { PushTokenResponse } from "./push-token";
 
+export {
+  postVisitorAttribution,
+  buildVisitorAttributionBody,
+  isVisitorAttributionAccepted,
+} from "./visitor-attribution";
+export type {
+  VisitorAttributionRequest,
+  VisitorAttributionResponse,
+} from "./visitor-attribution";
+
 // Delete User
 export { deleteUser } from "./delete-user";
 export type { DeleteUserInput } from "./delete-user";
@@ -79,6 +135,4 @@ export type { DeleteUserInput } from "./delete-user";
 export { giveAward } from "./award";
 export type { GiveAwardInput } from "./award";
 
-// Referral
-export { referralPrecheckOptIn } from "./referral-precheck-opt-in";
-export type { ReferralPrecheckOptInInput } from "./referral-precheck-opt-in";
+

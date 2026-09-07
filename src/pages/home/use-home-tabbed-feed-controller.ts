@@ -17,11 +17,12 @@ import {
   queryKeys,
   type PostsResponse,
 } from "@/src/api";
+import { withSessionLensPicks } from "@/src/api/read/request-params";
 import {
   fetchAndMergeInfinitePostsRefresh,
   type InfinitePostsData,
 } from "@/src/api/cache/merge-infinite-posts-refresh";
-import { invalidateRewardSummary } from "@/src/api/cache/reward-summary-cache";
+
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
@@ -65,7 +66,7 @@ export type HomeTabbedFeedControllerRef = {
   refresh: (options?: FeedRefreshOptions) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
-  handleNewPostsPress: () => Promise<void>;
+  handleNewPostsPress: () => void;
   dismissNewPosts: () => void;
   checkNewPosts: () => void;
   resetBaseline: (newTimestamp: number | null) => void;
@@ -193,14 +194,15 @@ export function useHomeTabbedFeedController({
       onRefreshingChange?.(true);
     }
     const activeSelection = selectHomeFeedTab(activeTabIndexRef.current);
-    const queryKey = queryKeys.posts({
+    const feedParams = withSessionLensPicks({
       limit: INITIAL_PAGE_SIZE,
       feed: baseFeed,
       by: activeSelection.querySort,
       allowed_tags: allowedTags || undefined,
       address: currentUser?.walletAddress,
       page: undefined,
-    });
+    }, currentUser?.walletAddress);
+    const queryKey = queryKeys.posts(feedParams);
     try {
       Sentry.addBreadcrumb({
         category: "home-feed",
@@ -215,11 +217,8 @@ export function useHomeTabbedFeedController({
         },
       });
       const fetchPage = (page: number) => getPosts({
+        ...feedParams,
         limit: page === 1 ? INITIAL_PAGE_SIZE : NEXT_PAGE_SIZE,
-        feed: baseFeed,
-        by: activeSelection.querySort,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress,
         page,
       });
       const existingData = queryClient.getQueryData<InfinitePostsData>(queryKey);
@@ -251,9 +250,7 @@ export function useHomeTabbedFeedController({
       }
       queryClient.setQueryData(queryKey, data);
       const newFirstPage = data.pages[0];
-      if (currentUser?.walletAddress) {
-        void invalidateRewardSummary(queryClient, currentUser.walletAddress);
-      }
+
       Sentry.addBreadcrumb({
         category: "home-feed",
         message: "Feed refresh completed",
@@ -332,12 +329,12 @@ export function useHomeTabbedFeedController({
     dismiss: dismissNewPosts,
     resetBaseline,
     checkNow,
-    getPrefetchedNewPostsResponse,
+    applyReadyPosts,
   } = useNewPostsChecker({
     feed: baseFeed,
     by: selection.querySort,
     allowed_tags: allowedTags || undefined,
-    enabled: true,
+    enabled: !isRefreshing,
     latestPostTimestamp,
     knownPostIds,
   });
@@ -346,27 +343,11 @@ export function useHomeTabbedFeedController({
     onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
   }, [hasNewPosts, newPostAvatars, newPostCount, onNewPostsChange]);
 
-  const applyNewPosts = useCallback(async (options?: { scrollToTop?: boolean }) => {
-    const shouldScrollToTop = options?.scrollToTop !== false;
-    if (shouldScrollToTop) {
-      showBars();
-    }
-    const prefetchedFirstPage = getPrefetchedNewPostsResponse();
-    await refreshRef.current?.({
-      silent: true,
-      fetchAllNew: true,
-      prefetchedFirstPage,
-    });
-    if (shouldScrollToTop) {
-      await scrollFeedListToTop(activeListRef.current);
-      showBars();
-    }
-    resetBaseline(null);
-  }, [getPrefetchedNewPostsResponse, resetBaseline, showBars]);
-  const handleNewPostsPress = useCallback(
-    () => applyNewPosts({ scrollToTop: true }),
-    [applyNewPosts],
-  );
+  const handleNewPostsPress = useCallback(() => {
+    if (isRefreshingRef.current || !applyReadyPosts()) return;
+    showBars();
+    void scrollFeedListToTop(activeListRef.current);
+  }, [applyReadyPosts, showBars]);
 
   const fetchStateRef = useRef({
     magic: { lastFetchTime: 0, fetching: false },

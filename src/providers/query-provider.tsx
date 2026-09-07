@@ -27,14 +27,14 @@ import {
   PERSISTED_QUERY_BUSTER,
   PERSISTED_QUERY_MAX_AGE_MS,
   preparePersistedQueryClient,
+  removeLegacyPersistedQueryCaches,
   restorePersistedQueryClient,
   type PersistedQueryMetrics,
 } from "@/src/api/cache/persisted-post-cache";
 import { getApiBaseUrl, useAuthStore, usePreferencesStore } from "@/src/stores";
 import { queryClient } from "@/src/providers/query-client";
 
-// Remove the pre-v3 broad cache, which was not identity scoped or allowlisted.
-storage.remove("mirage-query-cache");
+removeLegacyPersistedQueryCaches(storage);
 
 onlineManager.setEventListener((setOnline) => {
   setOnline(getNetworkState().isConnected);

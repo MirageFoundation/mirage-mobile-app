@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { View } from "react-native";
+import type { LayoutChangeEvent, View } from "react-native";
+import { getIntrinsicMediaAspectRatio } from "./media-gallery-sizing";
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import {
   MEDIA_ASPECT_RATIO_CACHE,
   MEDIA_LOADED_CACHE,
+  MEDIA_HORIZONTAL_PADDING,
+  SCREEN_WIDTH,
   getMediaAspectRatio,
 } from "./post-card-media-constants";
 import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
@@ -14,64 +17,43 @@ import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
  * PostCardMedia component; behavior is a verbatim port.
  */
 
-/**
- * Aspect-ratio state for the media frame. Prefers the LRU cache, then
- * server-provided dimensions, then detected sizes reported via
- * `updateMediaAspectRatioFromSize` outside feed cards. Media without dimensions
- * keeps its reserved fallback frame so decoding cannot resize a mounted list
- * row; current upload clients include dimensions for an exact frame.
- */
-export function useMediaAspectRatio(
-  media: ResolvedMedia | undefined,
-  { preserveFallback = false }: { preserveFallback?: boolean } = {},
-) {
+/** Metadata wins; decoded dimensions fill missing metadata for this asset only. */
+export function useMediaAspectRatio(media: ResolvedMedia | undefined) {
   const resolvedMediaUri = media?.uri;
-  const aspectRatioLockedRef = useRef(false);
-  const cachedAspectRatio = resolvedMediaUri
-    ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
-    : undefined;
-  const targetAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
-  const [mediaAspectRatio, setMediaAspectRatio] = useState(targetAspectRatio);
-
-  const prevMediaUriRef = useRef(resolvedMediaUri);
-  const uriChanged = prevMediaUriRef.current !== resolvedMediaUri;
-  if (uriChanged) {
-    prevMediaUriRef.current = resolvedMediaUri;
-    aspectRatioLockedRef.current = !!cachedAspectRatio;
-    if (Math.abs(mediaAspectRatio - targetAspectRatio) >= 0.01) {
-      setMediaAspectRatio(targetAspectRatio);
-    }
-  } else if (cachedAspectRatio && !aspectRatioLockedRef.current) {
-    aspectRatioLockedRef.current = true;
-  }
-
-  const effectiveAspectRatio = uriChanged ? targetAspectRatio : mediaAspectRatio;
-
-  const hasServerAspectRatio = !!(
-    media?.aspectRatio ||
-    (media?.width && media?.height)
-  );
-  const shouldKeepFallbackAspectRatio = preserveFallback && !hasServerAspectRatio;
+  const currentUriRef = useRef(resolvedMediaUri);
+  currentUriRef.current = resolvedMediaUri;
+  const [decoded, setDecoded] = useState<{ uri: string; ratio: number }>();
+  const metadataRatio = getIntrinsicMediaAspectRatio(media);
+  const effectiveAspectRatio = metadataRatio
+    ?? (decoded?.uri === resolvedMediaUri ? decoded?.ratio : undefined)
+    ?? getMediaAspectRatio(media);
 
   const updateMediaAspectRatioFromSize = useCallback(
     (width?: number, height?: number) => {
-      if (hasServerAspectRatio || shouldKeepFallbackAspectRatio) return;
-      if (!width || !height) return;
-      const ratio = width / height;
-      if (!Number.isFinite(ratio) || ratio <= 0) return;
-      setMediaAspectRatio((current) => {
-        if (Math.abs(current - ratio) < 0.01) return current;
-        return ratio;
-      });
-      if (resolvedMediaUri) {
-        MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
-      }
-      aspectRatioLockedRef.current = true;
+      if (metadataRatio || !resolvedMediaUri) return;
+      const ratio = getIntrinsicMediaAspectRatio({ width, height });
+      if (!ratio || currentUriRef.current !== resolvedMediaUri) return;
+      MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
+      setDecoded((current) =>
+        current?.uri === resolvedMediaUri && Math.abs(current.ratio - ratio) < 0.001
+          ? current
+          : { uri: resolvedMediaUri, ratio },
+      );
     },
-    [hasServerAspectRatio, resolvedMediaUri, shouldKeepFallbackAspectRatio],
+    [metadataRatio, resolvedMediaUri],
   );
 
   return { effectiveAspectRatio, updateMediaAspectRatioFromSize };
+}
+
+export function useMediaFrameWidth() {
+  const [containerWidth, setContainerWidth] = useState(SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING);
+  const onMediaLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+    if (!Number.isFinite(width) || width <= 0) return;
+    setContainerWidth((current) => Math.abs(current - width) < 1 ? current : width);
+  }, []);
+  return { containerWidth, onMediaLayout };
 }
 
 /**

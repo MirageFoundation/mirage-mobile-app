@@ -2,6 +2,7 @@ import { infiniteQueryOptions, useQuery, useInfiniteQuery } from "@tanstack/reac
 import * as Sentry from "@sentry/react-native";
 import { Platform } from "react-native";
 import { queryKeys } from "../query-keys";
+import { shouldRetryApiQuery } from "@/src/api/read-retry-policy";
 import {
   getInbox,
   normalizeInboxQueryParams,
@@ -48,7 +49,7 @@ export function useInbox(params?: Omit<GetInboxParams, "address">) {
       }
     },
     enabled: !!walletAddress,
-    retry: 1,
+    retry: (failureCount, error) => failureCount < 1 && shouldRetryApiQuery(failureCount, error),
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
   });
@@ -95,7 +96,7 @@ export function infiniteInboxQueryOptions(
     getPreviousPageParam: getPreviousNumberedPageParam,
     maxPages: INBOX_MAX_PAGES,
     enabled: !!walletAddress,
-    retry: 1,
+    retry: (failureCount, error) => failureCount < 1 && shouldRetryApiQuery(failureCount, error),
     staleTime: 1000 * 30, // 30 seconds
     gcTime: INBOX_QUERY_GC_TIME,
   });

@@ -18,19 +18,18 @@ export function usePostCardVideoListeners({
   playback,
   resolvedMediaUri,
   isPostDetail,
-  setMediaLoaded,
   updateMediaAspectRatioFromSize,
 }: {
   playback: PostCardVideoPlayback;
   resolvedMediaUri: string;
   isPostDetail: boolean;
-  setMediaLoaded: (loaded: boolean) => void;
   updateMediaAspectRatioFromSize: (width?: number, height?: number) => void;
 }) {
   const {
     videoPlayer,
     adoptedLease,
     shouldPlayNativeVideo,
+    shouldPrepareNativeVideo,
     videoPositionKey,
     getPosition,
     currentVideoPositionRef,
@@ -43,12 +42,16 @@ export function usePostCardVideoListeners({
   resolvedMediaUriForCacheRef.current = resolvedMediaUri;
 
   useEffect(() => {
+    let cancelled = false;
+    const acceptsEvent = (sourceUri = getAppliedVideoSourceUri(videoPlayer)) => !cancelled && shouldPrepareNativeVideo &&
+      resolvedMediaUriForCacheRef.current === resolvedMediaUri &&
+      sourceUri === resolvedMediaUri &&
+      !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease);
     const applySourceMetadata = (
       availableVideoTracks: typeof videoPlayer.availableVideoTracks,
+      sourceUri?: string | null,
     ) => {
-      if (!resolvedMediaUri) return;
-      setMediaLoaded(true);
-      MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+      if (!resolvedMediaUri || !acceptsEvent(sourceUri)) return;
       const size = availableVideoTracks[0]?.size;
       updateMediaAspectRatioFromSize(size?.width, size?.height);
 
@@ -63,11 +66,13 @@ export function usePostCardVideoListeners({
     };
     const registerListeners = () => {
     const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+      if (!acceptsEvent()) return;
       currentVideoPositionRef.current = currentTime;
     });
     const playingSubscription = videoPlayer.addListener(
       "playingChange",
       ({ isPlaying }) => {
+        if (!acceptsEvent()) return;
         if (!isPlaying) {
           if (
             shouldPlayNativeVideo &&
@@ -85,10 +90,6 @@ export function usePostCardVideoListeners({
           return;
         }
         setIsVideoLoading(false);
-        setMediaLoaded(true);
-        if (resolvedMediaUriForCacheRef.current) {
-          MEDIA_LOADED_CACHE.add(resolvedMediaUriForCacheRef.current);
-        }
         userInitiatedPlayRef.current = false;
       },
     );
@@ -98,8 +99,8 @@ export function usePostCardVideoListeners({
     const sourceSubscription = videoPlayer.addListener(
       "sourceLoad",
       ({ availableVideoTracks, videoSource }) => {
-        if (getVideoSourceUri(videoSource) !== resolvedMediaUri) return;
-        applySourceMetadata(availableVideoTracks);
+        if (!acceptsEvent(getVideoSourceUri(videoSource))) return;
+        applySourceMetadata(availableVideoTracks, getVideoSourceUri(videoSource));
         if (shouldPlayNativeVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
           videoPlayer.play();
         }
@@ -108,6 +109,7 @@ export function usePostCardVideoListeners({
     const statusSubscription = videoPlayer.addListener(
       "statusChange",
       ({ status }) => {
+        if (!acceptsEvent()) return;
         if (status === "readyToPlay") {
           if (getAppliedVideoSourceUri(videoPlayer) !== resolvedMediaUri) return;
           applySourceMetadata(videoPlayer.availableVideoTracks);
@@ -160,6 +162,7 @@ export function usePostCardVideoListeners({
     }
 
     return () => {
+      cancelled = true;
       try {
         subscriptions.forEach((subscription) => subscription.remove());
       } catch {
@@ -170,7 +173,7 @@ export function usePostCardVideoListeners({
     getPosition,
     resolvedMediaUri,
     shouldPlayNativeVideo,
-    setMediaLoaded,
+    shouldPrepareNativeVideo,
     updateMediaAspectRatioFromSize,
     videoPlayer,
     adoptedLease,

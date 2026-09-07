@@ -5,21 +5,41 @@ import {
   buildSearchDiscoverySections,
   getSearchTabCounts,
   normalizeSearchQuery,
+  recentSearchLabel,
+  SEARCH_TABS,
+  SEARCH_TAB_LABELS,
   resolveSearchTab,
-  selectTrendingTopics,
+  selectTrendingCommunities,
   shouldShowSearchResults,
 } from "../src/pages/search/search-state";
 
 const topic = (name: string, postCount?: number) => ({
-  topic: name,
+  community: name,
   post_count: postCount,
 });
 
 describe("search state mapping", () => {
+  test("labels the community tab without changing API tab keys", () => {
+    expect(SEARCH_TABS.map((tab) => SEARCH_TAB_LABELS[tab])).toEqual([
+      "Posts", "Communities", "Users",
+    ]);
+    expect(SEARCH_TABS[1]).toBe("communities");
+  });
+
+  test("displays explicit legacy community history without rewriting stored queries", () => {
+    const item = { id: "legacy", query: "#Bitcoin", timestamp: 1 };
+    expect(recentSearchLabel(item.query)).toBe("[bitcoin]");
+    expect(item.query).toBe("#Bitcoin");
+    expect(recentSearchLabel("[Bitcoin]")).toBe("[bitcoin]");
+    for (const query of ["bitcoin", "@Bitcoin", "C#", "#bitcoin news", "text #bitcoin", "[a label]", "#bad--slug", "#home"]) {
+      expect(recentSearchLabel(query)).toBe(query);
+    }
+  });
+
   test("normalizes query and route tab values", () => {
     expect(normalizeSearchQuery("  bitcoin  ")).toBe("bitcoin");
     expect(normalizeSearchQuery(null)).toBe("");
-    expect(resolveSearchTab("topics")).toBe("topics");
+    expect(resolveSearchTab("communities")).toBe("communities");
     expect(resolveSearchTab("unknown")).toBe("posts");
   });
 
@@ -37,11 +57,11 @@ describe("search state mapping", () => {
       topic("medium", 10),
     ];
 
-    expect(selectTrendingTopics(topics, 2).map((item) => item.topic)).toEqual([
+    expect(selectTrendingCommunities(topics, 2).map((item) => item.community)).toEqual([
       "largest",
       "medium",
     ]);
-    expect(topics.map((item) => item.topic)).toEqual([
+    expect(topics.map((item) => item.community)).toEqual([
       "small",
       "empty",
       "largest",
@@ -65,17 +85,17 @@ describe("search state mapping", () => {
   test("maps tab counts to selected-topic posts when applicable", () => {
     const counts = {
       postCount: 3,
-      topicCount: 4,
-      topicPostCount: 8,
+      communityCount: 4,
+      communityPostCount: 8,
       userCount: 5,
     };
 
-    expect(getSearchTabCounts({ ...counts, hasSelectedTopic: false })).toEqual({
+    expect(getSearchTabCounts({ ...counts, hasSelectedCommunity: false })).toEqual({
       posts: 3,
-      topics: 4,
+      communities: 4,
       users: 5,
     });
-    expect(getSearchTabCounts({ ...counts, hasSelectedTopic: true }).topics).toBe(
+    expect(getSearchTabCounts({ ...counts, hasSelectedCommunity: true }).communities).toBe(
       8,
     );
   });

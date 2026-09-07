@@ -23,12 +23,7 @@ export type StartupRouteAction =
   | "push_screen";
 
 export function isStartupHomePath(pathname: string): boolean {
-  return (
-    pathname === STARTUP_HOME_ROUTE ||
-    pathname.endsWith("/(tabs)") ||
-    pathname.endsWith("/(tabs)/") ||
-    pathname.endsWith("/index")
-  );
+  return pathname.length > 0 && /^(?:\/\(app\))?(?:\/\(tabs\))?(?:\/index|\/)?$/.test(pathname);
 }
 
 export function resolveStartupRouteAction(

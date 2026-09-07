@@ -10,8 +10,6 @@ import {
   unblockUser,
   blockPost,
   unblockPost,
-  blockTopic,
-  unblockTopic,
 } from "../endpoints/social";
 import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
@@ -49,58 +47,6 @@ export function useBlockUser(options: UseBlockOptions = {}) {
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
       queryClient.invalidateQueries({ queryKey: queryKeys.commentsRoot(), refetchType: "inactive" });
-    },
-  });
-}
-
-// ============================================
-// Topic Block Hooks
-// ============================================
-
-export function useBlockTopic(options: UseBlockOptions = {}) {
-  const queryClient = useQueryClient();
-  const { getWallet, address } = useWallet();
-
-  return useMutation({
-    mutationKey: mutationKeys.block.topic(),
-    mutationFn: async (topic: string) => {
-      const wallet = await getWallet();
-      return blockTopic(wallet, topic, options.onPoWProgress);
-    },
-    onSuccess: () => {
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userBlocked(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profile(address),
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
-    },
-  });
-}
-
-export function useUnblockTopic(options: UseBlockOptions = {}) {
-  const queryClient = useQueryClient();
-  const { getWallet, address } = useWallet();
-
-  return useMutation({
-    mutationKey: mutationKeys.block.unblockTopic(),
-    mutationFn: async (topic: string) => {
-      const wallet = await getWallet();
-      return unblockTopic(wallet, topic, options.onPoWProgress);
-    },
-    onSuccess: () => {
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userBlocked(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profile(address),
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }

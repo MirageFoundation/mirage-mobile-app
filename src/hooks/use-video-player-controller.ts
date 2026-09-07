@@ -155,17 +155,22 @@ export function useVideoPlayerController(
   const initialTimeRef = useRef(initialTime);
   initialTimeRef.current = initialTime;
   const appliedSourceKeyRef = useRef<string | null | undefined>(undefined);
+  const sourceLeased = isVideoPlayerLeased(player);
 
   useEffect(() => {
     // While an adopter (detail screen) holds this player, leave it alone; the
-    // leaseVersion dependency re-runs this effect after release.
+    // Ownership changes re-run this effect after release.
     if (isVideoPlayerLeased(player)) return;
     if (appliedSourceKeyRef.current === sourceKey) return;
     appliedSourceKeyRef.current = sourceKey;
     const targetSource = sourceRef.current;
-    void replaceVideoPlayerSourceAsync(player, targetSource)
+    let cancelled = false;
+    let settled = false;
+    const isCurrent = () => !cancelled && !isVideoPlayerLeased(player) && getSourceKey(sourceRef.current) === sourceKey;
+    void replaceVideoPlayerSourceAsync(player, targetSource, isCurrent)
       .then((didReplace) => {
-        if (!didReplace) return;
+        if (!didReplace || !isCurrent()) return;
+        settled = true;
         // A newer source superseded this one while earlier swaps were queued.
         if (appliedSourceKeyRef.current !== sourceKey) return;
         if (isVideoPlayerLeased(player)) return;
@@ -178,6 +183,8 @@ export function useVideoPlayerController(
         }
       })
       .catch((error) => {
+        if (!isCurrent()) return;
+        settled = true;
         Sentry.addBreadcrumb({
           category: "video-player",
           message: "Video source replacement failed",
@@ -189,7 +196,11 @@ export function useVideoPlayerController(
           },
         });
       });
-  }, [diagnosticId, player, sourceKey, leaseVersion]);
+    return () => {
+      cancelled = true;
+      if (!settled && appliedSourceKeyRef.current === sourceKey) appliedSourceKeyRef.current = undefined;
+    };
+  }, [diagnosticId, player, sourceKey, sourceLeased]);
 
   useEffect(() => {
     if (!handoffKey || sourceKey == null) return;

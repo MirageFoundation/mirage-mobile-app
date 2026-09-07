@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
-import { usePathname } from "expo-router";
+import { usePathname, useUnstableGlobalHref } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import * as Sentry from "@sentry/react-native";
 
 import { selectAuthSessionStatus, useAuthStore } from "@/src/stores/auth-store";
 import { AUTH_RECOVERY_ROUTE } from "@/src/navigation/auth-flow-policy";
+import { isProtectedEntryReady } from "@/src/navigation/auth-entry-policy";
+import { validatePendingRoute } from "@/src/navigation/route-map";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { usePreferencesStore } from "@/src/stores/preferences-store";
 import {
@@ -41,9 +43,10 @@ import {
  */
 export function LaunchRouteOrchestrator() {
   const pathname = usePathname();
+  const href = useUnstableGlobalHref();
   const { hasShareIntent } = useShareIntentContext();
   const isInitializing = useAuthStore((state) => state.isInitializing);
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const isLoggedIn = useAuthStore(isProtectedEntryReady);
   const sessionStatus = useAuthStore(selectAuthSessionStatus);
   const hasSeenAdultPrompt = usePreferencesStore(
     (state) => state.hasSeenAdultPrompt,
@@ -53,7 +56,6 @@ export function LaunchRouteOrchestrator() {
   const homeAnchorEstablishedRef = useRef(false);
   const startupHomeReadySignaledRef = useRef(false);
   const initialLaunchHandledRef = useRef(false);
-  const authRequiredPresentedRef = useRef(false);
   const shareNavigationDispatchedRef = useRef(false);
   const initialShareIntentRef = useRef(hasShareIntent);
 
@@ -86,8 +88,8 @@ export function LaunchRouteOrchestrator() {
       const shareOwnsRoute =
         hasShareIntent || initialShareIntentRef.current || !!getPendingShareIntent();
 
-      if (!pendingRoute && !notificationOwnsRoute && !shareOwnsRoute) {
-        useDeepLinkStore.getState().setPendingRoute(pathname);
+      if (!useDeepLinkStore.getState().pendingRoute && !notificationOwnsRoute && !shareOwnsRoute) {
+        useDeepLinkStore.getState().setPendingRoute(validatePendingRoute(href));
       }
 
       Sentry.addBreadcrumb({
@@ -115,7 +117,7 @@ export function LaunchRouteOrchestrator() {
       level: "info",
       data: { isLoggedIn },
     });
-  }, [hasShareIntent, isInitializing, isLoggedIn, pathname, pendingRoute]);
+  }, [hasShareIntent, href, isInitializing, isLoggedIn, pathname, pendingRoute]);
 
   useEffect(() => {
     if (
@@ -156,9 +158,6 @@ export function LaunchRouteOrchestrator() {
         hasSeenAdultPrompt,
       });
       if (result === "waiting") return;
-      if (result === "auth_required") {
-        authRequiredPresentedRef.current = true;
-      }
       initialLaunchHandledRef.current = true;
       markLaunchCompletedThisRuntime();
       return;
@@ -181,35 +180,6 @@ export function LaunchRouteOrchestrator() {
     isLoggedIn,
     pendingRoute,
     sessionStatus,
-  ]);
-
-  // A protected cold-start route remains pending while logged out. Dispatch it
-  // only after the same auth and onboarding gates have become ready.
-  useEffect(() => {
-    if (
-      !homeAnchorEstablishedRef.current ||
-      !initialLaunchHandledRef.current ||
-      !authRequiredPresentedRef.current ||
-      !pendingRoute ||
-      !isLoggedIn ||
-      !hasSeenAdultPrompt
-    ) {
-      return;
-    }
-
-    const result = flushPendingLaunchRoute({
-      isInitializing,
-      isLoggedIn,
-      hasSeenAdultPrompt,
-    });
-    if (result === "dispatched" || result === "none") {
-      authRequiredPresentedRef.current = false;
-    }
-  }, [
-    hasSeenAdultPrompt,
-    isInitializing,
-    isLoggedIn,
-    pendingRoute,
   ]);
 
   // Share intents received after startup use the already-established Home

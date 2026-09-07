@@ -78,13 +78,13 @@ describe("auth session status", () => {
 });
 
 describe("pending wallet startup", () => {
-  test("resumes only when the username tx already landed", () => {
+  test("retains all pending keys regardless of local username flags", () => {
     expect(
       resolvePendingWalletStartup({ pending: true, hasUsername: true }),
     ).toBe("resume");
     expect(
       resolvePendingWalletStartup({ pending: true, hasUsername: false }),
-    ).toBe("wipe");
+    ).toBe("resume");
     expect(
       resolvePendingWalletStartup({ pending: false, hasUsername: true }),
     ).toBe("none");

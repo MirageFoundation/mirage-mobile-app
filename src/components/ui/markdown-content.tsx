@@ -8,7 +8,7 @@ import { memo, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
-import { hasHashtags, parseHashtags } from "@/src/utils/hashtag-parser";
+import { hasCommunityMentions, parseCommunityReferences } from "@/src/utils/community-reference-parser";
 import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
 
 // Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
@@ -208,10 +208,10 @@ export const MarkdownContent = memo(function MarkdownContent({
             </Text>
           );
         }
-        if (hasHashtags(value)) {
+        if (hasCommunityMentions(value)) {
           return (
             <Text key={(node as any).key} style={textStyle} maxFontSizeMultiplier={1.2}>
-              {parseHashtags(value, textStyle)}
+              {parseCommunityReferences(value, textStyle)}
             </Text>
           );
         }

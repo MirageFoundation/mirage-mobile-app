@@ -15,6 +15,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { ProtectedEntry } from "@/src/navigation/protected-entry";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
@@ -268,7 +269,7 @@ function TabNavigationVisibilityReset() {
         level: "info",
         data: { pathname },
       });
-    } else if (!pathname.startsWith("/topic/")) {
+    } else if (!pathname.startsWith("/c/")) {
       Sentry.addBreadcrumb({
         category: "feed-video",
         message: "Disabled tab feed playback",
@@ -295,6 +296,7 @@ function TabsContent() {
       <TabNavigationVisibilityReset />
       <Tabs
         initialRouteName="index"
+        screenLayout={({ children, route }) => <ProtectedEntry screenName={route.name}>{children}</ProtectedEntry>}
         backBehavior="initialRoute"
         tabBar={(props) => <AnimatedTabBar {...props} />}
         screenOptions={{

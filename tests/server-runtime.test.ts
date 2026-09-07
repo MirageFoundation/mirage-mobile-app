@@ -39,7 +39,17 @@ describe("server query identity", () => {
     expect(getServerIdentity()).toBe("https://one.example");
 
     for (const [name, factory] of Object.entries(queryKeys)) {
-      const key = (factory as (...args: unknown[]) => readonly unknown[])();
+      const invoke = factory as (...args: unknown[]) => readonly unknown[];
+      let key: readonly unknown[];
+      try {
+        key = invoke();
+      } catch {
+        try {
+          key = invoke("sample");
+        } catch {
+          key = invoke("sample", 1, "sample", []);
+        }
+      }
       expect(key.slice(0, 2), name).toEqual(["server", "https://one.example"]);
     }
 
@@ -74,8 +84,8 @@ describe("viewer query identity", () => {
         queryKeys.search("mirage", "posts", 20, "sensitive", viewerB),
       ],
       [
-        queryKeys.topics(20, "sensitive", viewerA),
-        queryKeys.topics(20, "sensitive", viewerB),
+        queryKeys.communities({ joined_by: viewerA, limit: 20 }),
+        queryKeys.communities({ joined_by: viewerB, limit: 20 }),
       ],
     ];
 

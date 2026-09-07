@@ -8,7 +8,7 @@ import {
   type PostOptionsSheetRef,
   type ReportSheetRef,
 } from "@/src/components/molecules";
-import { isTopicFollowed } from "@/src/domain/topics";
+import { isCommunityJoined } from "@/src/domain/communities";
 import {
   useBlockHandler,
   useDeleteHandler,
@@ -35,12 +35,12 @@ type VoteState = {
 type UsePostActionControllerOptions = {
   currentUserId?: string;
   followedUsers: string[];
-  followedTopics: string[];
+  joinedCommunities: string[];
   savedPostIds: ReadonlySet<string>;
   onFollowUserOptimistic?: (userId: string, isFollowing: boolean) => void;
   onFollowUserRollback?: (userId: string) => void;
-  onFollowTopicOptimistic?: (topic: string, isFollowing: boolean) => void;
-  onFollowTopicRollback?: (topic: string) => void;
+  onJoinCommunityOptimistic?: (topic: string, isFollowing: boolean) => void;
+  onJoinCommunityRollback?: (topic: string) => void;
   onVoteOptimistic: (targetId: string, result: VoteResult) => void;
   onVoteRollback: (targetId: string, previousState: VoteState) => void;
   onBlockConfirmed: (target: BlockTarget) => void;
@@ -57,12 +57,12 @@ type UsePostActionControllerOptions = {
 export function usePostActionController({
   currentUserId,
   followedUsers,
-  followedTopics,
+  joinedCommunities,
   savedPostIds,
   onFollowUserOptimistic,
   onFollowUserRollback,
-  onFollowTopicOptimistic,
-  onFollowTopicRollback,
+  onJoinCommunityOptimistic,
+  onJoinCommunityRollback,
   onVoteOptimistic,
   onVoteRollback,
   onBlockConfirmed,
@@ -88,8 +88,8 @@ export function usePostActionController({
   const follow = useFollowHandler({
     onOptimisticFollowUser: onFollowUserOptimistic,
     onRollbackFollowUser: onFollowUserRollback,
-    onOptimisticFollowTopic: onFollowTopicOptimistic,
-    onRollbackFollowTopic: onFollowTopicRollback,
+    onOptimisticJoinCommunity: onJoinCommunityOptimistic,
+    onRollbackJoinCommunity: onJoinCommunityRollback,
   });
   const vote = useVoteHandler({
     onOptimisticUpdate: onVoteOptimistic,
@@ -117,7 +117,7 @@ export function usePostActionController({
   const followState = getSelectedPostFollowState(
     selectedPost,
     followedUsers,
-    followedTopics,
+    joinedCommunities,
   );
 
   const selectedActions = useMemo(
@@ -131,11 +131,11 @@ export function usePostActionController({
           followedUsers.includes(selectedPost.author.id),
         );
       },
-      followTopic: () => {
-        if (!selectedPost?.topic) return;
-        follow.handleFollowTopic(
-          selectedPost.topic,
-          isTopicFollowed(followedTopics, selectedPost.topic),
+      toggleCommunityMembership: () => {
+        if (!selectedPost?.community) return;
+        follow.handleToggleCommunityMembership(
+          selectedPost.community,
+          isCommunityJoined(joinedCommunities, selectedPost.community),
         );
       },
       save: () => {
@@ -179,7 +179,7 @@ export function usePostActionController({
       block,
       deletion,
       follow,
-      followedTopics,
+      joinedCommunities,
       followedUsers,
       onCopyText,
       onEditPost,
@@ -216,12 +216,12 @@ export function usePostActionController({
       createPostCardActionAdapters({
         openOptions,
         followUser: follow.handleFollowUser,
-        followTopic: follow.handleFollowTopic,
+        toggleCommunityMembership: follow.handleToggleCommunityMembership,
         upvote: vote.handleUpvote,
         downvote: vote.handleDownvote,
         requestBlockUser: block.requestBlockUser,
         requestBlockPost: block.requestBlockPost,
-        requestBlockTopic: block.requestBlockTopic,
+        requestBlockCommunity: block.requestBlockCommunity,
         requestReportPost: (postId) => report.requestReport(postId, "post"),
       }),
     [block, follow, openOptions, report, vote],

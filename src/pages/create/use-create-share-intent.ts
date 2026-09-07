@@ -24,7 +24,7 @@ import {
 } from "@/src/utils/media-merge-limits";
 import { getMediaDurationMillis } from "@/src/utils/media-duration";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
-import { sanitizeTopicName } from "@/src/utils/topic-validation";
+import { isRoutableCommunitySlug, normalizeCommunitySlug } from "@/src/domain/communities";
 import { MAX_VIDEO_DURATION_MS, trimToMaxDuration } from "@/src/utils/video-processing";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useCreateComposeState } from "./create-compose-state";
@@ -325,15 +325,15 @@ export function useCreateShareIntent({
 
     const redditMatch = (sharedUrl ?? activeShareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
     if (redditMatch) {
-      const topicName = sanitizeTopicName(redditMatch[1]);
-      if (topicName.length >= 2) {
+      const slug = normalizeCommunitySlug(redditMatch[1]);
+      if (isRoutableCommunitySlug(slug)) {
         updateDraft({
           community: {
-            id: topicName,
-            name: topicName,
+            id: slug,
+            name: slug,
             memberCount: 0,
             isSubscribed: false,
-            isNewTopic: true,
+            isNewCommunity: true,
           },
         });
       }

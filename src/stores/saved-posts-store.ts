@@ -5,6 +5,7 @@ import {
   walletScopedStorage,
 } from "./wallet-scoped-storage";
 import type { Comment, Post } from "@/src/domain/content";
+import { migratePersistedCommunityPost } from "./persisted-community-post";
 
 export type SavedPost = Post & {
   savedAt: number;
@@ -124,7 +125,7 @@ export const useSavedPostsStore = create<SavedPostsState>()(
       name: "saved-posts-storage",
       storage: createJSONStorage(() => walletScopedStorage),
       skipHydration: true,
-      version: 1,
+      version: 3,
       migrate: (persistedState) => {
         const state = persistedState as {
           savedPosts?: SavedPost[];
@@ -133,7 +134,10 @@ export const useSavedPostsStore = create<SavedPostsState>()(
 
         return {
           ...state,
-          savedPosts: (state.savedPosts ?? []).map((post) => normalizeScoreLikeCount(post)),
+          savedPosts: (state.savedPosts ?? [])
+            .map((post) => migratePersistedCommunityPost(post as SavedPost & Record<string, unknown>))
+            .filter((post): post is SavedPost & { community: string } => !!post)
+            .map((post) => normalizeScoreLikeCount(post as SavedPost)),
           savedComments: (state.savedComments ?? []).map((comment) => normalizeCommentScores(comment)),
         };
       },

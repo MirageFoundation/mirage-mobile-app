@@ -3,10 +3,10 @@ import { normalizeAccountIdentity } from "@/src/api/read/query-keys";
 
 type UnknownRecord = Record<string, unknown>;
 
-export const PERSISTED_QUERY_SCHEMA_VERSION = 3;
+export const PERSISTED_QUERY_SCHEMA_VERSION = 5;
 export const PERSISTED_QUERY_MAX_PAGES = 1;
 export const PERSISTED_QUERY_MAX_BYTES = 1024 * 1024;
-export const PERSISTED_QUERY_BUSTER = "launch-feed-cache-v3";
+export const PERSISTED_QUERY_BUSTER = "launch-feed-cache-v5";
 export const PERSISTED_QUERY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type PersistedQueryMetrics = {
@@ -58,6 +58,35 @@ export function buildPersistedQueryStorageKey(namespace: string): string {
   return `mirage-query-cache:${encodeURIComponent(namespace)}`;
 }
 
+const LEGACY_QUERY_CACHE_KEY = "mirage-query-cache";
+const QUERY_CACHE_KEY_PREFIX = "mirage-query-cache:";
+
+export function isLegacyPersistedQueryCacheKey(key: string): boolean {
+  if (key === LEGACY_QUERY_CACHE_KEY) return true;
+  if (!key.startsWith(QUERY_CACHE_KEY_PREFIX)) return false;
+  const encoded = key.slice(QUERY_CACHE_KEY_PREFIX.length);
+  let namespace = encoded;
+  try {
+    namespace = decodeURIComponent(encoded);
+  } catch {
+    return false;
+  }
+  return /^v[1234]\|/.test(namespace);
+}
+
+export function removeLegacyPersistedQueryCaches(store: {
+  getAllKeys?: () => string[];
+  remove: (key: string) => unknown;
+}): void {
+  store.remove(LEGACY_QUERY_CACHE_KEY);
+  const keys = typeof store.getAllKeys === "function" ? store.getAllKeys() : [];
+  for (const key of keys) {
+    if (key !== LEGACY_QUERY_CACHE_KEY && isLegacyPersistedQueryCacheKey(key)) {
+      store.remove(key);
+    }
+  }
+}
+
 export function getHydratablePersistedQueryClient(
   client: unknown,
   {
@@ -88,6 +117,15 @@ export function getHydratablePersistedQueryClient(
   };
 }
 
+function isCanonicalLaunchLens(filters: UnknownRecord): boolean {
+  return (
+    filters.lens === "effective" &&
+    filters.team_id === null &&
+    filters.scope === "current" &&
+    filters.lens_picks === ""
+  );
+}
+
 export function isLaunchCriticalFeedQuery(queryKey: unknown): boolean {
   if (!Array.isArray(queryKey)) return false;
   if (
@@ -101,29 +139,52 @@ export function isLaunchCriticalFeedQuery(queryKey: unknown): boolean {
   }
 
   const filters = queryKey[5];
-  return (
-    isRecord(filters) &&
-    (filters.feed === "home" || filters.feed === "following") &&
-    filters.by === "magic" &&
-    (filters.page === undefined || filters.page === null)
-  );
-}
-
-export function isPersistedRewardSummaryQuery(queryKey: unknown): boolean {
-  return (
-    Array.isArray(queryKey) &&
-    queryKey[0] === "server" &&
-    typeof queryKey[1] === "string" &&
-    queryKey[2] === "rewards" &&
-    queryKey[3] === "summary" &&
-    typeof queryKey[4] === "string"
-  );
+  if (!isRecord(filters)) return false;
+  if ("topic" in filters && filters.topic != null && filters.topic !== "") {
+    return false;
+  }
+  if (
+    typeof filters.community === "string" &&
+    filters.community.trim().length > 0 &&
+    filters.community.trim().toLowerCase() !== "all"
+  ) {
+    return false;
+  }
+  if (typeof filters.page === "number") return false;
+  if (
+    (filters.feed !== "home" && filters.feed !== "following") ||
+    filters.by !== "magic"
+  ) {
+    return false;
+  }
+  return isCanonicalLaunchLens(filters);
 }
 
 export function isLaunchPersistedQuery(queryKey: unknown): boolean {
+  return isLaunchCriticalFeedQuery(queryKey);
+}
+
+function isValidServedLens(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (
+    value.requested !== "effective" &&
+    value.requested !== "default" &&
+    value.requested !== "team" &&
+    value.requested !== "raw"
+  ) {
+    return false;
+  }
+  if (
+    value.effective_mode !== 0 &&
+    value.effective_mode !== 1 &&
+    value.effective_mode !== 2
+  ) {
+    return false;
+  }
   return (
-    isLaunchCriticalFeedQuery(queryKey) ||
-    isPersistedRewardSummaryQuery(queryKey)
+    value.effective_team_id === null ||
+    (typeof value.effective_team_id === "number" &&
+      Number.isSafeInteger(value.effective_team_id))
   );
 }
 
@@ -135,7 +196,18 @@ function isSafeServerPost(value: unknown): value is UnknownRecord {
     typeof value.user_id !== "string" ||
     value.user_id.length === 0 ||
     typeof value.username !== "string" ||
-    typeof value.timestamp !== "number"
+    typeof value.timestamp !== "number" ||
+    typeof value.community !== "string" ||
+    typeof value.root_community !== "string" ||
+    typeof value.thread_locked !== "boolean" ||
+    !isValidServedLens(value.lens)
+  ) {
+    return false;
+  }
+  if (
+    (typeof value.community !== "string" || value.community.length === 0) &&
+    typeof value.topic === "string" &&
+    value.topic.length > 0
   ) {
     return false;
   }
@@ -157,6 +229,11 @@ function isSafeServerPost(value: unknown): value is UnknownRecord {
   ) {
     return false;
   }
+  delete value.agent_edited;
+  delete value.agent_edits_meta;
+  delete value.appendices;
+  delete value.topic;
+  delete value.root_topic;
   return !isDeviceLocalUri(value.thumbnail);
 }
 
@@ -185,17 +262,6 @@ export function sanitizePersistedPostsData(data: unknown): unknown | undefined {
   };
 }
 
-function sanitizePersistedRewardSummaryData(data: unknown): unknown | undefined {
-  if (
-    !isRecord(data) ||
-    !Array.isArray(data.daily_quests) ||
-    !Array.isArray(data.pending_rewards)
-  ) {
-    return undefined;
-  }
-  return data;
-}
-
 function sanitizeAllowedQuery(
   query: unknown,
   namespace: string,
@@ -216,9 +282,7 @@ function sanitizeAllowedQuery(
     return undefined;
   }
 
-  const data = isLaunchCriticalFeedQuery(query.queryKey)
-    ? sanitizePersistedPostsData(query.state.data)
-    : sanitizePersistedRewardSummaryData(query.state.data);
+  const data = sanitizePersistedPostsData(query.state.data);
   if (data === undefined) return undefined;
   return { ...query, state: { ...query.state, data } };
 }
@@ -265,9 +329,6 @@ export function preparePersistedQueryClient(
     .map((query) => sanitizeAllowedQuery(query, namespace))
     .filter((query): query is UnknownRecord => query !== undefined)
     .sort((left, right) => {
-      const leftPriority = isPersistedRewardSummaryQuery(left.queryKey) ? 1 : 0;
-      const rightPriority = isPersistedRewardSummaryQuery(right.queryKey) ? 1 : 0;
-      if (leftPriority !== rightPriority) return rightPriority - leftPriority;
       const leftUpdated = isRecord(left.state) ? Number(left.state.dataUpdatedAt) : 0;
       const rightUpdated = isRecord(right.state) ? Number(right.state.dataUpdatedAt) : 0;
       return rightUpdated - leftUpdated;

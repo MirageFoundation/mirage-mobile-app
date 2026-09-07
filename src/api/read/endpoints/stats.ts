@@ -4,7 +4,6 @@ import type {
   CirculationStatsResponse,
   AppStatsResponse,
   LeaderboardResponse,
-  ReferralStatsResponse,
   PeersResponse,
   WelcomeStatsResponse,
 } from "../../types";
@@ -62,23 +61,6 @@ export async function getLeaderboard(
   params?: GetLeaderboardParams
 ): Promise<LeaderboardResponse> {
   return api.get<LeaderboardResponse>("/leaderboard", params);
-}
-
-// ============================================
-// Referral
-// ============================================
-
-export interface GetReferralStatsParams {
-  address: string;
-}
-
-/**
- * Get referral statistics and tree
- */
-export async function getReferralStats(
-  params: GetReferralStatsParams
-): Promise<ReferralStatsResponse> {
-  return api.get<ReferralStatsResponse>("/referral/stats", params);
 }
 
 // ============================================

@@ -212,9 +212,10 @@ This project uses Mixpanel for product analytics via `mixpanel-react-native`.
 | `comment_posted` | `use-post.ts` → `useComment` onSuccess |
 | `vote_cast` | `use-vote-handler.ts` → POW queue onSuccess |
 | `user_followed` | `use-follow.ts` → follow/toggle onSuccess (follows only) |
-| `topic_followed` | `use-follow.ts` → follow/toggle onSuccess (follows only) |
+| `community_joined` | `use-community-membership.ts` → join/toggle onSuccess (joins only) |
 
 Onboarding funnel: `onboarding_started` → `username_set` → `recovery_phrase_viewed` → `sign_up_completed`.
+`username_set` has no invite or referral properties.
 Creation funnel: `post_create_opened` → `post_created`.
 
 Super properties: `platform`, `app_version`, `tier`. User profile: `username`, `tier`. No PII, no wallet balances.

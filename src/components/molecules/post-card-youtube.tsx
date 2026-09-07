@@ -32,10 +32,8 @@ import {
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
 import {
-  MEDIA_HORIZONTAL_PADDING,
   MEDIA_LOADED_CACHE,
   MEDIA_MAX_HEIGHT,
-  SCREEN_WIDTH,
 } from "./post-card-media-constants";
 import {
   MediaBlurRevealOverlay,
@@ -45,6 +43,7 @@ import {
 import { postMediaStyles as styles } from "./post-card-media-styles";
 import {
   useMediaAspectRatio,
+  useMediaFrameWidth,
   useMediaLoadedState,
   useMediaPressTransition,
 } from "./post-card-media-shared";
@@ -145,6 +144,7 @@ export const PostCardYouTube = memo(
       () => setIsVideoLoading(false),
     );
     const { effectiveAspectRatio } = useMediaAspectRatio(media);
+    const { containerWidth, onMediaLayout } = useMediaFrameWidth();
     const { mediaFrameRef, runWithMediaTransition } = useMediaPressTransition({
       isPostDetail,
       postId,
@@ -348,7 +348,6 @@ export const PostCardYouTube = memo(
       [shouldUseAndroidYouTubeEmbed],
     );
 
-    const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
     const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
     const mediaWrapperStyle = exceedsMaxHeight
@@ -367,7 +366,7 @@ export const PostCardYouTube = memo(
 
     return (
       <View style={styles.mediaContainer}>
-        <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
+        <View ref={mediaFrameRef} onLayout={onMediaLayout} style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (
             <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
               <Image

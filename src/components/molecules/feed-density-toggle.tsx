@@ -31,7 +31,7 @@ type FeedDensityToggleProps = {
 
 export const FeedDensityToggle = ({ iconSize = 22 }: FeedDensityToggleProps) => {
   const { theme } = useUnistyles();
-  const [density, setDensity] = useFeedDensity();
+  const [density] = useFeedDensity();
 
   const triggerIcon: keyof typeof Ionicons.glyphMap =
     density === "compact" ? "list-outline" : "albums-outline";
@@ -71,6 +71,17 @@ export const FeedDensityToggle = ({ iconSize = 22 }: FeedDensityToggleProps) => 
           },
         }}
       >
+        <FeedDensityOptions />
+      </MenuOptions>
+    </Menu>
+  );
+};
+
+export function FeedDensityOptions() {
+  const { theme } = useUnistyles();
+  const [density, setDensity] = useFeedDensity();
+  return (
+    <>
         {OPTIONS.map((option, index) => {
           const isActive = option.value === density;
           return (
@@ -86,6 +97,7 @@ export const FeedDensityToggle = ({ iconSize = 22 }: FeedDensityToggleProps) => 
                 />
               )}
               <MenuOption
+                customStyles={{ optionTouchable: { accessibilityRole: "radio", accessibilityLabel: option.label, accessibilityState: { checked: isActive } } }}
                 onSelect={() => {
                   if (option.value === density) return;
                   triggerHaptic("light");
@@ -131,10 +143,9 @@ export const FeedDensityToggle = ({ iconSize = 22 }: FeedDensityToggleProps) => 
             </View>
           );
         })}
-      </MenuOptions>
-    </Menu>
+    </>
   );
-};
+}
 
 const styles = StyleSheet.create((theme) => ({
   trigger: {

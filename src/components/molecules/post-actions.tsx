@@ -5,6 +5,9 @@ import {
   UpvoteFilledIcon,
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
+import { ModerationButton } from "@/src/features/moderation/moderation-provider";
+import type { ModerationTarget } from "@/src/domain/communities/moderation-action";
+import { useToast } from "@/src/providers/toast-provider";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, useContentModerationStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,6 +27,7 @@ import {
   MenuTrigger,
 } from "react-native-popup-menu";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { fullscreenMediaColors, type PostActionsAppearance } from "./post-actions-appearance";
 
 // Vote colors
 const UPVOTE_COLOR = "#22C55E";
@@ -76,14 +80,16 @@ type PostActionsProps = {
   onBlockUser?: () => void;
   /** Callback when block post is pressed */
   onBlockPost?: () => void;
-  onBlockTopic?: () => void;
-  topic?: string;
+  onBlockCommunity?: () => void;
+  community?: string;
   onReport?: () => void;
   /** Post id used for local-only hide */
   postId?: string;
   /** Extra side effects after a local hide (e.g. leave post detail) */
   onHidePost?: () => void;
   hideCommentAction?: boolean;
+  appearance?: PostActionsAppearance;
+  moderationTarget?: ModerationTarget;
 };
 
 const SIZE_CONFIG = {
@@ -154,14 +160,22 @@ export const PostActions = memo(function PostActions({
   authorUsername,
   onBlockUser,
   onBlockPost,
-  onBlockTopic,
-  topic,
+  onBlockCommunity,
+  community,
   onReport,
   postId,
   onHidePost,
   hideCommentAction = false,
+  appearance = "default",
+  moderationTarget,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
+  const toast = useToast();
+  const locallyHidden = useContentModerationStore((s) => !!postId && s.hiddenPostIds.has(postId));
+  const fullscreenColors = appearance === "fullscreen" ? fullscreenMediaColors : undefined;
+  const pillAppearance = fullscreenColors && { backgroundColor: fullscreenColors.surface, borderColor: fullscreenColors.border };
+  const dividerAppearance = fullscreenColors && { backgroundColor: fullscreenColors.border };
+  const destructiveColor = fullscreenColors?.destructive ?? theme.colors.error[500];
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const {
@@ -266,9 +280,9 @@ export const PostActions = memo(function PostActions({
     onBlockPost?.();
   };
 
-  const handleBlockTopic = () => {
+  const handleBlockCommunity = () => {
     triggerHaptic("warning");
-    onBlockTopic?.();
+    onBlockCommunity?.();
   };
 
   const handleReport = () => {
@@ -277,9 +291,24 @@ export const PostActions = memo(function PostActions({
   };
 
   const handleHidePost = () => {
-    if (!postId) return;
+    if (disabled || !postId) return;
     triggerHaptic("medium");
+    if (locallyHidden) {
+      useContentModerationStore.getState().unhidePost(postId);
+      toast.success("Unhidden for me");
+      return;
+    }
+    const viewer = useAuthStore.getState().walletAddress;
     useContentModerationStore.getState().hidePost(postId);
+    toast.show("info", {
+      title: "Hidden for me - tap to undo",
+      description: "Only on this device for this wallet.",
+      action: () => {
+        if (useAuthStore.getState().walletAddress === viewer) {
+          useContentModerationStore.getState().unhidePost(postId);
+        }
+      },
+    });
     onHidePost?.();
   };
 
@@ -288,7 +317,7 @@ export const PostActions = memo(function PostActions({
     showAuthSheet();
   };
 
-  const defaultColor = theme.colors.text.default;
+  const defaultColor = fullscreenColors?.text ?? theme.colors.text.default;
 
   // Colors persist based on vote state
   // When upvoted: both arrow and count are red
@@ -301,7 +330,7 @@ export const PostActions = memo(function PostActions({
     <View style={[styles.container, style]}>
       <View style={[styles.actionGroup, { gap }]}>
         {/* Vote pill container */}
-        <View style={[styles.votePill, { height: pillHeight }]}>
+        <View style={[styles.votePill, pillAppearance, { height: pillHeight }]}>
         {/* Like button */}
         <Pressable
           onPress={handleLikePress}
@@ -323,7 +352,7 @@ export const PostActions = memo(function PostActions({
         </Pressable>
 
         {/* Divider */}
-        <View style={styles.voteDivider} />
+        <View style={[styles.voteDivider, dividerAppearance]} />
 
         {/* Vote count */}
         <Pressable
@@ -350,7 +379,7 @@ export const PostActions = memo(function PostActions({
         </Pressable>
 
         {/* Divider */}
-        <View style={styles.voteDivider} />
+        <View style={[styles.voteDivider, dividerAppearance]} />
 
         {/* Dislike button */}
         <Pressable
@@ -374,7 +403,7 @@ export const PostActions = memo(function PostActions({
         </View>
 
         {!hideCommentAction && (
-          <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: commentPillScale }] }]}>
+          <Animated.View style={[styles.votePill, pillAppearance, { height: pillHeight, transform: [{ scale: commentPillScale }] }]}>
             <Pressable
               onPress={() => {
                 if (disabled) return;
@@ -405,7 +434,8 @@ export const PostActions = memo(function PostActions({
 
       <View style={[styles.actionGroup, { gap }]}>
         {/* Share pill container — grouped with moderation/options */}
-        <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
+        <ModerationButton target={moderationTarget} color={destructiveColor} size={iconSize} disabled={disabled} />
+        <Animated.View style={[styles.votePill, pillAppearance, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
           <Pressable
             onPress={handleShare}
             {...makePressHandlers(sharePillScale)}
@@ -418,7 +448,7 @@ export const PostActions = memo(function PostActions({
 
         {/* Moderation menu (only for other users' posts) */}
         {!isOwnPost && !isLoggedIn && (
-          <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
+          <Animated.View style={[styles.votePill, pillAppearance, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
             <Pressable
               onPress={handleAuthRequiredModeration}
               {...makePressHandlers(banPillScale)}
@@ -429,7 +459,7 @@ export const PostActions = memo(function PostActions({
               <Ionicons
                 name="ban-outline"
                 size={iconSize}
-                color={theme.colors.error[500]}
+                color={destructiveColor}
               />
             </Pressable>
           </Animated.View>
@@ -437,6 +467,7 @@ export const PostActions = memo(function PostActions({
         {!isOwnPost && isLoggedIn && (
           <Menu>
           <MenuTrigger
+            disabled={disabled}
             customStyles={{
               triggerTouchable: {
                 hitSlop: { top: 6, bottom: 6, left: 6, right: 6 },
@@ -444,12 +475,12 @@ export const PostActions = memo(function PostActions({
               },
             }}
           >
-            <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
+            <Animated.View style={[styles.votePill, pillAppearance, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
              <View style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}>
                <Ionicons
                   name="ban-outline"
                  size={iconSize}
-                 color={theme.colors.error[500]}
+                 color={destructiveColor}
                />
               </View>
             </Animated.View>
@@ -457,7 +488,7 @@ export const PostActions = memo(function PostActions({
           <MenuOptions
             customStyles={{
               optionsContainer: {
-                backgroundColor: theme.colors.background.default,
+                backgroundColor: fullscreenColors?.surface ?? theme.colors.background.default,
                 borderRadius: theme.radius.lg,
                 minWidth: blockMenuMinWidth,
                 shadowColor: theme.colors.contrast.base,
@@ -466,7 +497,7 @@ export const PostActions = memo(function PostActions({
                 shadowRadius: 12,
                 elevation: 8,
                 borderWidth: 1,
-                borderColor: theme.colors.border.subtle,
+                borderColor: fullscreenColors?.border ?? theme.colors.border.subtle,
                 marginTop: 4,
                 paddingVertical: 8,
               },
@@ -478,15 +509,15 @@ export const PostActions = memo(function PostActions({
                   <Ionicons
                     name="eye-off-outline"
                     size={16}
-                    color={theme.colors.text.default}
+                    color={defaultColor}
                   />
                   <Text
                     size="lg"
                     weight="medium"
                     numberOfLines={1}
-                    style={{ color: theme.colors.text.default }}
+                    style={{ color: defaultColor }}
                   >
-                    Hide Post
+                    {locallyHidden ? "Unhide for me" : "Hide for me"}
                   </Text>
                 </View>
               </MenuOption>
@@ -496,13 +527,13 @@ export const PostActions = memo(function PostActions({
                 <Ionicons
                   name="ban-outline"
                   size={16}
-                  color={theme.colors.error[500]}
+                  color={destructiveColor}
                 />
                 <Text
                   size="lg"
                   weight="medium"
                   numberOfLines={1}
-                  style={{ color: theme.colors.error[500] }}
+                  style={{ color: destructiveColor }}
                 >
                   Block @{authorUsername}
                 </Text>
@@ -513,33 +544,33 @@ export const PostActions = memo(function PostActions({
                 <Ionicons
                   name="eye-off-outline"
                   size={16}
-                  color={theme.colors.error[500]}
+                  color={destructiveColor}
                 />
                 <Text
                   size="lg"
                   weight="medium"
                   numberOfLines={1}
-                  style={{ color: theme.colors.error[500] }}
+                  style={{ color: destructiveColor }}
                 >
                   Block Post
                 </Text>
               </View>
             </MenuOption>
-            {topic && onBlockTopic && (
-              <MenuOption onSelect={handleBlockTopic}>
+            {community && onBlockCommunity && (
+              <MenuOption onSelect={handleBlockCommunity}>
                 <View style={styles.menuOption}>
                   <Ionicons
                     name="pricetag-outline"
                     size={16}
-                    color={theme.colors.error[500]}
+                    color={destructiveColor}
                   />
                   <Text
                     size="lg"
                     weight="medium"
                     numberOfLines={1}
-                    style={{ color: theme.colors.error[500] }}
+                    style={{ color: destructiveColor }}
                   >
-                    Block #{topic}
+                    Block [{community}]
                   </Text>
                 </View>
               </MenuOption>
@@ -549,13 +580,13 @@ export const PostActions = memo(function PostActions({
                 <Ionicons
                   name="flag-outline"
                   size={16}
-                  color={theme.colors.error[500]}
+                  color={destructiveColor}
                 />
                 <Text
                   size="lg"
                   weight="medium"
                   numberOfLines={1}
-                  style={{ color: theme.colors.error[500] }}
+                  style={{ color: destructiveColor }}
                 >
                   Report Post
                 </Text>

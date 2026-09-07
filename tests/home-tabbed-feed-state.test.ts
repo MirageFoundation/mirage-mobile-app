@@ -30,8 +30,8 @@ describe("home tabbed feed state", () => {
   });
 
   test("prefetches only after crossing the current-page threshold", () => {
-    expect(shouldPrefetchNextPage(13, 20)).toBe(false);
-    expect(shouldPrefetchNextPage(14, 20)).toBe(true);
+    expect(shouldPrefetchNextPage(15, 20)).toBe(false);
+    expect(shouldPrefetchNextPage(16, 20)).toBe(true);
     expect(shouldPrefetchNextPage(5, 8)).toBe(false);
     expect(shouldPrefetchNextPage(6, 8)).toBe(true);
   });

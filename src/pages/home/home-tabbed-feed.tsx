@@ -105,12 +105,9 @@ export const HomeTabbedFeed = forwardRef<
   }, [controller.handleRefresh, progressViewOffset]);
   const listHeader = useMemo(
     () => (
-      <HomeFeedListHeader
-        extra={ListHeaderExtra}
-        showQuests={feedType === "home" && activeTabIndex === 0}
-      />
+      <HomeFeedListHeader extra={ListHeaderExtra} />
     ),
-    [ListHeaderExtra, activeTabIndex, feedType],
+    [ListHeaderExtra],
   );
   const listEmpty = useMemo(
     () => (

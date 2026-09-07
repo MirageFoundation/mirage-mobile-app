@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
 
 import type { ResolvedMedia } from "./post-card-utils";
+import { getIntrinsicMediaAspectRatio, validMediaAspectRatio } from "./media-gallery-sizing";
 
 export const SCREEN_WIDTH = Dimensions.get("window").width;
 export const MEDIA_MAX_HEIGHT = 450;
@@ -35,11 +36,8 @@ export function getMediaAspectRatio(media?: ResolvedMedia): number {
   const cached = media.uri
     ? MEDIA_ASPECT_RATIO_CACHE.get(media.uri)
     : undefined;
-  if (cached) return cached;
-  if (media.aspectRatio) return media.aspectRatio;
-  if (media.width && media.height) {
-    return media.width / media.height;
-  }
+  const ratio = getIntrinsicMediaAspectRatio(media) ?? validMediaAspectRatio(cached);
+  if (ratio) return ratio;
   if (media.type === "youtube") return 16 / 9;
   return 4 / 5;
 }

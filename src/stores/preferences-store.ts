@@ -5,7 +5,6 @@ import { mmkvStorage } from "./mmkv-storage";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
 import {
   HAS_SEEN_ADULT_PROMPT_DEFAULT,
-  normalizeReminderUserKey,
 } from "@/src/services/home-entry-prompt-orchestrator";
 import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
@@ -80,8 +79,6 @@ type PreferencesState = {
   adultContentEnabled: boolean;
   hasSeenAdultPrompt: boolean;
   adultPromptDismissedAt: number;
-  moderationReminderUnderstoodByUser: Record<string, boolean>;
-  moderationReminderSnoozedUntilByUser: Record<string, number>;
   selectedContentTypes: ContentType[];
   blurSensitiveMedia: boolean;
   ageVerified: boolean;
@@ -95,7 +92,7 @@ type PreferencesState = {
   autoCollapseThreshold: number | null; // -10, -5, -3, -1, 0, or null (never)
 
   // Sidebar
-  topicsBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
+  communitiesBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
   peopleBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
 
   // Sharing
@@ -108,21 +105,15 @@ type PreferencesState = {
  autoPlayVideos: boolean;
  videoAutoplayNetwork: VideoAutoplayNetwork;
 
- // Home Screen Cards
- hideInviteCard: boolean;
-  inviteCardExpanded: boolean;
-  questsCardExpanded: boolean;
-
 // Actions
  setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
   setFeedDensity: (density: FeedDensity) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
+  answerAdultPrompt: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
   setAdultPromptDismissedAt: (timestamp: number) => void;
-  dismissModerationReminder: (userId: string) => void;
-  snoozeModerationReminder: (userId: string, until: number) => void;
   setSelectedContentTypes: (types: ContentType[]) => void;
   toggleContentType: (type: ContentType) => void;
   setBlurSensitiveMedia: (blur: boolean) => void;
@@ -130,20 +121,17 @@ type PreferencesState = {
   setHideDownvotedPosts: (hide: boolean) => void;
   setAnalyticsConsent: (granted: boolean) => void;
   setAutoCollapseThreshold: (threshold: number | null) => void;
-  setTopicsBeforeShowMore: (count: number) => void;
+  setCommunitiesBeforeShowMore: (count: number) => void;
   setPeopleBeforeShowMore: (count: number) => void;
   setShareServer: (server: ShareServer) => void;
   setApiServer: (server: ApiServer) => void;
  setAutoPlayVideos: (autoPlay: boolean) => void;
  setVideoAutoplayNetwork: (network: VideoAutoplayNetwork) => void;
- setHideInviteCard: (hide: boolean) => void;
-  setInviteCardExpanded: (expanded: boolean) => void;
-  setQuestsCardExpanded: (expanded: boolean) => void;
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Feed
       feedType: "home",
       followingFeedType: "home",
@@ -156,8 +144,6 @@ export const usePreferencesStore = create<PreferencesState>()(
       adultContentEnabled: false,
       hasSeenAdultPrompt: HAS_SEEN_ADULT_PROMPT_DEFAULT,
       adultPromptDismissedAt: 0,
-      moderationReminderUnderstoodByUser: {},
-      moderationReminderSnoozedUntilByUser: {},
       selectedContentTypes: ["sensitive"],
       blurSensitiveMedia: false,
       ageVerified: false,
@@ -171,7 +157,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       autoCollapseThreshold: -5,
 
       // Sidebar
-      topicsBeforeShowMore: 5,
+      communitiesBeforeShowMore: 5,
       peopleBeforeShowMore: 5,
 
       // Sharing
@@ -184,16 +170,24 @@ export const usePreferencesStore = create<PreferencesState>()(
      autoPlayVideos: true,
      videoAutoplayNetwork: "always",
 
-     // Home Screen Cards
-     hideInviteCard: false,
-      inviteCardExpanded: true,
-      questsCardExpanded: true,
-
     // Actions
      setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
       setFeedDensity: (density) => set({ feedDensity: density }),
       setTheme: (theme) => set({ theme }),
+      answerAdultPrompt: (enabled) => {
+        if (get().hasSeenAdultPrompt) return;
+        set((state) => ({
+          adultContentEnabled: enabled,
+          selectedContentTypes: enabled
+            ? [...CONTENT_TAGS]
+            : state.selectedContentTypes.filter(
+                (type) => type !== "adult" && type !== "all" && type !== "none",
+              ),
+          hasSeenAdultPrompt: true,
+          adultPromptDismissedAt: Date.now(),
+        }));
+      },
       setAdultContent: (enabled) =>
         set((state) => {
           if (enabled) {
@@ -215,29 +209,6 @@ export const usePreferencesStore = create<PreferencesState>()(
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
       setAdultPromptDismissedAt: (timestamp) =>
         set({ adultPromptDismissedAt: timestamp }),
-      // User keys are lowercased so the dismiss/snooze state survives any
-      // address-casing differences across sessions (BUG-016).
-      dismissModerationReminder: (userId) =>
-        set((state) => {
-          const key = normalizeReminderUserKey(userId);
-          return {
-            moderationReminderUnderstoodByUser: {
-              ...state.moderationReminderUnderstoodByUser,
-              [key]: true,
-            },
-            moderationReminderSnoozedUntilByUser: {
-              ...state.moderationReminderSnoozedUntilByUser,
-              [key]: 0,
-            },
-          };
-        }),
-      snoozeModerationReminder: (userId, until) =>
-        set((state) => ({
-          moderationReminderSnoozedUntilByUser: {
-            ...state.moderationReminderSnoozedUntilByUser,
-            [normalizeReminderUserKey(userId)]: until,
-          },
-        })),
       setSelectedContentTypes: (types) => {
         const normalized = normalizeContentTypes(types);
         set({
@@ -280,20 +251,17 @@ export const usePreferencesStore = create<PreferencesState>()(
       },
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
-      setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
+      setCommunitiesBeforeShowMore: (count) => set({ communitiesBeforeShowMore: count }),
       setPeopleBeforeShowMore: (count) => set({ peopleBeforeShowMore: count }),
       setShareServer: (server) => set({ shareServer: server }),
      setApiServer: (server) => set({ apiServer: server }),
      setAutoPlayVideos: (autoPlay) => set({ autoPlayVideos: autoPlay }),
      setVideoAutoplayNetwork: (network) => set({ videoAutoplayNetwork: network }),
-     setHideInviteCard: (hide) => set({ hideInviteCard: hide }),
-      setInviteCardExpanded: (expanded) => set({ inviteCardExpanded: expanded }),
-      setQuestsCardExpanded: (expanded) => set({ questsCardExpanded: expanded }),
   }),
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 8,
+      version: 11,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -330,10 +298,11 @@ export const usePreferencesStore = create<PreferencesState>()(
 
         if (version < 5) {
           state.adultPromptDismissedAt = state.adultPromptDismissedAt ?? 0;
-          state.moderationReminderUnderstoodByUser =
-            state.moderationReminderUnderstoodByUser ?? {};
-          state.moderationReminderSnoozedUntilByUser =
-            state.moderationReminderSnoozedUntilByUser ?? {};
+          const legacyReminder = state as Record<string, unknown>;
+          legacyReminder.moderationReminderUnderstoodByUser =
+            legacyReminder.moderationReminderUnderstoodByUser ?? {};
+          legacyReminder.moderationReminderSnoozedUntilByUser =
+            legacyReminder.moderationReminderSnoozedUntilByUser ?? {};
         }
 
         if (version < 6) {
@@ -352,21 +321,50 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
 
         if (version < 8) {
-          // Lowercase moderation-reminder user keys so lookups are
-          // case-insensitive across sessions (BUG-016).
           const lowerKeys = <T,>(map?: Record<string, T>): Record<string, T> => {
             const out: Record<string, T> = {};
             for (const [key, value] of Object.entries(map ?? {})) {
-              out[normalizeReminderUserKey(key)] = value;
+              out[key.trim().toLowerCase()] = value;
             }
             return out;
           };
-          state.moderationReminderUnderstoodByUser = lowerKeys(
-            state.moderationReminderUnderstoodByUser,
+          (state as Record<string, unknown>).moderationReminderUnderstoodByUser = lowerKeys(
+            (state as { moderationReminderUnderstoodByUser?: Record<string, boolean> })
+              .moderationReminderUnderstoodByUser,
           );
-          state.moderationReminderSnoozedUntilByUser = lowerKeys(
-            state.moderationReminderSnoozedUntilByUser,
+          (state as Record<string, unknown>).moderationReminderSnoozedUntilByUser = lowerKeys(
+            (state as { moderationReminderSnoozedUntilByUser?: Record<string, number> })
+              .moderationReminderSnoozedUntilByUser,
           );
+        }
+
+        if (version < 9) {
+          const legacy = persistedState as {
+            communitiesBeforeShowMore?: number;
+            topicsBeforeShowMore?: number;
+          };
+          state.communitiesBeforeShowMore =
+            legacy.communitiesBeforeShowMore ?? legacy.topicsBeforeShowMore ?? 5;
+        }
+
+        if (version < 10) {
+          const legacy = persistedState as {
+            communitiesBeforeShowMore?: number;
+            topicsBeforeShowMore?: number;
+          };
+          if (state.communitiesBeforeShowMore == null) {
+            state.communitiesBeforeShowMore = legacy.topicsBeforeShowMore ?? 5;
+          }
+          delete (state as Record<string, unknown>).topicsBeforeShowMore;
+          delete (state as Record<string, unknown>).moderationReminderUnderstoodByUser;
+          delete (state as Record<string, unknown>).moderationReminderSnoozedUntilByUser;
+          delete (state as Record<string, unknown>).hideInviteCard;
+          delete (state as Record<string, unknown>).inviteCardExpanded;
+          delete (state as Record<string, unknown>).questsCardExpanded;
+        }
+
+        if (version < 11 && (state.adultPromptDismissedAt ?? 0) > 0) {
+          state.hasSeenAdultPrompt = true;
         }
 
         return state as PreferencesState;

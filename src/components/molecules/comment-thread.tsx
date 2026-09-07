@@ -195,7 +195,7 @@ export const CommentThread = ({
             comment.likes,
           )
         }
-        onReplyPress={() => onReplyPress?.(comment)}
+        onReplyPress={onReplyPress ? () => onReplyPress(comment) : undefined}
         onMorePress={() => onMorePress?.(comment)}
         onHighlightedLayout={onHighlightedLayout}
       />

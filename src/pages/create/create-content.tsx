@@ -71,7 +71,7 @@ export function CreateScreen() {
     trimEnd?: string;
     isMuted?: string;
     editPostId?: string;
-    editTopic?: string;
+    editCommunity?: string;
     editTitle?: string;
     editBody?: string;
     editTag?: string;

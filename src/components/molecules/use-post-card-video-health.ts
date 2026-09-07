@@ -1,462 +1,108 @@
-import * as Sentry from "@sentry/react-native";
-import type { VideoPlayer } from "expo-video";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { VideoPlayer } from "expo-video";
 import { AppState } from "react-native";
 import { isHostedStreamVideoUrl, type ResolvedMedia } from "./post-card-utils";
-import {
-  HLS_PROCESSING_POLL_INTERVAL_MS,
-  isHlsManifestReady,
-} from "@/src/utils/hls-manifest";
+import { HLS_PROCESSING_POLL_INTERVAL_MS, isHlsManifestReady } from "@/src/utils/hls-manifest";
 import { BoundedLruSet } from "@/src/utils/bounded-lru";
-
-/**
- * Failure handling for post-card native video: playback-error retries,
- * "video is still processing" detection with HLS-manifest polling, offline
- * and focus recovery. Extracted verbatim from the former monolithic
- * PostCardMedia component.
- */
+import { isVideoPlayerControlledElsewhere, type VideoPlayerLease } from "@/src/utils/video-player-handoff";
+import { useVideoSourceRecovery } from "./use-video-source-recovery";
+import { useVideoPlayerLeaseVersion } from "@/src/hooks/use-video-player-controller";
 
 export const HOSTED_VIDEO_READY_CACHE = new BoundedLruSet<string>(256);
 const COMPLETED_PROCESSING_POST_IDS = new BoundedLruSet<string>(256);
-const VIDEO_PROCESSING_POLL_MAX_MS = 5 * 60 * 1000;
+export const VIDEO_PROCESSING_POLL_MAX_MS = 5 * 60 * 1000;
 
-export type PostCardVideoHealthOptions = {
+export function usePostCardVideoHealth({
+  media, videoPlayer, adoptedLease, enabled, shouldPlay,
+  forceVideoProcessing, processingMediaUri, onVideoProcessingComplete, postId,
+}: {
   media: ResolvedMedia;
-  isPostDetail: boolean;
-  isVisible: boolean;
-  isFocused: boolean;
-  isConnected: boolean;
-  screenActive: boolean;
-  shouldBlurContent: boolean;
-  feedTappedToPlay: boolean;
-  mediaWasCached: boolean;
+  videoPlayer: VideoPlayer;
+  adoptedLease: VideoPlayerLease | null;
+  enabled: boolean;
+  shouldPlay: boolean;
   forceVideoProcessing: boolean;
   processingMediaUri?: string;
   onVideoProcessingComplete?: () => void;
   postId?: string;
-  videoPlayer: VideoPlayer;
-  stopNativeVideoPlayback: () => Promise<void>;
-  videoReadyForDisplay: boolean;
-  setVideoReadyForDisplay: (ready: boolean) => void;
-  setIsVideoLoading: (loading: boolean) => void;
-  setMediaLoaded: (loaded: boolean) => void;
-  clearLoadingFallback: () => void;
-  mediaRetryKey: number;
-  setMediaRetryKey: (update: (key: number) => number) => void;
-};
-
-export function usePostCardVideoHealth({
-  media,
-  isPostDetail,
-  isVisible,
-  isFocused,
-  isConnected,
-  screenActive,
-  shouldBlurContent,
-  feedTappedToPlay,
-  mediaWasCached,
-  forceVideoProcessing,
-  processingMediaUri,
-  onVideoProcessingComplete,
-  postId,
-  videoPlayer,
-  stopNativeVideoPlayback,
-  videoReadyForDisplay,
-  setVideoReadyForDisplay,
-  setIsVideoLoading,
-  setMediaLoaded,
-  clearLoadingFallback,
-  mediaRetryKey,
-  setMediaRetryKey,
-}: PostCardVideoHealthOptions) {
-  const resolvedMediaUri = media.uri;
-  const [videoError, setVideoError] = useState(false);
-  const [isVideoProcessing, setIsVideoProcessing] = useState(false);
-  const videoErrorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoErrorRetryCountRef = useRef(0);
-  const videoProcessingPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoProcessingStartedAtRef = useRef<number | null>(null);
-  const videoProcessingAttemptsRef = useRef(0);
-  const processingCompletionReportedRef = useRef(false);
-  const focusRecoveryRetryCountRef = useRef(0);
-  const wasOfflineRef = useRef(false);
-  const wasBackgroundedRef = useRef(false);
-
-  const processingTargetUri = processingMediaUri ?? resolvedMediaUri;
+}) {
+  const [processingState, setProcessingState] = useState<"polling" | "ready" | "expired">("polling");
+  const processing = forceVideoProcessing && processingState !== "ready";
+  const recovery = useVideoSourceRecovery({ uri: media.uri, player: videoPlayer, lease: adoptedLease, enabled, shouldPlay: shouldPlay && !processing, processing });
+  const { retry: retrySource, firstFrame } = recovery;
+  const leaseVersion = useVideoPlayerLeaseVersion();
+  const [pollEpisode, setPollEpisode] = useState(0);
+  const startedAt = useRef<number | null>(null);
+  const processingTargetUri = processingMediaUri ?? media.uri;
   const isHostedStreamVideo = isHostedStreamVideoUrl(processingTargetUri);
-  const isRedgifsVideo = resolvedMediaUri?.includes("redgifs.com");
-  const isRetryableVideo = isHostedStreamVideo || isRedgifsVideo;
-  const showVideoProcessing =
-    forceVideoProcessing || (isVideoProcessing && !!isRetryableVideo);
-  const shouldHideOnError = videoError && !isRetryableVideo && !isVideoProcessing;
-
-  useEffect(() => {
-    processingCompletionReportedRef.current = false;
-    focusRecoveryRetryCountRef.current = 0;
-  }, [resolvedMediaUri]);
-
+  const showVideoProcessing = forceVideoProcessing && processingState === "polling";
   const reportVideoProcessingComplete = useCallback(() => {
-    const completionKey = postId ?? processingTargetUri;
-    if (
-      processingCompletionReportedRef.current ||
-      !completionKey ||
-      COMPLETED_PROCESSING_POST_IDS.has(completionKey)
-    ) {
-      return;
-    }
-    processingCompletionReportedRef.current = true;
-    COMPLETED_PROCESSING_POST_IDS.add(completionKey);
+    const key = postId ?? processingTargetUri;
+    if (COMPLETED_PROCESSING_POST_IDS.has(key)) return;
+    COMPLETED_PROCESSING_POST_IDS.add(key);
     onVideoProcessingComplete?.();
   }, [onVideoProcessingComplete, postId, processingTargetUri]);
-
-  const getVideoDiagnostics = useCallback(() => ({
-    postId,
-    mediaType: media.type,
-    isPostDetail,
-    isVisible,
-    isFocused,
-    isConnected,
-    mediaRetryKey,
-    videoErrorRetryCount: videoErrorRetryCountRef.current,
-    processingAttempts: videoProcessingAttemptsRef.current,
-  }), [
-    postId,
-    media.type,
-    isPostDetail,
-    isVisible,
-    isFocused,
-    isConnected,
-    mediaRetryKey,
-  ]);
-
-  // Playback errors: retryable hosted-stream/redgifs failures flip into the
-  // processing flow; anything else hides the card.
-  const mediaSourceUri = resolvedMediaUri ?? "";
   useEffect(() => {
-    let subscription: { remove(): void };
-    try {
-      subscription = videoPlayer.addListener(
-        "statusChange",
-        ({ status, error }) => {
-        if (status !== "error" || !error) return;
-        if (__DEV__) {
-          console.log(
-            "[PostCardVideo] Video error:",
-            error.message,
-            "uri:",
-            mediaSourceUri,
-          );
-        }
-        const isHostedStream = isHostedStreamVideoUrl(mediaSourceUri);
-        const isRedgifs = mediaSourceUri?.includes("redgifs.com");
-        Sentry.captureMessage("Post video playback error", {
-          level: isHostedStream || isRedgifs ? "warning" : "error",
-          tags: {
-            feature: "post-media",
-            operation: "video-playback",
-            retryable: String(isHostedStream || isRedgifs),
-          },
-          extra: {
-            ...getVideoDiagnostics(),
-            uri: mediaSourceUri,
-            error: error.message,
-            isHostedStream,
-            isRedgifs,
-            retryCount: videoErrorRetryCountRef.current,
-          },
-        });
-        if (isHostedStream || isRedgifs) {
-          videoErrorRetryCountRef.current += 1;
-          if (videoErrorRetryRef.current) {
-            clearTimeout(videoErrorRetryRef.current);
-            videoErrorRetryRef.current = null;
-          }
-          if (!HOSTED_VIDEO_READY_CACHE.has(mediaSourceUri)) {
-            setIsVideoProcessing(true);
-          }
-          setVideoError(false);
-          setMediaLoaded(false);
-          setVideoReadyForDisplay(false);
-          void stopNativeVideoPlayback();
-        } else {
-          setVideoError(true);
-        }
-        setIsVideoLoading(false);
-        },
-      );
-    } catch (error) {
-      Sentry.addBreadcrumb({
-        category: "video-player",
-        message: "Skipped health listener on released video player",
-        level: "warning",
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
-      return;
-    }
-
-    return () => {
-      try {
-        subscription.remove();
-      } catch {
-        // The native shared player may already be released during recycling.
-      }
-      if (videoErrorRetryRef.current) {
-        clearTimeout(videoErrorRetryRef.current);
-        videoErrorRetryRef.current = null;
-      }
-    };
-  }, [
-    getVideoDiagnostics,
-    mediaSourceUri,
-    setIsVideoLoading,
-    setMediaLoaded,
-    setVideoReadyForDisplay,
-    stopNativeVideoPlayback,
-    videoPlayer,
-  ]);
-
-  // Coming back online after an offline failure: clear error state and force
-  // a source retry.
+    startedAt.current = null;
+    setProcessingState("polling");
+  }, [processingTargetUri]);
   useEffect(() => {
-    if (!isConnected) {
-      wasOfflineRef.current = true;
-      clearLoadingFallback();
-    } else if (wasOfflineRef.current && (isVideoProcessing || videoError)) {
-      wasOfflineRef.current = false;
-      setTimeout(() => {
-        setIsVideoProcessing(false);
-        setVideoError(false);
-        setIsVideoLoading(false);
-        setMediaRetryKey((k) => k + 1);
-      }, 500);
-    } else {
-      wasOfflineRef.current = false;
-    }
-  }, [videoError, isConnected, isVideoProcessing, clearLoadingFallback, setIsVideoLoading, setMediaRetryKey]);
-
-  // Returning from background/lock with a stuck processing/error state:
-  // retry. iOS screen lock often only reports `inactive` (BUG-009).
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState.match(/inactive|background/)) {
-        wasBackgroundedRef.current = true;
-      } else if (nextState === "active" && wasBackgroundedRef.current) {
-        wasBackgroundedRef.current = false;
-        if (!forceVideoProcessing && (isVideoProcessing || (videoError && isRetryableVideo))) {
-          setTimeout(() => {
-            setIsVideoProcessing(false);
-            setVideoError(false);
-            setIsVideoLoading(false);
-            setMediaRetryKey((k) => k + 1);
-          }, 500);
-        }
-      }
-    });
-    return () => sub.remove();
-  }, [
-    forceVideoProcessing,
-    isVideoProcessing,
-    videoError,
-    isRetryableVideo,
-    setIsVideoLoading,
-    setMediaRetryKey,
-  ]);
-
-  // A cached video that should be showing but never produced a frame after a
-  // focus change gets a couple of silent source retries.
-  const shouldAttemptVideoRecovery =
-    mediaWasCached &&
-    screenActive &&
-    isVisible &&
-    !shouldBlurContent &&
-    (isPostDetail || isFocused || feedTappedToPlay);
-
-  useEffect(() => {
-    if (!shouldAttemptVideoRecovery) return;
-    if (videoReadyForDisplay || forceVideoProcessing || isVideoProcessing || videoError) {
-      focusRecoveryRetryCountRef.current = 0;
-      return;
-    }
-    if (focusRecoveryRetryCountRef.current >= 2) return;
-
-    const timer = setTimeout(() => {
-      if (videoReadyForDisplay || forceVideoProcessing || isVideoProcessing || videoError) return;
-      focusRecoveryRetryCountRef.current += 1;
-      setMediaRetryKey((k) => k + 1);
-    }, 700);
-
-    return () => clearTimeout(timer);
-  }, [
-    shouldAttemptVideoRecovery,
-    videoReadyForDisplay,
-    forceVideoProcessing,
-    isVideoProcessing,
-    videoError,
-    setMediaRetryKey,
-  ]);
-
-  // While the backend is still transcoding, poll the HLS manifest until it
-  // becomes playable, then retry the source.
-  useEffect(() => {
-    if (!showVideoProcessing || !isHostedStreamVideo || !processingTargetUri) {
-      videoProcessingStartedAtRef.current = null;
-      if (videoProcessingPollTimeoutRef.current) {
-        clearTimeout(videoProcessingPollTimeoutRef.current);
-        videoProcessingPollTimeoutRef.current = null;
-      }
-      return;
-    }
-
-    if (!videoProcessingStartedAtRef.current) {
-      videoProcessingStartedAtRef.current = Date.now();
-      console.log("[PostCardVideo] Hosted video processing poll started", getVideoDiagnostics());
-      Sentry.addBreadcrumb({
-        category: "post-media",
-        message: "Hosted video processing poll started",
-        level: "info",
-        data: getVideoDiagnostics(),
-      });
-    }
-
+    if (!showVideoProcessing || !enabled) return;
+    if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
     let cancelled = false;
     const controller = new AbortController();
-
-    const poll = async () => {
-      try {
-        const ready = await isHlsManifestReady(processingTargetUri, controller.signal);
-        if (cancelled) return;
-
-        console.log("[PostCardVideo] Hosted video manifest poll result", {
-          ...getVideoDiagnostics(),
-          ready,
-        });
-
-        if (ready) {
-          Sentry.addBreadcrumb({
-            category: "post-media",
-            message: "Hosted video manifest became ready",
-            level: "info",
-            data: {
-              ...getVideoDiagnostics(),
-              attempts: videoProcessingAttemptsRef.current,
-              elapsedMs: videoProcessingStartedAtRef.current
-                ? Date.now() - videoProcessingStartedAtRef.current
-                : undefined,
-            },
-          });
-          videoProcessingStartedAtRef.current = null;
-          if (videoProcessingPollTimeoutRef.current) {
-            clearTimeout(videoProcessingPollTimeoutRef.current);
-            videoProcessingPollTimeoutRef.current = null;
-          }
-          setIsVideoProcessing(false);
-          setVideoError(false);
-          setIsVideoLoading(false);
-          setMediaLoaded(false);
-          setVideoReadyForDisplay(false);
-          videoProcessingAttemptsRef.current = 0;
-          HOSTED_VIDEO_READY_CACHE.add(processingTargetUri);
-          reportVideoProcessingComplete();
-          setMediaRetryKey((k) => k + 1);
-          return;
-        }
-      } catch (error) {
-        if (cancelled) return;
-        console.log("[PostCardVideo] Hosted video manifest poll failed", {
-          ...getVideoDiagnostics(),
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      if (cancelled) return;
-      if (
-        videoProcessingStartedAtRef.current &&
-        Date.now() - videoProcessingStartedAtRef.current >= VIDEO_PROCESSING_POLL_MAX_MS
-      ) {
-        Sentry.addBreadcrumb({
-          category: "post-media",
-          message: "Hosted video processing poll reached time limit",
-          level: "warning",
-          data: getVideoDiagnostics(),
-        });
-        return;
-      }
-      const nextDelay = Math.min(
-        HLS_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
-        10000,
-      );
-      videoProcessingAttemptsRef.current += 1;
-      videoProcessingPollTimeoutRef.current = setTimeout(() => {
-        void poll();
-      }, nextDelay);
-    };
-
-    void poll();
-
-    return () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (startedAt.current === null) startedAt.current = Date.now();
+    const expire = () => {
+      if (cancelled || AppState.currentState !== "active" || isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
       cancelled = true;
       controller.abort();
-      if (videoProcessingPollTimeoutRef.current) {
-        clearTimeout(videoProcessingPollTimeoutRef.current);
-        videoProcessingPollTimeoutRef.current = null;
+      if (timer) clearTimeout(timer);
+      setProcessingState("expired");
+    };
+    const deadline = setTimeout(expire, Math.max(0, VIDEO_PROCESSING_POLL_MAX_MS - (Date.now() - startedAt.current)));
+    const poll = async () => {
+      if (cancelled || AppState.currentState !== "active" || isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
+      const ready = isHostedStreamVideo && await isHlsManifestReady(processingTargetUri, controller.signal).catch(() => false);
+      if (cancelled || AppState.currentState !== "active" || isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
+      if (ready) {
+        clearTimeout(deadline);
+        HOSTED_VIDEO_READY_CACHE.add(processingTargetUri);
+        setProcessingState("ready");
+        reportVideoProcessingComplete();
+        retrySource();
+      } else {
+        timer = setTimeout(() => { void poll(); }, HLS_PROCESSING_POLL_INTERVAL_MS);
       }
     };
-  }, [
-    showVideoProcessing,
-    isHostedStreamVideo,
-    processingTargetUri,
-    getVideoDiagnostics,
-    reportVideoProcessingComplete,
-    setIsVideoLoading,
-    setMediaLoaded,
-    setMediaRetryKey,
-    setVideoReadyForDisplay,
-  ]);
-
-  // First-frame bookkeeping shared with the component's onFirstFrameRender.
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") { cancelled = true; controller.abort(); if (timer) clearTimeout(timer); clearTimeout(deadline); }
+      else setPollEpisode((value) => value + 1);
+    });
+    void poll();
+    return () => { cancelled = true; controller.abort(); clearTimeout(deadline); if (timer) clearTimeout(timer); sub.remove(); };
+  }, [adoptedLease, enabled, isHostedStreamVideo, leaseVersion, pollEpisode, processingTargetUri, retrySource, reportVideoProcessingComplete, showVideoProcessing, videoPlayer]);
+  const retry = useCallback(() => {
+    startedAt.current = null;
+    setProcessingState("polling");
+    setPollEpisode((value) => value + 1);
+    retrySource();
+  }, [retrySource]);
   const handleFirstFrameHealth = useCallback(() => {
-    if (resolvedMediaUri && isHostedStreamVideo && resolvedMediaUri === processingTargetUri) {
+    if (!firstFrame()) return false;
+    if (media.uri === processingTargetUri && isHostedStreamVideo) {
       HOSTED_VIDEO_READY_CACHE.add(processingTargetUri);
+      setProcessingState("ready");
+      if (forceVideoProcessing) reportVideoProcessingComplete();
     }
-    if (isVideoProcessing) {
-      setIsVideoProcessing(false);
-    }
-    if (
-      resolvedMediaUri === processingTargetUri &&
-      isHostedStreamVideo &&
-      onVideoProcessingComplete
-    ) {
-      reportVideoProcessingComplete();
-    }
-    videoProcessingStartedAtRef.current = null;
-    if (videoProcessingPollTimeoutRef.current) {
-      clearTimeout(videoProcessingPollTimeoutRef.current);
-      videoProcessingPollTimeoutRef.current = null;
-    }
-    focusRecoveryRetryCountRef.current = 0;
-    videoErrorRetryCountRef.current = 0;
-    if (videoErrorRetryRef.current) {
-      clearTimeout(videoErrorRetryRef.current);
-      videoErrorRetryRef.current = null;
-    }
-  }, [
-    isHostedStreamVideo,
-    isVideoProcessing,
-    onVideoProcessingComplete,
-    processingTargetUri,
-    reportVideoProcessingComplete,
-    resolvedMediaUri,
-  ]);
-
+    return true;
+  }, [forceVideoProcessing, isHostedStreamVideo, media.uri, processingTargetUri, firstFrame, reportVideoProcessingComplete]);
   return {
-    videoError,
-    isVideoProcessing,
-    isHostedStreamVideo,
-    isRedgifsVideo,
-    isRetryableVideo,
+    ...recovery,
+    retry,
+    isRedgifsVideo: media.uri.includes("redgifs.com"),
     showVideoProcessing,
-    shouldHideOnError,
-    reportVideoProcessingComplete,
+    videoError: processingState === "expired" || (!showVideoProcessing && recovery.phase === "terminal"),
     handleFirstFrameHealth,
   };
 }

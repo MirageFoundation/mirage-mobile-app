@@ -204,7 +204,7 @@ export interface PostParams extends BaseParams {
   /** "" for post, parent txhash for comment */
   target: string;
   /** Required for post, "" for comment */
-  topic: string;
+  community: string;
   /** Post title */
   title: string;
   /** Post content */
@@ -217,21 +217,21 @@ export interface PostParams extends BaseParams {
 
 /**
  * Build canonical base bytes for MsgPost
- * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag), 105 (media[])
+ * Tags: 100 (target), 101 (community), 102 (title), 103 (content), 104 (tag), 105 (media[]), 106 (protocol_version=1)
  */
 export function canonBasePost(params: PostParams): Uint8Array {
-  const base = concatBytes(
+  const mediaFields = (params.media ?? []).map((url) => encString(105, url));
+  return concatBytes(
     prefix("MsgPost"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.topic),
+    encString(101, params.community),
     encString(102, params.title),
     encString(103, params.content),
-    encString(104, params.tag)
+    encString(104, params.tag),
+    ...mediaFields,
+    encU64(106, 1)
   );
-  if (!params.media || params.media.length === 0) return base;
-  const mediaFields = params.media.map((url) => encString(105, url));
-  return concatBytes(base, ...mediaFields);
 }
 
 // --- MsgEdit ---
@@ -240,7 +240,7 @@ export interface EditParams extends BaseParams {
   /** "" for post edit, parent txhash for comment edit */
   target: string;
   /** Required for posts, "" for comments */
-  topic: string;
+  community: string;
   /** New title */
   title: string;
   /** New content */
@@ -255,14 +255,14 @@ export interface EditParams extends BaseParams {
 
 /**
  * Build canonical base bytes for MsgEdit
- * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag), 105 (override), 106 (media[])
+ * Tags: 100 (target), 101 (community), 102 (title), 103 (content), 104 (tag), 105 (override), 106 (media[])
  */
 export function canonBaseEdit(params: EditParams): Uint8Array {
   const base = concatBytes(
     prefix("MsgEdit"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.topic),
+    encString(101, params.community),
     encString(102, params.title),
     encString(103, params.content),
     encString(104, params.tag),
@@ -321,33 +321,6 @@ export function canonBaseDelete(params: DeleteParams): Uint8Array {
   );
 }
 
-// --- MsgEnableAgent / MsgDisableAgent ---
-
-export interface EnableAgentParams extends BaseParams {
-  /** Your address */
-  target: string;
-  /** Agent address to enable/disable */
-  agent: string;
-}
-
-export function canonBaseEnableAgent(params: EnableAgentParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgEnableAgent"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.agent)
-  );
-}
-
-export function canonBaseDisableAgent(params: EnableAgentParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgDisableAgent"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.agent)
-  );
-}
-
 // --- MsgFollowUser / MsgUnfollowUser ---
 
 export interface FollowUserParams extends BaseParams {
@@ -372,33 +345,6 @@ export function canonBaseUnfollowUser(params: FollowUserParams): Uint8Array {
     encodeHeader(params),
     encString(100, params.target),
     encString(101, params.user)
-  );
-}
-
-// --- MsgFollowTopic / MsgUnfollowTopic ---
-
-export interface FollowTopicParams extends BaseParams {
-  /** Your address */
-  target: string;
-  /** Topic name (lowercase) */
-  topic: string;
-}
-
-export function canonBaseFollowTopic(params: FollowTopicParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgFollowTopic"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.topic)
-  );
-}
-
-export function canonBaseUnfollowTopic(params: FollowTopicParams): Uint8Array {
-  return concatBytes(
-    prefix("MsgUnfollowTopic"),
-    encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.topic)
   );
 }
 
@@ -448,28 +394,333 @@ export function canonBaseUnblockUser(params: BlockUserParams): Uint8Array {
   );
 }
 
-// --- MsgBlockTopic / MsgUnblockTopic ---
+// --- MsgJoinCommunity / MsgLeaveCommunity ---
 
-export interface BlockTopicParams extends BaseParams {
-  target: string;
-  topic: string;
+export interface JoinCommunityParams extends BaseParams {
+  community: string;
+  mode?: number;
+  pinnedTeamId?: number;
 }
 
-export function canonBaseBlockTopic(params: BlockTopicParams): Uint8Array {
+export function canonBaseJoinCommunity(params: JoinCommunityParams): Uint8Array {
   return concatBytes(
-    prefix("MsgBlockTopic"),
+    prefix("MsgJoinCommunity"),
     encodeHeader(params),
-    encString(100, params.target),
-    encString(101, params.topic)
+    encString(100, params.community),
+    encU64(101, params.mode ?? 0),
+    encU64(102, params.pinnedTeamId ?? 0)
   );
 }
 
-export function canonBaseUnblockTopic(params: BlockTopicParams): Uint8Array {
+export interface LeaveCommunityParams extends BaseParams {
+  community: string;
+}
+
+export function canonBaseLeaveCommunity(params: LeaveCommunityParams): Uint8Array {
   return concatBytes(
-    prefix("MsgUnblockTopic"),
+    prefix("MsgLeaveCommunity"),
+    encodeHeader(params),
+    encString(100, params.community)
+  );
+}
+
+// --- MsgBlockCommunity / MsgUnblockCommunity ---
+
+export interface BlockCommunityParams extends BaseParams {
+  /** Signing user's lowercased Mirage address */
+  target: string;
+  community: string;
+}
+
+export function canonBaseBlockCommunity(params: BlockCommunityParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgBlockCommunity"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.topic)
+    encString(101, params.community)
+  );
+}
+
+export function canonBaseUnblockCommunity(params: BlockCommunityParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgUnblockCommunity"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.community)
+  );
+}
+
+// --- MsgSetCurationPreference ---
+
+export type SetCurationPreferenceParams = JoinCommunityParams;
+
+export function canonBaseSetCommunityPreference(
+  params: SetCurationPreferenceParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationPreference"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.mode ?? 0),
+    encU64(102, params.pinnedTeamId ?? 0)
+  );
+}
+
+export interface CreateCurationTeamParams extends BaseParams {
+  community: string;
+  name: string;
+  description: string;
+}
+
+export function canonBaseCreateCurationTeam(params: CreateCurationTeamParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgCreateCurationTeam"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encString(101, params.name),
+    encString(102, params.description)
+  );
+}
+
+export interface SetCurationTeamProfileParams extends BaseParams {
+  community: string;
+  team_id: number;
+  name: string;
+  description: string;
+}
+
+export function canonBaseSetCurationTeamProfile(
+  params: SetCurationTeamProfileParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationTeamProfile"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.name),
+    encString(103, params.description)
+  );
+}
+
+export interface InviteCuratorParams extends BaseParams {
+  community: string;
+  team_id: number;
+  target: string;
+}
+
+export function canonBaseInviteCurator(params: InviteCuratorParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgInviteCurator"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target)
+  );
+}
+
+export function canonBaseRevokeCuratorInvite(params: InviteCuratorParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgRevokeCuratorInvite"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target)
+  );
+}
+
+export interface CurationTeamIdParams extends BaseParams {
+  community: string;
+  team_id: number;
+}
+
+export function canonBaseAcceptCuratorInvite(params: CurationTeamIdParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgAcceptCuratorInvite"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id)
+  );
+}
+
+export function canonBaseDeclineCuratorInvite(params: CurationTeamIdParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgDeclineCuratorInvite"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id)
+  );
+}
+
+export function canonBaseLeaveCurationTeam(params: CurationTeamIdParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgLeaveCurationTeam"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id)
+  );
+}
+
+export function canonBaseRemoveCurator(params: InviteCuratorParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgRemoveCurator"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target)
+  );
+}
+
+export interface TransferCurationTeamParams extends BaseParams {
+  community: string;
+  team_id: number;
+  new_owner: string;
+}
+
+export function canonBaseTransferCurationTeam(
+  params: TransferCurationTeamParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgTransferCurationTeam"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.new_owner)
+  );
+}
+
+export function canonBaseDeleteCurationTeam(params: CurationTeamIdParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgDeleteCurationTeam"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id)
+  );
+}
+
+export interface SetCurationPostHiddenParams extends BaseParams {
+  community: string;
+  team_id: number;
+  target: string;
+  hidden: boolean;
+}
+
+export function canonBaseSetCurationPostHidden(
+  params: SetCurationPostHiddenParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationPostHidden"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target),
+    encU64(103, params.hidden ? 1 : 0)
+  );
+}
+
+export function canonBaseSetCurationUserHidden(
+  params: SetCurationPostHiddenParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationUserHidden"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target),
+    encU64(103, params.hidden ? 1 : 0)
+  );
+}
+
+export interface SetCurationThreadLockedParams extends BaseParams {
+  community: string;
+  team_id: number;
+  root_hash: string;
+  locked: boolean;
+}
+
+export function canonBaseSetCurationThreadLocked(
+  params: SetCurationThreadLockedParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationThreadLocked"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.root_hash),
+    encU64(103, params.locked ? 1 : 0)
+  );
+}
+
+export interface SetCurationSubscriberOnlyParams extends BaseParams {
+  community: string;
+  team_id: number;
+  enabled: boolean;
+}
+
+export function canonBaseSetCurationSubscriberOnly(
+  params: SetCurationSubscriberOnlyParams,
+): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationSubscriberOnly"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encU64(102, params.enabled ? 1 : 0)
+  );
+}
+
+export interface SetCurationTagParams extends BaseParams {
+  community: string;
+  team_id: number;
+  tag: string;
+}
+
+export function canonBaseSetCurationTag(params: SetCurationTagParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationTag"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.tag)
+  );
+}
+
+export interface SetCurationPostTagParams extends BaseParams {
+  community: string;
+  team_id: number;
+  target: string;
+  tag: string;
+  clear: boolean;
+}
+
+export function canonBaseSetCurationPostTag(params: SetCurationPostTagParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetCurationPostTag"),
+    encodeHeader(params),
+    encString(100, params.community),
+    encU64(101, params.team_id),
+    encString(102, params.target),
+    encString(103, params.tag),
+    encU64(104, params.clear ? 1 : 0)
+  );
+}
+
+// --- MsgClaimCreatorRewards ---
+
+export interface ClaimCreatorRewardsParams extends BaseParams {
+  /** Deduped ascending positive epoch ids. Repeated tag 100; no target. */
+  epoch_ids: number[];
+}
+
+/**
+ * Build canonical base bytes for MsgClaimCreatorRewards.
+ * Payload: repeated epoch_ids at tag 100 after the base envelope. No target.
+ */
+export function canonBaseClaimCreatorRewards(params: ClaimCreatorRewardsParams): Uint8Array {
+  const epochFields = params.epoch_ids.map((epochId) => encU64(100, epochId));
+  return concatBytes(
+    prefix("MsgClaimCreatorRewards"),
+    encodeHeader(params),
+    ...epochFields,
   );
 }
 
@@ -494,25 +745,27 @@ export function canonBaseSendTokens(params: SendTokensParams): Uint8Array {
   );
 }
 
-// --- MsgSubscribe (self-subscribe, no PoW) ---
+// --- MsgSubscribe (self-subscribe or gift, no PoW) ---
 
-export interface UpgradeLevelParams {
+export interface SubscribeParams {
   pubkey33: Uint8Array;
   lastBlockHashBytes: Uint8Array;
   timestampMs: number;
   envelopeNonce: bigint;
-  /** Target level: 1 (Subscriber) or 10 (Agent) */
+  /** Purchasable level is 1 (Subscriber) */
   level: number;
+  /** Gift recipient; omit or empty for self-subscribe */
+  target?: string;
+  /** Explicit period count at tag 102 */
+  periodCount?: number;
 }
 
 /**
- * Build canonical base bytes for self-subscription.
- *
- * The protocol renamed MsgUpgradeLevel to MsgSubscribe. Keep the exported
- * function name for existing mobile call sites, but sign the current message.
+ * Build canonical base bytes for MsgSubscribe.
+ * Tags: 100 (level), optional 101 (target), 102 (periodCount when nonzero).
  * NOTE: difficulty is always 0 for paid subscription operations.
  */
-export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
+export function canonBaseSubscribe(params: SubscribeParams): Uint8Array {
   const baseParams: BaseParams = {
     pubkey33: params.pubkey33,
     lastBlockHashBytes: params.lastBlockHashBytes,
@@ -521,12 +774,22 @@ export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
     envelopeNonce: params.envelopeNonce,
   };
 
-  return concatBytes(
+  const fields: Uint8Array[] = [
     prefix("MsgSubscribe"),
     encodeHeader(baseParams),
-    encU64(100, params.level)
-  );
+    encU64(100, params.level),
+  ];
+  if (params.target) {
+    fields.push(encString(101, params.target));
+  }
+  if (params.periodCount) {
+    fields.push(encU64(102, params.periodCount));
+  }
+  return concatBytes(...fields);
 }
+
+export type UpgradeLevelParams = SubscribeParams;
+export const canonBaseUpgradeLevel = canonBaseSubscribe;
 
 // --- MsgSetAutoRenewal (No PoW) ---
 
@@ -623,76 +886,11 @@ export function canonBaseSetBiography(params: SetBiographyParams): Uint8Array {
   );
 }
 
-// --- MsgSetAgents ---
-
-export interface SetAgentsParams extends BaseParams {
+export interface GiftSubscriptionParams extends SubscribeParams {
   target: string;
-  agents: string[];
-}
-
-export function canonBaseSetAgents(params: SetAgentsParams): Uint8Array {
-  const base = concatBytes(
-    prefix("MsgSetAgents"),
-    encodeHeader(params),
-    encString(100, params.target)
-  );
-  if (!params.agents || params.agents.length === 0) return base;
-  const agentFields = params.agents.map((addr) => encString(101, addr));
-  return concatBytes(base, ...agentFields);
-}
-
-// --- MsgAnnotate (Agent-only) ---
-
-export interface AnnotateParams extends BaseParams {
-  topic: string;
-  title: string;
-  content: string;
-  tag: string;
-  override: string;
-  media?: string[];
-  appendix: string;
-}
-
-export function canonBaseAnnotate(params: AnnotateParams): Uint8Array {
-  const base = concatBytes(
-    prefix("MsgAnnotate"),
-    encodeHeader(params),
-    encString(100, params.appendix),
-    encString(101, params.topic),
-    encString(102, params.title),
-    encString(103, params.content),
-    encString(104, params.tag),
-    encString(105, params.override)
-  );
-  const mediaFields = (params.media && params.media.length > 0)
-    ? params.media.map((url) => encString(106, url))
-    : [];
-  return concatBytes(base, ...mediaFields);
-}
-
-// --- MsgSubscribe / Gift Subscription (No PoW) ---
-
-export interface GiftSubscriptionParams {
-  pubkey33: Uint8Array;
-  lastBlockHashBytes: Uint8Array;
-  timestampMs: number;
-  envelopeNonce: bigint;
-  level: number;
-  target: string;
+  periodCount: number;
 }
 
 export function canonBaseGiftSubscription(params: GiftSubscriptionParams): Uint8Array {
-  const baseParams: BaseParams = {
-    pubkey33: params.pubkey33,
-    lastBlockHashBytes: params.lastBlockHashBytes,
-    difficulty: 0,
-    timestampMs: params.timestampMs,
-    envelopeNonce: params.envelopeNonce,
-  };
-  return concatBytes(
-    prefix("MsgSubscribe"),
-    encodeHeader(baseParams),
-    encU64(100, params.level),
-    encString(101, params.target)
-  );
+  return canonBaseSubscribe(params);
 }

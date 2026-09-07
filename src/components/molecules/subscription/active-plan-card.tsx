@@ -20,13 +20,15 @@ type ActivePlanCardProps = {
 const PLAN_COLORS: Record<string, string> = {
   Free: "#6B7280",
   Subscriber: "#F59E0B",
-  Agent: "#EF4444",
+  Admin: "#EF4444",
+  Unknown: "#6B7280",
 };
 
 const PLAN_ICONS: Record<string, string> = {
   Free: "person-outline",
   Subscriber: "shield-checkmark-outline",
-  Agent: "diamond-outline",
+  Admin: "shield-outline",
+  Unknown: "help-circle-outline",
 };
 
 const BALANCE_INFO =
@@ -108,7 +110,7 @@ export const ActivePlanCard = memo(function ActivePlanCard({
   const { theme } = useUnistyles();
   const planColor = PLAN_COLORS[planTitle] || PLAN_COLORS.Free;
   const planIcon = PLAN_ICONS[planTitle] || PLAN_ICONS.Free;
-  const isFree = planTitle === "Free";
+  const isFree = planTitle === "Free" || planTitle === "Unknown";
   const renewalTime = subscriptionExpiry ? formatTimeUntil(subscriptionExpiry) : null;
 
   const [showBalanceInfo, setShowBalanceInfo] = useState(false);

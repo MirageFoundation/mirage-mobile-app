@@ -1,8 +1,9 @@
-import { AntDesign, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Text } from "@/src/components/ui/primitives";
+import { SwipeBackGuard } from "@/src/components/ui/swipe-back-guard";
 
 import { styles } from "./post-detail-styles";
 
@@ -11,7 +12,7 @@ type PostDetailHeaderProps = {
   isLoadingTopic?: boolean;
   insetsTop: number;
   onBack: () => void;
-  onTopicPress?: () => void;
+  onCommunityPress?: () => void;
   onOptionsPress?: () => void;
 };
 
@@ -20,7 +21,7 @@ export function PostDetailHeader({
   isLoadingTopic = false,
   insetsTop,
   onBack,
-  onTopicPress,
+  onCommunityPress,
   onOptionsPress,
 }: PostDetailHeaderProps) {
   const { theme } = useUnistyles();
@@ -28,6 +29,7 @@ export function PostDetailHeader({
   return (
     <View style={{ paddingTop: insetsTop }}>
       <View style={styles.header}>
+        <SwipeBackGuard nativeChild>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close post"
@@ -35,24 +37,28 @@ export function PostDetailHeader({
           style={styles.headerButton}
           hitSlop={8}
         >
-          <AntDesign name="close" size={22} color={theme.colors.text.default} />
+          <Ionicons name="arrow-back" size={22} color={theme.colors.text.default} />
         </Pressable>
+        </SwipeBackGuard>
         <View style={styles.headerCenter}>
           {isLoadingTopic && !topic ? (
             <View style={styles.headerTopicSkeleton} />
           ) : topic ? (
-            <Pressable onPress={onTopicPress} disabled={!onTopicPress}>
+            <SwipeBackGuard nativeChild>
+            <Pressable onPress={onCommunityPress} disabled={!onCommunityPress}>
               <Text
                 size="lg"
                 weight="semibold"
                 numberOfLines={1}
                 style={{ color: theme.colors.text.default }}
               >
-                {`#${topic}`}
+                {`[${topic}]`}
               </Text>
             </Pressable>
+            </SwipeBackGuard>
           ) : null}
         </View>
+        <SwipeBackGuard nativeChild>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open post options"
@@ -70,6 +76,7 @@ export function PostDetailHeader({
             />
           ) : null}
         </Pressable>
+        </SwipeBackGuard>
       </View>
       <View style={styles.headerDivider} />
     </View>

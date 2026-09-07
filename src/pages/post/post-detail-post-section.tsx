@@ -1,19 +1,21 @@
 import { useCallback, useState, type RefObject } from "react";
 import { LayoutChangeEvent, Pressable, View } from "react-native";
-import Animated from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
 
 import { MediaPostDetailSkeleton, PostCard, type Post } from "@/src/components/molecules";
 import { Text } from "@/src/components/ui/primitives";
-import { isTopicFollowed } from "@/src/domain/topics";
+import { isCommunityJoined } from "@/src/domain/communities";
+import { getThreadReplyPolicy } from "@/src/domain/content";
 import { useFollowHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { postMediaRoute } from "@/src/navigation/post-media-route";
 import {
   POST_DETAIL_HOME_ROUTE,
   resolvePostDetailExitAction,
 } from "@/src/navigation/post-detail-route-policy";
-import { getShareBaseUrl } from "@/src/stores";
+import { getShareBaseUrl, usePreferencesStore } from "@/src/stores";
+import { shouldAutoplayVideo, useNetworkType } from "@/src/hooks/use-network-state";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePostDetailActionStateStore } from "@/src/stores/post-detail-action-state-store";
 import type { PostDetailActionSheetsRef } from "./post-detail-action-sheets";
@@ -24,7 +26,7 @@ type PostDetailPostSectionProps = {
   contentInitiallyRevealed: boolean;
   currentUserId?: string;
   focusedCommentId?: string | null;
-  followedTopics: string[];
+  joinedCommunities: string[];
   focusedCommentNotFound?: boolean;
   hasFocusedRecentContext: boolean;
   hasFullThreadBeyondFocus: boolean;
@@ -32,9 +34,9 @@ type PostDetailPostSectionProps = {
   isVideoVisible: boolean;
   loadFocusedContext: (depth: number) => Promise<void>;
   onLayout: (event: LayoutChangeEvent) => void;
+  onMediaLayout: (event: LayoutChangeEvent) => void;
   onShowFullThread: () => void;
   post: Post | null;
-  postEnteringStyle: any;
   recentContextDone: boolean;
   screenActive: boolean;
   shareServer: string;
@@ -47,16 +49,16 @@ export function PostDetailPostSection({
   currentUserId,
   focusedCommentId,
   focusedCommentNotFound = false,
-  followedTopics,
+  joinedCommunities,
   hasFocusedRecentContext,
   hasFullThreadBeyondFocus,
   id,
   isVideoVisible,
   loadFocusedContext,
   onLayout,
+  onMediaLayout,
   onShowFullThread,
   post,
-  postEnteringStyle,
   recentContextDone,
   screenActive,
   shareServer,
@@ -64,14 +66,17 @@ export function PostDetailPostSection({
 }: PostDetailPostSectionProps) {
   const { theme } = useUnistyles();
   const router = useRouter();
+  const autoPlayVideos = usePreferencesStore((state) => state.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((state) => state.videoAutoplayNetwork);
+  const networkType = useNetworkType();
   const [revealedContent, setRevealedContent] = useState(contentInitiallyRevealed);
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
   const postFollowOverride = usePostDetailActionStateStore((state) =>
     post?.id ? state.postFollowOverrides[post.id] : undefined,
   );
-  const topicFollowOverride = usePostDetailActionStateStore((state) =>
-    post?.id ? state.topicFollowOverrides[post.id] : undefined,
+  const communityJoinOverride = usePostDetailActionStateStore((state) =>
+    post?.id ? state.communityJoinOverrides[post.id] : undefined,
   );
   const setPostFollowOverride = usePostDetailActionStateStore(
     (state) => state.setPostFollowOverride,
@@ -113,7 +118,7 @@ export function PostDetailPostSection({
 
   const {
     handleFollowUser: handleFollowUserViaQueue,
-    handleFollowTopic: handleFollowTopicViaQueue,
+    handleToggleCommunityMembership: handleToggleCommunityMembershipViaQueue,
   } = useFollowHandler({
     onOptimisticFollowUser: (_userId, isFollowing) => {
       if (post?.id) setPostFollowOverride(post.id, isFollowing);
@@ -121,10 +126,10 @@ export function PostDetailPostSection({
     onRollbackFollowUser: () => {
       if (post?.id) clearPostFollowOverride(post.id);
     },
-    onOptimisticFollowTopic: (_topic, isFollowing) => {
+    onOptimisticJoinCommunity: (_topic, isFollowing) => {
       if (post?.id) setTopicFollowOverride(post.id, isFollowing);
     },
-    onRollbackFollowTopic: () => {
+    onRollbackJoinCommunity: () => {
       if (post?.id) clearTopicFollowOverride(post.id);
     },
   });
@@ -138,10 +143,10 @@ export function PostDetailPostSection({
     router.push(`/user/${post.author.id}`);
   }, [post, router]);
 
-  const handleTopicPress = useCallback(() => {
-    if (!post?.topic) return;
-    router.push(`/topic/${encodeURIComponent(post.topic)}`);
-  }, [post?.topic, router]);
+  const handleCommunityPress = useCallback(() => {
+    if (!post?.community) return;
+    router.push(`/c/${encodeURIComponent(post.community)}` as never);
+  }, [post?.community, router]);
 
   const handleLikePost = useCallback(() => {
     if (!post) return;
@@ -172,13 +177,13 @@ export function PostDetailPostSection({
     );
   }, [handleFollowUserViaQueue, post, postFollowOverride]);
 
-  const handleFollowTopic = useCallback(() => {
-    if (!post?.topic) return;
-    handleFollowTopicViaQueue(
-      post.topic,
-      topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic),
+  const handleToggleCommunityMembership = useCallback(() => {
+    if (!post?.community) return;
+    handleToggleCommunityMembershipViaQueue(
+      post.community,
+      communityJoinOverride ?? isCommunityJoined(joinedCommunities, post.community),
     );
-  }, [followedTopics, handleFollowTopicViaQueue, post?.topic, topicFollowOverride]);
+  }, [joinedCommunities, handleToggleCommunityMembershipViaQueue, post?.community, communityJoinOverride]);
 
   const handleHidePost = useCallback(() => {
     if (resolvePostDetailExitAction(router.canGoBack()) === "back") {
@@ -197,21 +202,23 @@ export function PostDetailPostSection({
   }
 
   return (
-    <Animated.View style={postEnteringStyle} onLayout={onLayout}>
+    <View onLayout={onLayout}>
       <PostCard
         post={post}
         isOwnPost={currentUserId === post.author.id}
         isVisible={isVideoVisible}
-        isTopicFollowed={
-          topicFollowOverride ?? isTopicFollowed(followedTopics, post.topic)
+        isCommunityJoined={
+          communityJoinOverride ?? isCommunityJoined(joinedCommunities, post.community)
         }
         screenActive={screenActive}
+        allowAutoplay={shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType)}
         onAuthorPress={handleAuthorPress}
-        onTopicPress={handleTopicPress}
+        onMediaPress={(index) => router.push(postMediaRoute(post.id, index, videoSyncScope, revealedContent))}
+        onCommunityPress={handleCommunityPress}
         onLikePress={handleLikePost}
         onDislikePress={handleDislikePost}
         onFollowUser={handleFollowPost}
-        onFollowTopic={handleFollowTopic}
+        onToggleCommunityMembership={handleToggleCommunityMembership}
         onMorePress={() => actionSheetsRef.current?.presentPostOptions()}
         onBlockUser={() => actionSheetsRef.current?.requestBlockPostAuthor()}
         onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
@@ -221,7 +228,9 @@ export function PostDetailPostSection({
         contentRevealed={revealedContent}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${id}`}
         showUrlCard={false}
-        hideCommentAction
+        hideCommentAction={!getThreadReplyPolicy({ protocol_version: post.protocolVersion, thread_locked: post.threadLocked }).canReply}
+        onCommentPress={() => usePostDetailActionStateStore.getState().requestComments(post.id)}
+        onMediaLayout={onMediaLayout}
         showMoreButton
         isPostDetail
         videoSyncScope={videoSyncScope}
@@ -314,6 +323,6 @@ export function PostDetailPostSection({
           </View>
         </View>
       ) : null}
-    </Animated.View>
+    </View>
   );
 }

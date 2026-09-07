@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import { useQuery, useInfiniteQuery, useIsRestoring } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { getInfinitePostsQueryPolicy } from "../infinite-posts-policy";
+import { getBackgroundOverlapThroughPage } from "../../cache/ready-feed-update";
 import {
   FEED_MAX_PAGES,
   FEED_QUERY_GC_TIME,
@@ -16,9 +17,11 @@ import {
   type GetPostsParams,
   type GetUserPostsParams,
 } from "../endpoints/posts";
+import { withSessionLensPicks } from "../request-params";
 import type { PostsResponse } from "../../types";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, useEncodedLensPicks } from "@/src/stores";
 import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
+import { shouldRetrySignedContentRead } from "../signed-content-read";
 
 /**
  * Get posts with pagination
@@ -27,18 +30,22 @@ import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/store
  * staleTime: 1 minute
  */
 export function usePosts(params?: Omit<GetPostsParams, "address">) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
+  const lensPicks = useEncodedLensPicks(walletAddress);
 
-  const fullParams: GetPostsParams = {
+  const fullParams: GetPostsParams = withSessionLensPicks({
     ...params,
     address: walletAddress ?? undefined,
-  };
+    lens_picks: params?.lens_picks ?? (params?.community ? undefined : lensPicks),
+  }, walletAddress);
 
   return useQuery({
     queryKey: queryKeys.posts(fullParams),
-    queryFn: () => getPosts(fullParams),
+    queryFn: ({ signal }) => getPosts(fullParams, { signal }),
     staleTime: 1000 * 60, // 1 minute
     gcTime: 1000 * 60 * 60 * 4, // 4 hours
+    retry: (failureCount, error) =>
+      shouldRetrySignedContentRead(failureCount, error),
   });
 }
 
@@ -53,7 +60,7 @@ function reportPaginationAnomaly(
     reason,
     feed: context?.feed ?? null,
     by: context?.by ?? null,
-    topic: context?.topic ?? null,
+    community: context?.community ?? null,
     allowed_tags: context?.allowed_tags ?? null,
     page: lastPage.page,
     limit: lastPage.limit,
@@ -75,7 +82,7 @@ function reportPaginationAnomaly(
       reason,
       feed: context?.feed ?? null,
       by: context?.by ?? null,
-      topic: context?.topic ?? null,
+      community: context?.community ?? null,
       allowed_tags: context?.allowed_tags ?? null,
       has_address: !!context?.address,
       page: lastPage.page,
@@ -112,7 +119,8 @@ function getNextPostsPageParam(
   );
   const hasNewPosts = posts.some((post) => !previousPostIds.has(post.post_id));
 
-  if (!hasNewPosts && allPages.length > 1) return undefined;
+  if (!hasNewPosts && allPages.length > 1 &&
+    currentPage > getBackgroundOverlapThroughPage(allPages)) return undefined;
   if (lastPage.has_more) return currentPage + 1;
   if (Number.isFinite(total) && total > currentPage * currentLimit) {
     reportPaginationAnomaly("total_exceeds_page_window", lastPage, context);
@@ -141,11 +149,13 @@ export function useInfinitePosts(
   // synchronously hydrated launch cache and flashes a skeleton.
   const walletAddress = useAuthStore((s) => s.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const lensPicks = useEncodedLensPicks(walletAddress);
 
-  const baseParams = {
+  const baseParams = withSessionLensPicks({
     ...params,
     address: walletAddress ?? undefined,
-  };
+    lens_picks: params?.lens_picks ?? (params?.community ? undefined : lensPicks),
+  }, walletAddress);
 
   const pageLimit = options?.pageLimit;
   const queryKey = queryKeys.posts({ ...baseParams, page: undefined });
@@ -157,8 +167,10 @@ export function useInfinitePosts(
 
   return useInfiniteQuery({
     queryKey,
-    queryFn: ({ pageParam = 1 }) =>
-      getPosts({ ...baseParams, page: pageParam, limit: pageParam === 1 ? baseParams.limit : (pageLimit ?? baseParams.limit) }),
+    queryFn: ({ pageParam = 1, signal }) =>
+      getPosts({ ...baseParams, page: pageParam, limit: pageParam === 1 ? baseParams.limit : (pageLimit ?? baseParams.limit) }, { signal }),
+    retry: (failureCount, error) =>
+      shouldRetrySignedContentRead(failureCount, error),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) =>
       getNextPostsPageParam(lastPage, allPages, baseParams),
@@ -179,7 +191,7 @@ export function useUserPosts(
   owner: string | undefined | null,
   type?: "submissions" | "comments"
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
@@ -190,14 +202,16 @@ export function useUserPosts(
 
   return useQuery({
     queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         ...queryParams,
-      }),
+      }, { signal }),
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
+    retry: (failureCount, error) =>
+      shouldRetrySignedContentRead(failureCount, error),
   });
 }
 
@@ -208,7 +222,7 @@ export function useInfiniteUserPosts(
   owner: string | undefined | null,
   params?: Omit<GetUserPostsParams, "owner" | "page" | "address">
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
@@ -219,14 +233,16 @@ export function useInfiniteUserPosts(
 
   return useInfiniteQuery({
     queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
-    queryFn: ({ pageParam = 1 }) => {
+    queryFn: ({ pageParam = 1, signal }) => {
       return getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         page: pageParam,
         ...queryParams,
-      });
+      }, { signal });
     },
+    retry: (failureCount, error) =>
+      shouldRetrySignedContentRead(failureCount, error),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       if (!lastPage?.has_more) return undefined;

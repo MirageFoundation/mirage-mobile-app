@@ -8,7 +8,6 @@ import {
   getSingleContentWarningSelection,
   selectSingleContentWarning,
 } from "../src/domain/content";
-import { getAnnotateContentWarningSelection } from "../src/pages/annotate/content-warning-selection";
 import { getCreateContentWarningSelection } from "../src/pages/create/content-warning-selection";
 
 describe("content warning options", () => {
@@ -43,10 +42,10 @@ describe("content warning options", () => {
     expect(clearContentWarningSelection()).toEqual([]);
   });
 
-  test("keeps create and annotate adapter mapping equivalent", () => {
+  test("keeps create adapter mapping on the canonical selection helper", () => {
     for (const value of ["", ...CONTENT_WARNING_IDS]) {
       expect(getCreateContentWarningSelection(value)).toEqual(
-        getAnnotateContentWarningSelection(value),
+        getSingleContentWarningSelection(value),
       );
     }
   });

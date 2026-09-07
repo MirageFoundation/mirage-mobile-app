@@ -1,29 +1,36 @@
 export const GALLERY_MEDIA_MAX_HEIGHT = 450;
 export const GALLERY_MEDIA_FALLBACK_ASPECT_RATIO = 4 / 5;
 
-export function hasGalleryItemAspectRatio(item: {
+export type MediaDimensions = {
   width?: number;
   height?: number;
   aspectRatio?: number;
-}): boolean {
-  return !!(
-    (item.width && item.height && item.height > 0) ||
-    (item.aspectRatio && Number.isFinite(item.aspectRatio) && item.aspectRatio > 0)
-  );
+};
+
+export function validMediaAspectRatio(ratio?: number): number | undefined {
+  return typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0
+    ? ratio
+    : undefined;
 }
 
-export function resolveGalleryItemAspectRatio(item: {
-  width?: number;
-  height?: number;
-  aspectRatio?: number;
-}): number {
-  if (item.width && item.height && item.height > 0) {
-    return item.width / item.height;
-  }
-  if (item.aspectRatio && Number.isFinite(item.aspectRatio) && item.aspectRatio > 0) {
-    return item.aspectRatio;
-  }
-  return GALLERY_MEDIA_FALLBACK_ASPECT_RATIO;
+export function getIntrinsicMediaAspectRatio(item?: MediaDimensions): number | undefined {
+  const width = validMediaAspectRatio(item?.width);
+  const height = validMediaAspectRatio(item?.height);
+  return (width && height ? validMediaAspectRatio(width / height) : undefined)
+    ?? validMediaAspectRatio(item?.aspectRatio);
+}
+
+export function hasGalleryItemAspectRatio(item: MediaDimensions): boolean {
+  return getIntrinsicMediaAspectRatio(item) !== undefined;
+}
+
+export function resolveGalleryItemAspectRatio(
+  item: MediaDimensions,
+  decodedRatio?: number,
+): number {
+  return getIntrinsicMediaAspectRatio(item)
+    ?? validMediaAspectRatio(decodedRatio)
+    ?? GALLERY_MEDIA_FALLBACK_ASPECT_RATIO;
 }
 
 export function computeGalleryFrameHeight(

@@ -216,7 +216,7 @@ export function useUserProfileController(
           ...post,
           title: override.title,
           content: override.content,
-          topic: override.topic ?? post.topic,
+          community: override.community ?? post.community,
           media: override.media ?? post.media,
         } : post;
       });
@@ -435,8 +435,8 @@ export function useUserProfileController(
     (postId: string) => router.push(`/post/${postId}`),
     [router],
   );
-  const handleTopicPress = useCallback(
-    (topic: string) => router.push(`/topic/${encodeURIComponent(topic)}`),
+  const handleCommunityPress = useCallback(
+    (topic: string) => router.push(`/c/${encodeURIComponent(topic)}` as never),
     [router],
   );
   const handleSettingsPress = useCallback(() => router.push("/settings"), [router]);
@@ -479,7 +479,7 @@ export function useUserProfileController(
     stickyTabsAnimatedStyle, swipeGesture, uiPosts, userAddress, userMenuSheetRef,
     userProfileFeedContext, userStatus, username, visibleVideoPostIds,
     handleBackPress, handleFollowersPress, handleMenuPress, handlePostPress,
-    handleTopicPress, handleSettingsPress, handleRequestBlockUser,
+    handleCommunityPress, handleSettingsPress, handleRequestBlockUser,
     handleCancelBlockUser, handleReportUser,
     handleGiftMirageToUser, handleGiftSubscriptionToUser,
     handleBlockUserFromCard, handleBlockPostFromCard, handleReportFromCard,

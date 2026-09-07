@@ -1,5 +1,8 @@
 import * as Sentry from "@sentry/react-native";
 import {
+ classifyAccountStatusError,
+} from "@/src/domain/subscriptions";
+import {
  getErrorMessage,
  isRetryable,
  isMaybeRetryable,
@@ -25,6 +28,19 @@ function getBackendErrorMessage(data: Record<string, unknown>): string | null {
 }
 
 export function parseApiError(error: unknown): ApiError {
+ const classified = classifyAccountStatusError(error);
+ if (classified) {
+  const axiosError = error as any;
+  return {
+   errorCode: classified.code,
+   message: classified.message,
+   httpStatus: axiosError?.response?.status ?? null,
+   retryable: false,
+   context: classified.kind === "quota" ? classified.accounting : {},
+   raw: error,
+  };
+ }
+
  const axiosError = error as any;
  const data = axiosError?.response?.data;
  const httpStatus: number | null = axiosError?.response?.status ?? null;

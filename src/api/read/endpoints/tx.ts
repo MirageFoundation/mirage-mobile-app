@@ -10,7 +10,12 @@ export interface GetTxStatusParams {
  * Poll for confirmation after submitting transactions
  */
 export async function getTxStatus(
-  params: GetTxStatusParams
+  params: GetTxStatusParams,
+  options?: { signal?: AbortSignal },
 ): Promise<TxStatusResponse> {
-  return api.get<TxStatusResponse>("/get_tx_status", params);
+  return api.get<TxStatusResponse>(
+    "/get_tx_status",
+    { hash: String(params.hash ?? "").trim().toLowerCase() },
+    options,
+  );
 }

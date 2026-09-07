@@ -8,8 +8,8 @@ export function useParameters() {
 
  return useQuery({
   queryKey: queryKeys.parameters(walletAddress ?? undefined),
-  queryFn: () =>
-   getParameters(walletAddress ? { address: walletAddress } : undefined),
+  queryFn: ({ signal }) =>
+   getParameters(walletAddress ? { address: walletAddress } : undefined, { signal }),
   staleTime: 0,
   gcTime: 1000 * 60 * 5,
  });
@@ -22,7 +22,7 @@ export function useConfig(options?: { enabled?: boolean }) {
 
  return useQuery({
   queryKey: queryKeys.config(),
-  queryFn: () => getChainConfig(),
+  queryFn: ({ signal }) => getChainConfig({ signal }),
   enabled: !isInitializing && !isBootstrapping && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 60 * 4,
   gcTime: 1000 * 60 * 60 * 24,
@@ -35,7 +35,7 @@ export function useChainConfig(options?: { enabled?: boolean }) {
 
  return useQuery({
   queryKey: queryKeys.config(),
-  queryFn: () => getChainConfig(),
+  queryFn: ({ signal }) => getChainConfig({ signal }),
   enabled: !isInitializing && !isBootstrapping && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 60 * 4,
   gcTime: 1000 * 60 * 60 * 24,
@@ -48,7 +48,7 @@ export function useNodeConfig() {
 
  return useQuery({
   queryKey: queryKeys.nodeConfig(),
-  queryFn: () => getNodeConfig(),
+  queryFn: ({ signal }) => getNodeConfig({ signal }),
   enabled: !isInitializing && !isBootstrapping,
   staleTime: 1000 * 60 * 60 * 24,
   gcTime: 1000 * 60 * 60 * 24,

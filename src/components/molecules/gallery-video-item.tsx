@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useVideoPlaybackIntent } from "./use-video-playback-intent";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -7,6 +8,8 @@ import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import {
   applyVideoBufferProfile,
+  getAppliedVideoSourceUri,
+  getVideoSourceUri,
   useVideoPlayerController,
   useVideoPlayerLeaseVersion,
 } from "@/src/hooks/use-video-player-controller";
@@ -24,7 +27,8 @@ import {
   markVideoPrepareStart,
 } from "@/src/utils/video-ttff";
 import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
-import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
+import { useVideoSourceRecovery } from "./use-video-source-recovery";
+import { VideoUnavailableOverlay } from "./video-unavailable-overlay";
 import { useVideoForegroundRecovery } from "./use-video-foreground-recovery";
 import {
   GALLERY_ASPECT_RATIO_CACHE,
@@ -34,6 +38,7 @@ import {
 
 type GalleryVideoItemProps = {
   item: ResolvedMedia;
+  postId?: string;
   width: number;
   height: number;
   isActive: boolean;
@@ -55,6 +60,7 @@ type GalleryVideoItemProps = {
  */
 export const GalleryVideoItem = memo(function GalleryVideoItem({
   item,
+  postId,
   width,
   height,
   isActive,
@@ -76,16 +82,12 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     : allowAutoplay
       ? (globalMuted || !isFocused)
       : globalMuted;
-  const [isLoading, setIsLoading] = useState(() => !GALLERY_LOADED_CACHE.has(item.uri));
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
-  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const errorRetryCountRef = useRef(0);
-  const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
+  const shouldPlayVideo = Boolean(isPlaying && isActive && screenActive && isVisible);
   const handoffKey = itemUri.startsWith("file://")
     ? null
-    : canonicalVideoAssetId(itemUri);
+    : `${postId ? `${postId}:` : ""}${canonicalVideoAssetId(itemUri)}`;
   // Same feed -> detail player handoff as single-video posts: the feed
   // gallery card stays mounted underneath the pushed detail screen, so the
   // detail gallery adopts its already-buffered player instead of creating a
@@ -119,11 +121,15 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     },
   );
   const videoPlayer = adoptedPlayer ?? controllerPlayer;
+  const recovery = useVideoSourceRecovery({ uri: itemUri, player: videoPlayer, lease: adoptedLease, enabled: shouldPrepare && screenActive, shouldPlay: shouldPlayVideo });
+  const isLoading = shouldPlayVideo && (recovery.phase === "loading" || recovery.phase === "recovering");
+  const { acceptsEvent } = recovery;
 
   // Stand down while a surface stacked above (fullscreen preview) holds a
   // newer lease on this player; re-assert once it releases.
   const leaseVersion = useVideoPlayerLeaseVersion();
   const controlledElsewhere = isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease);
+  const returningIntent = useVideoPlaybackIntent(videoPlayer, isPlaying, screenActive, controlledElsewhere, setIsPlaying);
 
   // An adopted player bypasses the controller's option effects, so detail
   // applies its settings directly.
@@ -161,24 +167,6 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     }
   }, [adoptedPlayer, adoptedLease, shouldPlayVideo, leaseVersion]);
 
-  // When the fullscreen preview releases this player, nudge the surface to
-  // repaint and resume playback if we still want it playing.
-  const wasControlledElsewhereRef = useRef(false);
-  useEffect(() => {
-    const was = wasControlledElsewhereRef.current;
-    wasControlledElsewhereRef.current = controlledElsewhere;
-    if (!was || controlledElsewhere) return;
-    if (!shouldPlayVideo) return;
-    try {
-      if (videoPlayer.status === "readyToPlay") {
-        const position = videoPlayer.currentTime;
-        videoPlayer.currentTime = position;
-        videoPlayer.play();
-      }
-    } catch {
-      // Player already released; the prepare gates will recreate it.
-    }
-  }, [controlledElsewhere, shouldPlayVideo, videoPlayer]);
 
   useEffect(() => {
     if (shouldPrepare) {
@@ -200,21 +188,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
   });
 
   useEffect(() => {
-    if (!shouldPrepare || GALLERY_LOADED_CACHE.has(itemUri)) return;
-    setIsLoading(true);
-    loadingTimeoutRef.current = setTimeout(() => {
-      setIsLoading(false);
-      GALLERY_LOADED_CACHE.add(itemUri);
-    }, 8000);
     return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
       if (pauseDelayRef.current) {
         clearTimeout(pauseDelayRef.current);
-      }
-      if (errorRetryRef.current) {
-        clearTimeout(errorRetryRef.current);
       }
     };
   }, [itemUri, shouldPrepare]);
@@ -222,17 +198,6 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
   useEffect(() => {
     if (!shouldPrepare) return;
     let cancelled = false;
-    const markLoaded = () => {
-      if (cancelled) return;
-      setIsLoading(false);
-      GALLERY_LOADED_CACHE.add(item.uri);
-      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-      errorRetryCountRef.current = 0;
-      if (errorRetryRef.current) {
-        clearTimeout(errorRetryRef.current);
-        errorRetryRef.current = null;
-      }
-    };
     const applyAspectRatio = (
       availableVideoTracks: typeof videoPlayer.availableVideoTracks,
     ) => {
@@ -248,8 +213,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
 
     const sourceSubscription = videoPlayer.addListener(
       "sourceLoad",
-      ({ availableVideoTracks }) => {
-        markLoaded();
+      ({ availableVideoTracks, videoSource }) => {
+        if (getVideoSourceUri(videoSource) !== item.uri) return;
+        if (cancelled || !acceptsEvent(getVideoSourceUri(videoSource))) return;
         applyAspectRatio(availableVideoTracks);
         if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
           videoPlayer.play();
@@ -260,26 +226,15 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
       "statusChange",
       ({ status }) => {
         if (status === "readyToPlay") {
-          markLoaded();
+          if (cancelled || !acceptsEvent() || getAppliedVideoSourceUri(videoPlayer) !== item.uri) return;
           applyAspectRatio(videoPlayer.availableVideoTracks);
           if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
             videoPlayer.play();
           }
-        } else if (status === "error" && errorRetryCountRef.current < 3) {
-          errorRetryCountRef.current += 1;
-          if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
-          errorRetryRef.current = setTimeout(() => {
-            if (cancelled) return;
-            setIsLoading(true);
-            void replaceVideoPlayerSourceAsync(videoPlayer, item.uri).catch(() => {
-              if (!cancelled) setIsLoading(false);
-            });
-          }, 2000 * errorRetryCountRef.current);
         }
       },
     );
-    if (videoPlayer.status === "readyToPlay") {
-      markLoaded();
+    if (acceptsEvent() && videoPlayer.status === "readyToPlay" && getAppliedVideoSourceUri(videoPlayer) === item.uri) {
       applyAspectRatio(videoPlayer.availableVideoTracks);
       if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
         videoPlayer.play();
@@ -290,14 +245,16 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
       cancelled = true;
       sourceSubscription.remove();
       statusSubscription.remove();
-      if (errorRetryRef.current) {
-        clearTimeout(errorRetryRef.current);
-        errorRetryRef.current = null;
-      }
     };
-  }, [item.uri, onAspectRatioDetected, shouldPlayVideo, shouldPrepare, videoPlayer, adoptedLease]);
+  }, [item.uri, onAspectRatioDetected, shouldPlayVideo, shouldPrepare, videoPlayer, adoptedLease, acceptsEvent]);
 
   useEffect(() => {
+    if (controlledElsewhere) return;
+    if (screenActive && returningIntent.current !== null) {
+      setIsPlaying(returningIntent.current);
+      returningIntent.current = null;
+      return;
+    }
     if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
       if (pauseDelayRef.current) {
         clearTimeout(pauseDelayRef.current);
@@ -318,7 +275,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
         }, 400);
       }
     }
-  }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay]);
+  }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay, controlledElsewhere, returningIntent]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying((p) => !p);
@@ -343,41 +300,33 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     uri: thumbnailUri,
     surface: isPostDetail ? "detail" : "feed",
     mediaType: "poster",
+    contentFit: "contain",
     displayWidth: width,
     intrinsicWidth: item.width,
     intrinsicHeight: item.height,
     visible: isVisible,
   });
   const showThumbnail =
-    thumbnailUri && (!shouldPrepare || !GALLERY_LOADED_CACHE.has(item.uri));
+    thumbnailUri && (!shouldPrepare || recovery.phase !== "playable");
 
   return (
     <View style={[galleryStyles.itemContainer, { width, height }]}>
       {showThumbnail ? (
         <Image
           source={getMediaImageSource(thumbnailPolicy)}
-          style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 0 }]}
+          style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 1 }]}
+          pointerEvents="none"
           contentFit={thumbnailPolicy.contentFit}
           cachePolicy={thumbnailPolicy.cachePolicy}
           recyclingKey={thumbnailPolicy.recyclingKey}
           allowDownscaling={thumbnailPolicy.allowDownscaling}
           enforceEarlyResizing={thumbnailPolicy.enforceEarlyResizing}
           priority={thumbnailPolicy.priority}
-          onLoad={({ source }) => {
-            const w = source?.width;
-            const h = source?.height;
-            if (w && h) {
-              const ratio = w / h;
-              if (Number.isFinite(ratio) && ratio > 0) {
-                GALLERY_ASPECT_RATIO_CACHE.set(item.uri, ratio);
-                onAspectRatioDetected?.(item.uri, ratio);
-              }
-            }
-          }}
         />
       ) : null}
-      {shouldPrepare ? (
+      {shouldPrepare && !controlledElsewhere ? (
         <VideoView
+          key={`${itemUri}:${recovery.revision}`}
           player={videoPlayer}
           style={[galleryStyles.itemMedia, { width, height }]}
           contentFit="cover"
@@ -386,7 +335,8 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
           allowsPictureInPicture={false}
           surfaceType={Platform.OS === "android" ? "textureView" : undefined}
           onFirstFrameRender={() => {
-            setIsLoading(false);
+            if (!recovery.firstFrame()) return;
+            GALLERY_LOADED_CACHE.add(itemUri);
             markVideoFirstFrame(itemUri, isPostDetail ? "gallery-detail" : "gallery-feed");
           }}
         />
@@ -451,6 +401,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
           VIDEO
         </Text>
       </View>
+      <VideoUnavailableOverlay visible={recovery.phase === "terminal"} onRetry={recovery.retry} />
     </View>
   );
 });

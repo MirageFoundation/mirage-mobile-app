@@ -5,6 +5,10 @@ import type {
   InboxReply,
   PostWithChildren,
 } from "@/src/api/types";
+import {
+  UNSPECIFIED_SERVED_LENS,
+  type LensRequest,
+} from "@/src/domain/communities";
 
 function buildInboxCommentPost(reply: InboxReply): PostWithChildren {
   return {
@@ -13,8 +17,8 @@ function buildInboxCommentPost(reply: InboxReply): PostWithChildren {
     username: reply.reply_username || reply.reply_owner,
     author_level: reply.reply_author_level,
     timestamp: reply.reply_timestamp,
-    topic: "",
-    root_topic: "",
+    community: "",
+    root_community: "",
     root_post_id: reply.root_post_id,
     title: "",
     content: reply.reply_content,
@@ -25,6 +29,8 @@ function buildInboxCommentPost(reply: InboxReply): PostWithChildren {
     comments: 0,
     user_vote: 0,
     user_weight: 0,
+    lens: UNSPECIFIED_SERVED_LENS,
+    thread_locked: false,
     children: [],
   };
 }
@@ -33,15 +39,17 @@ export function seedFocusedCommentFromInbox(
   queryClient: QueryClient,
   reply: InboxReply,
   address?: string,
+  lensRequest?: LensRequest,
 ): void {
   const comment = buildInboxCommentPost(reply);
+  const commentsKey = queryKeys.comments(reply.reply_id, address, lensRequest);
 
   // Preserve any existing focused-comment cache children. The inbox payload
   // has no children info, so unconditionally writing `children: []` would
   // briefly wipe out a richer tree that was already fetched (e.g. on a second
   // open of the same reply), producing a transient empty focused thread.
   const existingFocused = queryClient.getQueryData<CommentsResponse>(
-    queryKeys.comments(reply.reply_id, address),
+    commentsKey,
   );
 
   // Deliberately seeded WITHOUT `ancestors`. The inbox payload knows the parent
@@ -56,17 +64,14 @@ export function seedFocusedCommentFromInbox(
     ...(existingFocused?.ancestors ? { ancestors: existingFocused.ancestors } : {}),
   };
 
-  queryClient.setQueryData(
-    queryKeys.comments(reply.reply_id, address),
-    focusedCommentData,
-  );
+  queryClient.setQueryData(commentsKey, focusedCommentData);
 
   // Mark the seeded entry stale WITHOUT triggering a refetch here. The
   // post-detail screen mounts an observer for this exact key immediately after
   // navigation, and stale + mount already causes exactly one fetch — which now
   // returns the entire thread.
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.comments(reply.reply_id, address),
+    queryKey: commentsKey,
     refetchType: "none",
   });
 }

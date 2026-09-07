@@ -10,43 +10,27 @@ import { buildSignedEnvelope, canonBaseSetUsername } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
 
-// ============================================
-// Types
-// ============================================
-
 export interface SetUsernameInput {
   username: string;
-  referrer_username?: string;
-  invite_code?: string;
 }
 
 export interface SetUsernamePayload {
   username: string;
-  referrer_username?: string;
-  invite_code?: string;
   target: string;
 }
 
-// ============================================
-// Endpoint
-// ============================================
-
 /**
  * Set username for the current wallet
- *
- * @param wallet - Wallet to sign with
- * @param input - Username and optional referrer
- * @param onPoWProgress - Optional callback for PoW progress
- * @returns Write response with tx_hash
  */
 export async function setUsername(
   wallet: MirageWallet,
   input: SetUsernameInput,
-  onPoWProgress?: PoWProgressCallback
+  onPoWProgress?: PoWProgressCallback,
+  checkpoint?: { beforeBroadcast: () => void; onSubmitted: (hash: string) => void },
 ): Promise<WriteResponse> {
-  const { username, referrer_username, invite_code } = input;
+  const { username } = input;
 
-  return withPowRetry(async () => {
+  const operation = async () => {
     const payload = await buildSignedEnvelope({
       wallet,
       baseBuilder: canonBaseSetUsername,
@@ -57,8 +41,16 @@ export async function setUsername(
       onPoWProgress,
     });
 
-   const body = { ...payload, ...(invite_code && { invite_code }), ...(referrer_username && { referrer_username }) };
-
-    return api.post<WriteResponse>("/core/set_username", body);
-  }, "setUsername");
+    checkpoint?.beforeBroadcast();
+    try {
+      const response = await api.post<WriteResponse>("/core/set_username", payload);
+      checkpoint?.onSubmitted(response.tx_hash);
+      return response;
+    } catch (error) {
+      const hash = (error as { response?: { data?: { tx_hash?: unknown } } })?.response?.data?.tx_hash;
+      if (typeof hash === "string" && hash) checkpoint?.onSubmitted(hash);
+      throw error;
+    }
+  };
+  return checkpoint ? operation() : withPowRetry(operation, "setUsername");
 }

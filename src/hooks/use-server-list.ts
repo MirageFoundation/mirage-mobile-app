@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePreferencesStore, type ApiServer } from "@/src/stores";
 import { useMemo, useRef } from "react";
+import { getMirageRequestHeaders } from "@/src/api/mirage-request-headers";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { PeersResponse } from "@/src/api/types";
 import axios from "axios";
+import { jsonTransport } from "@/src/api/json-transport";
 
 const DEFAULT_SERVERS: ApiServer[] = ["mirage.talk", "mirage.vote"];
-const PEERS_SOURCE = "https://mirage.talk";
+export const PEERS_SOURCE_URL = "https://mirage.talk/api/get_peers";
 
 function extractDomain(moniker: string): string | null {
   try {
@@ -18,7 +20,11 @@ function extractDomain(moniker: string): string | null {
 }
 
 async function fetchPeersFromSource(): Promise<PeersResponse> {
-  const { data } = await axios.get<PeersResponse>(`${PEERS_SOURCE}/get_peers`);
+  const { data } = await axios.get<PeersResponse>(PEERS_SOURCE_URL, {
+    adapter: jsonTransport,
+    timeout: 30000,
+    headers: getMirageRequestHeaders(),
+  });
   return data;
 }
 

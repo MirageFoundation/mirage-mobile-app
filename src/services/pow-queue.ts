@@ -17,8 +17,13 @@
 import { create } from "zustand";
 import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
+import { getCachedRelayDecision, invalidateAccountStatus } from "@/src/api/cache/account-status-cache";
+import { queryClient } from "@/src/providers/query-client";
+import {
+  isExpectedWriteConditionError,
+  QuotaExhaustedError,
+} from "@/src/domain/subscriptions";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
-import { canSkipPoWForUser } from "@/src/utils/pow-eligibility";
 import { cancelPow, isPowCancelled } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
 import {
@@ -42,13 +47,9 @@ export type PowActionType =
   | "delete"
   | "follow"
   | "unfollow"
-  | "enable_agent"
-  | "disable_agent"
-  | "set_agents"
   | "block"
   | "unblock"
   | "report"
-  | "annotate"
   | "send_tokens"
   | "gift_subscription"
   | "award";
@@ -60,7 +61,6 @@ const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set([
   "comment",
   "post",
   "edit",
-  "annotate",
   "send_tokens",
   "gift_subscription",
   "award",
@@ -155,20 +155,12 @@ export const getActionLabel = (type: PowActionType): string => {
       return "Following";
     case "unfollow":
       return "Unfollowing";
-    case "enable_agent":
-      return "Enabling agent";
-    case "disable_agent":
-      return "Disabling agent";
-    case "set_agents":
-      return "Updating agents";
     case "block":
       return "Blocking";
     case "unblock":
       return "Unblocking";
     case "report":
       return "Reporting";
-    case "annotate":
-      return "Annotating";
     case "send_tokens":
       return "Sending gift";
     case "gift_subscription":
@@ -200,20 +192,12 @@ export const getSuccessLabel = (type: PowActionType): string => {
       return "Followed";
     case "unfollow":
       return "Unfollowed";
-    case "enable_agent":
-      return "Agent enabled";
-    case "disable_agent":
-      return "Agent disabled";
-    case "set_agents":
-      return "Agents updated";
     case "block":
       return "Blocked";
     case "unblock":
       return "Unblocked";
     case "report":
       return "Reported";
-    case "annotate":
-      return "Annotated";
     case "send_tokens":
       return "Gift sent";
     case "gift_subscription":
@@ -516,7 +500,18 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
     }
 
     const err = error instanceof Error ? error : new Error(String(error));
-    if (!isNetworkError(error)) {
+    if (isExpectedWriteConditionError(error)) {
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: `${action.type} failed with expected account/thread condition`,
+        level: "info",
+        data: { actionId: action.id, type: action.type },
+      });
+      const address = useAuthStore.getState().user?.walletAddress;
+      if (address && isExpectedWriteConditionError(error)) {
+        void invalidateAccountStatus(queryClient, address);
+      }
+    } else if (!isNetworkError(error)) {
       Sentry.captureException(err, {
         tags: { action: "pow_action_immediate", pow_type: action.type },
         extra: { actionId: action.id, label: action.label },
@@ -568,7 +563,41 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     action.onOptimisticUpdate?.();
 
     const { userLevel, user } = useAuthStore.getState();
-    if (!action.forcePoW && canSkipPoWForUser(userLevel, user?.tier)) {
+    const address = user?.walletAddress;
+    const decision = address
+      ? getCachedRelayDecision(queryClient, address, { userLevel })
+      : { pow_required: true, relay_allowed: false, quota_exhausted: false };
+    if (!action.forcePoW && decision.quota_exhausted) {
+      const err = new QuotaExhaustedError();
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: "Relay quota exhausted; skipping sign and HTTP",
+        level: "info",
+        data: { actionId: action.id, type: action.type },
+      });
+      if (address) {
+        void invalidateAccountStatus(queryClient, address);
+      }
+      action.onRollback?.();
+      action.onError?.(err);
+      set({
+        lastError: err,
+        lastCompletedAction: {
+          type: action.type,
+          success: false,
+          errorMessage: err.message,
+          skippedPoW: true,
+        },
+        successOverlay: {
+          type: action.type,
+          success: false,
+          errorMessage: err.message,
+          skippedPoW: true,
+        },
+      });
+      return;
+    }
+    if (!action.forcePoW && decision.relay_allowed) {
       get().showPreparing({ ...action, phase: "submitting" });
       void executeImmediately(action);
       return;
@@ -894,7 +923,18 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
           : isNetworkError(error)
           ? "No internet connection"
           : getApiErrorMessage(error);
-        if (!isNetworkError(error) && !isPowCancelled(error) && !isPowTimeoutError(error)) {
+        if (isExpectedWriteConditionError(error)) {
+          Sentry.addBreadcrumb({
+            category: "pow",
+            message: `${nextAction.type} failed with expected account/thread condition`,
+            level: "info",
+            data: { actionId: nextAction.id, type: nextAction.type },
+          });
+          const address = useAuthStore.getState().user?.walletAddress;
+          if (address) {
+            void invalidateAccountStatus(queryClient, address);
+          }
+        } else if (!isNetworkError(error) && !isPowCancelled(error) && !isPowTimeoutError(error)) {
           Sentry.captureException(err, {
             tags: { action: "pow_action", pow_type: nextAction.type },
             extra: { actionId: nextAction.id, label: nextAction.label },

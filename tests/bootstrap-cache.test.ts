@@ -24,7 +24,6 @@ const response = {
   user_status: null,
   user_followed: null,
   user_blocked: null,
-  rewards_summary: null,
   view: feed,
 };
 
@@ -97,6 +96,47 @@ describe("bootstrap feed cache hydration", () => {
       by: "magic",
       allowed_tags: "sensitive",
       address: "MIRAGE1ABC",
+    })).toEqual(feed);
+  });
+
+  test("does not cross-consume previews across lens identity", () => {
+    const queryClient = new QueryClient();
+    const params = {
+      address: "MIRAGE1ABC",
+      view: "feed:home" as const,
+      by: "magic" as const,
+      allowed_tags: "sensitive",
+      limit: 10,
+      lens_picks: "bitcoin:raw",
+    };
+    const queryKey = queryKeys.posts({
+      address: "MIRAGE1ABC",
+      feed: "home",
+      by: "magic",
+      allowed_tags: "sensitive",
+      limit: 10,
+      page: undefined,
+      lens_picks: "bitcoin:raw",
+    });
+    queryClient.setQueryData(queryKey, {
+      pages: [{ ...feed, posts: [{ id: "cached-1" }] }],
+      pageParams: [1],
+    });
+
+    hydrateBootstrapViewCache(queryClient, response, params);
+
+    expect(consumeBootstrapFeedPreview({
+      feed: "home",
+      by: "magic",
+      allowed_tags: "sensitive",
+      address: "MIRAGE1ABC",
+    })).toBeNull();
+    expect(consumeBootstrapFeedPreview({
+      feed: "home",
+      by: "magic",
+      allowed_tags: "sensitive",
+      address: "MIRAGE1ABC",
+      lens_picks: "bitcoin:raw",
     })).toEqual(feed);
   });
 });

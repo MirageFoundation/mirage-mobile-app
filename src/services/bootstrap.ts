@@ -1,23 +1,21 @@
 import * as Sentry from "@sentry/react-native";
 import type { QueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/src/api/client";
+import { assertReadActive, isCompletedApiRead, isReadCancellation, shouldRetryApiQuery } from "@/src/api/read-retry-policy";
+import { fetchAuthUserStatus } from "@/src/api/read/auth-status-query";
 
 import { getBootstrap, type BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
 import {
   getChainConfig,
   getNodeConfig,
-  getSafeApiErrorContext,
 } from "@/src/api/read/endpoints/parameters";
-import type { RewardSummaryResponse } from "@/src/api/read/endpoints/rewards";
 import {
-  getInviteCodes,
   getUserBlocked,
   getUserFollowed,
-  getUserStatus,
-  mergeUserFollowedEnabledAgents,
 } from "@/src/api/read/endpoints/users";
+import { withSessionLensPicks } from "@/src/api/read/request-params";
 import { queryKeys } from "@/src/api/read/query-keys";
-import type { NodeConfigResponse, UserFollowedResponse } from "@/src/api/types";
-import { walletService } from "@/src/services/wallet-service";
+import { hydrateAccountStatus, parseAccountStatusSnapshot } from "@/src/api/cache/account-status-cache";
 import { hydrateBootstrapViewCache } from "@/src/api/cache/bootstrap-cache";
 import {
   getAllowedTagsFromContentTypes,
@@ -27,27 +25,41 @@ import {
 type BootstrapSection = keyof BootstrapResponse;
 
 const STARTUP_FEED_LIMIT = 10;
+const responseGuards = new WeakMap<BootstrapResponse, () => boolean>();
+
+export function isBootstrapResponseCurrent(response: BootstrapResponse): boolean {
+  return responseGuards.get(response)?.() ?? false;
+}
 
 const USER_SECTIONS: BootstrapSection[] = [
   "user_status",
   "user_followed",
   "user_blocked",
-  "invite_codes",
-  "rewards_summary",
 ];
 
 function summarizeBootstrapResponse(
   response: BootstrapResponse,
   hasAddress: boolean,
 ) {
-  const nullSections = (Object.keys(response) as BootstrapSection[]).filter(
+  const recognizedSections: BootstrapSection[] = [
+    "node_config",
+    "chain_config",
+    "user_status",
+    "user_followed",
+    "user_blocked",
+    "community_preferences",
+    "daily_quota",
+    "renewal_warning",
+    "view",
+  ];
+  const nullSections = recognizedSections.filter(
     (section) => response[section] == null,
   );
 
   return {
     hasAddress,
     nullSections,
-    hydratedSections: (Object.keys(response) as BootstrapSection[]).filter(
+    hydratedSections: recognizedSections.filter(
       (section) => response[section] != null,
     ),
     expectedUserSections: hasAddress,
@@ -62,15 +74,15 @@ export function getStartupBootstrapParams(address?: string) {
     adultContentEnabled,
   );
 
-  if (!address) return {};
+  if (!address) return withSessionLensPicks({}, address);
 
-  return {
+  return withSessionLensPicks({
     address,
     view: "feed:home" as const,
     by: "magic" as const,
     allowed_tags: allowedTags || undefined,
     limit: STARTUP_FEED_LIMIT,
-  };
+  }, address);
 }
 
 function addBootstrapFallbackBreadcrumb(
@@ -95,16 +107,6 @@ export function hydrateBootstrapCache(
   }
   if (response.node_config) {
     queryClient.setQueryData(queryKeys.nodeConfig(), response.node_config);
-    Sentry.addBreadcrumb({
-      category: "auto-enabled-agents",
-      message: "Bootstrap node config hydrated",
-      level: "info",
-      data: {
-        source: "bootstrap",
-        autoEnabledAgentsCount: response.node_config.auto_enabled_agents?.length ?? 0,
-        hasAutoEnabledAgents: Array.isArray(response.node_config.auto_enabled_agents),
-      },
-    });
   }
 
   if (!address) return;
@@ -112,49 +114,47 @@ export function hydrateBootstrapCache(
   if (response.user_status) {
     queryClient.setQueryData(queryKeys.userStatus(address), response.user_status);
   }
+  hydrateAccountStatus(
+    queryClient,
+    address,
+    parseAccountStatusSnapshot({
+      daily_quota: response.daily_quota,
+      renewal_warning: response.renewal_warning,
+    }),
+  );
   if (response.user_followed) {
     queryClient.setQueryData(
       queryKeys.userFollowed(address),
-      mergeUserFollowedEnabledAgents(response.user_followed, {
-        source: "bootstrap",
-        nodeConfigAutoEnabledAgents: response.node_config?.auto_enabled_agents,
-      }),
+      response.user_followed,
     );
   }
   if (response.user_blocked) {
     queryClient.setQueryData(queryKeys.userBlocked(address), response.user_blocked);
   }
-  if (response.invite_codes) {
-    queryClient.setQueryData(queryKeys.inviteCodes(address), response.invite_codes);
-  }
-  if (response.rewards_summary) {
-    queryClient.setQueryData<RewardSummaryResponse>(
-      queryKeys.rewardSummary(address),
-      (cached) => {
-        const incoming = response.rewards_summary!;
-        if (
-          incoming.disabled &&
-          incoming.daily_quests.length === 0 &&
-          (cached?.daily_quests.length ?? 0) > 0
-        ) {
-          return cached;
-        }
-        return incoming;
-      },
-    );
-  }
 }
 
 function scheduleBootstrapFallbacks(
   queryClient: QueryClient,
-  response: BootstrapResponse,
+  response: Partial<BootstrapResponse>,
   address?: string,
+  isCurrent: () => boolean = () => true,
 ) {
+  const guarded = <T>(request: (options: { signal: AbortSignal }) => Promise<T>) => async ({ signal }: { signal: AbortSignal }) => {
+    const check = () => {
+      assertReadActive(signal);
+      if (!isCurrent()) throw Object.assign(new Error("Inactive bootstrap session"), { code: "ERR_CANCELED" });
+    };
+    check();
+    const result = await request({ signal });
+    check();
+    return result;
+  };
   if (!response.chain_config) {
     addBootstrapFallbackBreadcrumb("chain_config", Boolean(address));
     queryClient.prefetchQuery({
       queryKey: queryKeys.config(),
-      queryFn: getChainConfig,
+      queryFn: guarded(getChainConfig),
+      retry: shouldRetryApiQuery,
       staleTime: 1000 * 60 * 60 * 4,
     });
   }
@@ -163,62 +163,8 @@ function scheduleBootstrapFallbacks(
     addBootstrapFallbackBreadcrumb("node_config", Boolean(address));
     queryClient.prefetchQuery({
       queryKey: queryKeys.nodeConfig(),
-      queryFn: async () => {
-        let nodeConfigFetched = false;
-
-        try {
-          const nodeConfig = await getNodeConfig();
-          nodeConfigFetched = true;
-          const autoEnabledAgentsCount = nodeConfig.auto_enabled_agents?.length ?? 0;
-          let mergedExistingUserFollowed = false;
-
-          if (address) {
-            queryClient.setQueryData<UserFollowedResponse | undefined>(
-              queryKeys.userFollowed(address),
-              (old) => {
-                if (!old) return old;
-                mergedExistingUserFollowed = true;
-                return mergeUserFollowedEnabledAgents(old, {
-                  source: "node_config_fallback",
-                  nodeConfigAutoEnabledAgents: nodeConfig.auto_enabled_agents,
-                });
-              },
-            );
-          }
-
-          Sentry.addBreadcrumb({
-            category: "auto-enabled-agents",
-            message: "Bootstrap node config fallback completed",
-            level: "info",
-            data: {
-              source: "node_config_fallback",
-              hasAddress: Boolean(address),
-              autoEnabledAgentsCount,
-              mergedExistingUserFollowed,
-            },
-          });
-
-          return nodeConfig;
-        } catch (error) {
-          Sentry.addBreadcrumb({
-            category: "auto-enabled-agents",
-            message: "Bootstrap node config fallback failed",
-            level: "error",
-            data: {
-              source: "node_config_fallback",
-              hasAddress: Boolean(address),
-              ...getSafeApiErrorContext(error),
-            },
-          });
-          if (nodeConfigFetched) {
-            Sentry.captureException(error, {
-              tags: { feature: "auto-enabled-agents", operation: "bootstrap-node-config-merge" },
-              extra: { hasAddress: Boolean(address) },
-            });
-          }
-          throw error;
-        }
-      },
+      queryFn: guarded(getNodeConfig),
+      retry: shouldRetryApiQuery,
       staleTime: 1000 * 60 * 60 * 24,
     });
   }
@@ -227,51 +173,22 @@ function scheduleBootstrapFallbacks(
 
   if (!response.user_status) {
     addBootstrapFallbackBreadcrumb("user_status", true);
-    queryClient.prefetchQuery({
-      queryKey: queryKeys.userStatus(address),
-      queryFn: () => getUserStatus({ address }),
-    });
+    void fetchAuthUserStatus(queryClient, address, isCurrent).catch(() => undefined);
   }
   if (!response.user_followed) {
     addBootstrapFallbackBreadcrumb("user_followed", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.userFollowed(address),
-      queryFn: async () => {
-        const nodeConfig = await queryClient.ensureQueryData({
-          queryKey: queryKeys.nodeConfig(),
-          queryFn: getNodeConfig,
-          staleTime: 1000 * 60 * 60 * 24,
-        }).catch(() => null);
-        return getUserFollowed({ address }, { nodeConfig });
-      },
+      queryFn: guarded((options) => getUserFollowed({ address }, options)),
+      retry: shouldRetryApiQuery,
     });
   }
   if (!response.user_blocked) {
     addBootstrapFallbackBreadcrumb("user_blocked", true);
     queryClient.prefetchQuery({
       queryKey: queryKeys.userBlocked(address),
-      queryFn: () => getUserBlocked({ address }),
-    });
-  }
-  // Invite codes are feature-gated: when registration_invite_code_required is
-  // false the endpoint always returns an empty list, so a null bootstrap
-  // section is expected and not worth a request. Only fall back when the
-  // feature is explicitly enabled.
-  const inviteCodesEnabled =
-    (response.node_config ??
-      queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig()))
-      ?.registration_invite_code_required === true;
-  if (!response.invite_codes && inviteCodesEnabled) {
-    addBootstrapFallbackBreadcrumb("invite_codes", true);
-    queryClient.prefetchQuery({
-      queryKey: queryKeys.inviteCodes(address),
-      queryFn: async () => {
-        const wallet = await walletService.getWallet();
-        if (!wallet || wallet.address.toLowerCase() !== address.toLowerCase()) {
-          throw new Error("Active wallet changed before invite-code fallback");
-        }
-        return getInviteCodes(wallet);
-      },
+      queryFn: guarded((options) => getUserBlocked({ address }, options)),
+      retry: shouldRetryApiQuery,
     });
   }
 }
@@ -280,8 +197,12 @@ export async function primeBootstrap(
   queryClient: QueryClient,
   address?: string,
   isCurrent: () => boolean = () => true,
+  options?: { signal?: AbortSignal },
 ): Promise<BootstrapResponse | null> {
   const hasAddress = Boolean(address);
+  const serverContext = apiClient.getCurrentServerContext();
+  const isActive = () => isCurrent() && !options?.signal?.aborted &&
+    apiClient.getCurrentServerContext().generation === serverContext.generation;
 
   Sentry.addBreadcrumb({
     category: "bootstrap",
@@ -291,28 +212,14 @@ export async function primeBootstrap(
   });
 
   try {
-    let wallet = null;
-    if (address) {
-      try {
-        const candidate = await walletService.getWallet();
-        if (candidate?.address.toLowerCase() === address.toLowerCase()) {
-          wallet = candidate;
-        }
-      } catch (error) {
-        Sentry.addBreadcrumb({
-          category: "bootstrap",
-          message: "Bootstrap identity proof unavailable; continuing without invite codes",
-          level: "warning",
-          data: { error: error instanceof Error ? error.name : "unknown" },
-        });
-      }
-    }
     const params = getStartupBootstrapParams(address);
-    const response = await getBootstrap(params, wallet ?? undefined);
-    if (!isCurrent()) return null;
+    if (!isActive()) return null;
+    const response = await getBootstrap(params, options);
+    if (!isActive()) return null;
+    responseGuards.set(response, isActive);
     hydrateBootstrapCache(queryClient, response, address);
     hydrateBootstrapViewCache(queryClient, response, params);
-    scheduleBootstrapFallbacks(queryClient, response, address);
+    scheduleBootstrapFallbacks(queryClient, response, address, isActive);
 
     const summary = summarizeBootstrapResponse(response, hasAddress);
     Sentry.addBreadcrumb({
@@ -338,15 +245,15 @@ export async function primeBootstrap(
 
     return response;
   } catch (error) {
-    if (!isCurrent()) return null;
-    console.warn("[Bootstrap] Failed to prime bootstrap cache:", error);
+    if (!isActive() || isReadCancellation(error)) return null;
+    scheduleBootstrapFallbacks(queryClient, {}, address, isActive);
     Sentry.addBreadcrumb({
       category: "bootstrap",
       message: "Bootstrap request failed",
       level: "warning",
       data: { hasAddress },
     });
-    Sentry.captureException(error, {
+    if (!isCompletedApiRead(error)) Sentry.captureException(error, {
       tags: { feature: "bootstrap", operation: "prime" },
       extra: { hasAddress },
     });

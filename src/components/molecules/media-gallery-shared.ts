@@ -7,7 +7,6 @@ import {
 } from "./post-card-media-constants";
 import {
   computeGalleryFrameHeight,
-  hasGalleryItemAspectRatio,
   resolveGalleryItemAspectRatio,
 } from "./media-gallery-sizing";
 
@@ -24,11 +23,7 @@ export const GALLERY_ASPECT_RATIO_CACHE = new BoundedLruMap<string, number>(256)
 export const GALLERY_LOADED_CACHE = new BoundedLruSet<string>(512);
 
 export function getGalleryItemAspectRatio(item: ResolvedMedia): number {
-  if (hasGalleryItemAspectRatio(item)) {
-    const cached = GALLERY_ASPECT_RATIO_CACHE.get(item.uri);
-    if (cached) return cached;
-  }
-  return resolveGalleryItemAspectRatio(item);
+  return resolveGalleryItemAspectRatio(item, GALLERY_ASPECT_RATIO_CACHE.get(item.uri));
 }
 
 export function computeGalleryHeight(

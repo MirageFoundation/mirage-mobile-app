@@ -67,7 +67,7 @@ describe("auth signup screen access", () => {
     ).toBe("show");
   });
 
-  test("pending signup with a phrase resumes on recovery, not username", () => {
+  test("pending signup keeps its controller mounted until explicit recovery navigation", () => {
     expect(
       resolveAuthSignupScreenAccess({
         screen: "username",
@@ -75,13 +75,14 @@ describe("auth signup screen access", () => {
         hasRecoveryPhrase: true,
         isCompletingSignup: false,
       }),
-    ).toBe("redirect_recovery_phrase");
+    ).toBe("show");
 
     expect(
       resolveAuthSignupScreenAccess({
         screen: "recovery-phrase",
         sessionStatus: "pending_signup",
         hasRecoveryPhrase: true,
+        hasConfirmedUsername: true,
         isCompletingSignup: false,
       }),
     ).toBe("show");
@@ -101,7 +102,7 @@ describe("auth signup screen access", () => {
         screen: "recovery-phrase",
         hasRecoveryPhrase: true,
       }),
-    ).toBe("show");
+    ).toBe("redirect_username");
   });
 });
 

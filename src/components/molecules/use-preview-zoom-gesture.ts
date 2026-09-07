@@ -112,6 +112,11 @@ export function usePreviewZoomGesture(
     });
 
   const panGesture = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesMove((_event, state) => {
+      if (scale.value <= MIN_ZOOM_SCALE) state.fail();
+      else state.activate();
+    })
     .onUpdate((e) => {
       const liveScale = scale.value;
       if (liveScale <= MIN_ZOOM_SCALE) {
@@ -184,5 +189,5 @@ export function usePreviewZoomGesture(
     ],
   }));
 
-  return { composedGesture, animatedStyle, resetTransforms };
+  return { composedGesture, animatedStyle, resetTransforms, scale };
 }

@@ -67,7 +67,7 @@ export function UserProfileScreen() {
     handleSettingsPress,
     handleTabChange,
     handleTabDoubleTap,
-    handleTopicPress,
+    handleCommunityPress,
     handleUnblockUser,
     handleUnfollow,
     handleUpvote,
@@ -157,7 +157,7 @@ export function UserProfileScreen() {
             onBlockPost={handleBlockPostFromCard}
             onReport={handleReportFromCard}
             onRevealContent={handleRevealContent}
-            onTopicPress={handleTopicPress}
+            onCommunityPress={handleCommunityPress}
           />
         </Animated.View>
       );
@@ -179,7 +179,7 @@ export function UserProfileScreen() {
     handleBlockPostFromCard, handleBlockUserFromCard, handleCommentPress,
     handleDownvote, handleFollowersPress, handlePostMorePress, handlePostPress,
     handleReportFromCard, handleRevealContent, handleTabChange,
-    handleTabDoubleTap, handleTopicPress, handleUpvote, headerHeight, isFocused,
+    handleTabDoubleTap, handleCommunityPress, handleUpvote, headerHeight, isFocused,
     isLoading, isOwnProfile, isTabsSticky, nearbyVideoPostIds, profileData,
     revealedPosts, scrollY, shareServer, theme.colors.background.default,
     userAddress, userProfileFeedContext, username, visibleVideoPostIds,

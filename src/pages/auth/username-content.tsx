@@ -1,16 +1,15 @@
 import { useConfig, useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
-import { validateInviteCode } from "@/src/api/read/endpoints/users";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
-import { getTxStatus } from "@/src/api/read/endpoints/tx";
-import { setUsername as setUsernameOnChain } from "@/src/api/write";
+import { useSignupRegistration } from "./use-signup-registration";
+import { PendingSignupRecovery } from "./pending-signup-recovery";
+import { canSubmitRegistration } from "@/src/domain/auth/registration-gate";
 import { TransactionProgressModal } from "@/src/components/molecules";
 import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
+import { useServerList } from "@/src/hooks";
 import { trackEvent } from "@/src/services/analytics";
-import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
@@ -19,18 +18,10 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useLocalSearchParams } from "expo-router";
-import { getReferralPrecheck } from "@/src/api/read/endpoints/referrals";
-import {
-  formatInviteCode,
-  useAuthInviteLinkListener,
-} from "@/src/navigation/auth-invite-linking";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Keyboard,
-  Pressable,
   ScrollView,
   View,
 } from "react-native";
@@ -43,14 +34,7 @@ import { UsernameRegistrationUnavailableModal } from "./username-registration-un
 import { UsernameServerModal } from "./username-server-modal";
 import { styles } from "./username-styles";
 
-type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
-type InviteCodeStatus =
-  | "idle"
-  | "checking"
-  | "valid"
-  | "invalid"
-  | "used"
-  | "expired";
+type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "error";
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -59,26 +43,8 @@ export default function UsernameScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
-  const createNewWallet = useAuthStore((s) => s.createNewWallet);
   const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
-  const setHasUsername = useAuthStore((s) => s.setHasUsername);
-  const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
-
-  const searchParams = useLocalSearchParams<{ ref?: string; invite?: string }>();
-
-  const [username, setUsername] = useState("");
-  const [status, setStatus] = useState<UsernameStatus>("idle");
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [isSettingUp, setIsSettingUp] = useState(false);
-
-  const [referrerUsername, setReferrerUsername] = useState<string | null>(null);
-  const [precheckStatus, setPrecheckStatus] = useState<"idle" | "loading" | "valid" | "error">("idle");
-  const [precheckError, setPrecheckError] = useState<string | null>(null);
-  const [precheckAvailable, setPrecheckAvailable] = useState<number | null>(null);
-  const [alreadyUsedCode, setAlreadyUsedCode] = useState(false);
-  const isReferralMode = precheckStatus === "valid" && !!referrerUsername;
+  const [username, setUsername] = useState(() => walletService.getWalletMetadata()?.signup?.username ?? "");
   const savedServer = usePreferencesStore((s) => s.apiServer);
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
@@ -87,16 +53,9 @@ export default function UsernameScreen() {
   const toast = useToast();
   const { servers } = useServerList();
 
-  const walletConfirmedRef = useRef(false);
-  const recoveryNavigationStartedRef = useRef(false);
-  const txProgress = useTransactionProgress();
 
   useEffect(() => {
-    trackEvent("onboarding_started", {
-      is_referral: !!searchParams.ref,
-      has_invite_param: !!searchParams.invite,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    trackEvent("onboarding_started");
   }, []);
 
   useEffect(() => {
@@ -112,15 +71,9 @@ export default function UsernameScreen() {
   }, []);
 
   const { data: config } = useConfig();
-  const { data: nodeConfig } = useNodeConfig();
-  // Web parity (useCreateAccount.js): no silent defaults. The invite
-  // requirement only exists when node_config explicitly says so, and signup
-  // stays blocked until node_config has loaded instead of guessing.
-  const nodeConfigLoaded =
-    typeof nodeConfig?.registration_enabled === "boolean" &&
-    typeof nodeConfig?.registration_invite_code_required === "boolean";
-  const registrationEnabled = nodeConfig?.registration_enabled === true;
-  const inviteCodeRequired = nodeConfig?.registration_invite_code_required === true;
+  const { data: nodeConfig, isError: nodeConfigError, isFetching: nodeConfigFetching, refetch: refetchNodeConfig } = useNodeConfig();
+  const nodeConfigLoaded = typeof nodeConfig?.registration_enabled === "boolean";
+  const registrationEnabled = nodeConfig?.registration_enabled === true && !nodeConfigError && !nodeConfigFetching;
   const [showRegPopup, setShowRegPopup] = useState(false);
   const [isSwitchingNode, setIsSwitchingNode] = useState(false);
   const otherServer = servers.find((s) => s !== activeServer) ?? servers[0];
@@ -128,7 +81,7 @@ export default function UsernameScreen() {
   const maxUsernameSize = config?.max_username_size ?? 20;
 
   useEffect(() => {
-    if (nodeConfig && !registrationEnabled) {
+    if (nodeConfig?.registration_enabled === false && !walletService.getWalletMetadata()?.pending) {
       setShowRegPopup(true);
     }
   }, [nodeConfig, registrationEnabled]);
@@ -158,62 +111,12 @@ export default function UsernameScreen() {
     }
   }, [otherServer, setApiServer, queryClient, router, toast]);
 
-  const applyInviteCode = useCallback((invite: string) => {
-    setReferrerUsername(null);
-    setPrecheckStatus("idle");
-    setPrecheckError(null);
-    setPrecheckAvailable(null);
-    setAlreadyUsedCode(false);
-    setInviteCode(formatInviteCode(invite));
-    setInviteStatus("idle");
-  }, []);
-
-  const applyReferral = useCallback((ref: string) => {
-    setInviteCode("");
-    setInviteStatus("idle");
-    setReferrerUsername(ref);
-    setPrecheckStatus("loading");
-    getReferralPrecheck({ username: ref })
-      .then((result) => {
-        if (result.valid) {
-          setPrecheckStatus("valid");
-          setPrecheckAvailable(result.available ?? null);
-        } else {
-          setPrecheckStatus("error");
-          setPrecheckError(result.error ?? "Referral link is not valid");
-          if (result.error === "you already used your code") {
-            setAlreadyUsedCode(true);
-          }
-        }
-      })
-      .catch(() => {
-        setPrecheckStatus("error");
-        setPrecheckError("Failed to verify referral link");
-      });
-  }, []);
-
-  useEffect(() => {
-    if (searchParams.invite) {
-      applyInviteCode(searchParams.invite);
-    } else if (searchParams.ref && inviteCodeRequired) {
-      applyReferral(searchParams.ref);
-    }
-  }, [
-    searchParams.ref,
-    searchParams.invite,
-    inviteCodeRequired,
-    applyInviteCode,
-    applyReferral,
-  ]);
-
-  useAuthInviteLinkListener({
-    onInvite: applyInviteCode,
-    onReferral: inviteCodeRequired ? applyReferral : undefined,
-  });
-
   const {
     data: usernameData,
     isLoading: isCheckingUsername,
+    isFetching: isFetchingUsername,
+    isError: availabilityError,
+    refetch: refetchAvailability,
     isFetched,
   } = useUsernameAvailability(
     username.length >= minUsernameSize ? username : null,
@@ -230,221 +133,34 @@ export default function UsernameScreen() {
     [minUsernameSize, maxUsernameSize],
   );
 
-  useEffect(() => {
-    if (username.length === 0) {
-      setStatus("idle");
-      return;
-    }
-
-    if (!validateUsername(username)) {
-      setStatus("invalid");
-      return;
-    }
-
-    if (isCheckingUsername) {
-      setStatus("checking");
-      return;
-    }
-
-    if (isFetched && usernameData) {
-      if (usernameData.exists) {
-        setStatus("taken");
-      } else {
-        setStatus("available");
-      }
-    }
-  }, [username, validateUsername, isCheckingUsername, isFetched, usernameData]);
-
+  const status: UsernameStatus = !username ? "idle" : !validateUsername(username) ? "invalid"
+    : availabilityError ? "error" : isCheckingUsername || isFetchingUsername ? "checking"
+    : isFetched && usernameData ? usernameData.exists ? "taken" : "available" : "checking";
+  const currentName = useRef(username);
+  currentName.current = username;
+  const authorize = useCallback(async () => {
+    if (!registrationEnabled || !nodeConfigLoaded || status !== "available") return false;
+    const context = apiClient.getCurrentServerContext();
+    const [freshConfig, freshAvailability] = await Promise.all([getNodeConfig(), refetchAvailability()]);
+    return canSubmitRegistration({
+      currentUsername: currentName.current, requestedUsername: username,
+      sameServer: apiClient.getCurrentServerContext().generation === context.generation,
+      registrationEnabled: freshConfig.registration_enabled, results: freshAvailability,
+    });
+  }, [registrationEnabled, nodeConfigLoaded, status, username, refetchAvailability]);
+  const {
+    txProgress, isSettingUp, createError, setCreateError, handleContinue,
+    handleRetry, handleDismissError, handleRecoveryPhraseNavigation,
+  } = useSignupRegistration(username, authorize);
+  const pending = walletService.getWalletMetadata();
+  const needsReconciliation = pending?.pending && pending.signup?.phase !== "wallet_generated";
   const handleUsernameChange = useCallback((text: string) => {
+    if (isSettingUp || needsReconciliation) return;
     const sanitized = text.replace(/[^a-zA-Z0-9-]/g, "");
+    currentName.current = sanitized;
     setUsername(sanitized);
     setCreateError(null);
-  }, []);
-
-  const handleInviteCodeChange = useCallback((text: string) => {
-    setInviteCode(formatInviteCode(text));
-    setInviteStatus("idle");
-    setCreateError(null);
-  }, []);
-
-  const handleEnterManually = useCallback(() => {
-    setReferrerUsername(null);
-    setPrecheckStatus("idle");
-    setPrecheckError(null);
-    setPrecheckAvailable(null);
-    setAlreadyUsedCode(false);
-    setInviteCode("");
-    setInviteStatus("idle");
-  }, []);
-
-  const handleContinue = useCallback(async () => {
-    if (status !== "available") return;
-    if (!nodeConfigLoaded) return;
-    if (inviteCodeRequired && !isReferralMode && !inviteCode.trim()) {
-      setInviteStatus("invalid");
-      setCreateError("Please enter an invite code");
-      triggerHaptic("error");
-      return;
-    }
-
-    triggerHaptic("selection");
-    Keyboard.dismiss();
-
-    if (inviteCodeRequired && !isReferralMode) {
-      setInviteStatus("checking");
-    }
-
-    try {
-      if (inviteCodeRequired && !isReferralMode) {
-        const rawCode = inviteCode.trim();
-        const result = await validateInviteCode({ code: rawCode });
-
-        if (!result.valid) {
-          if (result.error === "already_used") {
-            setInviteStatus("used");
-          } else if (result.error === "expired") {
-            setInviteStatus("expired");
-          } else {
-            setInviteStatus("invalid");
-          }
-          triggerHaptic("error");
-          return;
-        }
-        setInviteStatus("valid");
-      }
-
-      setIsSettingUp(true);
-
-      const existingMetadata = walletService.getWalletMetadata();
-      if (existingMetadata?.pending && existingMetadata.hasUsername) {
-        setIsSettingUp(false);
-        router.push({
-          pathname: "/recovery-phrase",
-          params: { username: `anon-${username}` },
-        });
-        return;
-      }
-
-      if (await walletService.hasWallet()) {
-        await walletService.clearWallet();
-      }
-
-      const mnemonic = await createNewWallet();
-
-      if (!mnemonic) {
-        throw new Error("Failed to generate wallet");
-      }
-
-      const wallet = await walletService.getWallet();
-
-      if (!wallet) {
-        throw new Error("Wallet not available");
-      }
-
-      const txResult = await executeWithProgress(
-        txProgress,
-        async (onPoWProgress) => {
-          txProgress.setPhase("signing");
-          const usernamePayload = isReferralMode
-            ? { username, referrer_username: referrerUsername! }
-            : { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
-          const response = await setUsernameOnChain(
-            wallet,
-            usernamePayload,
-            onPoWProgress,
-          );
-          txProgress.setPhase("submitting");
-          return response;
-        },
-        {
-          pollTxStatus: true,
-          getTxStatus: async (hash) => {
-            const s = await getTxStatus({ hash });
-            return {
-              found: s.found,
-              indexed: s.indexed ?? false,
-              success: s.success,
-              error_details: s.error_details,
-            };
-          },
-        },
-      );
-
-      if (!txResult.success) {
-        setIsSettingUp(false);
-        setInviteStatus("idle");
-        return;
-      }
-
-      if (!isCurrentAuthWallet(wallet.address)) return;
-      setHasUsername(true, `anon-${username}`, wallet.address);
-
-      trackEvent("username_set", {
-        sign_up_path: isReferralMode
-          ? "referral"
-          : inviteCodeRequired
-            ? "invite_code"
-            : "open",
-      });
-
-      triggerHaptic("success");
-    } catch (error) {
-      console.error("[Username] Failed to create account:", error);
-      triggerHaptic("error");
-      setIsSettingUp(false);
-      setInviteStatus("idle");
-
-      if (!txProgress.isVisible) {
-        if (error instanceof Error) {
-          if (error.message.includes("already exists")) {
-            setCreateError("A wallet already exists. Please logout first.");
-          } else {
-            setCreateError("Failed to create account. Please try again.");
-          }
-        } else {
-          setCreateError("An unexpected error occurred.");
-        }
-      }
-    }
-  }, [
-    status,
-    username,
-    inviteCode,
-    nodeConfigLoaded,
-    inviteCodeRequired,
-    isReferralMode,
-    referrerUsername,
-    createNewWallet,
-    setHasUsername,
-    txProgress,
-    router,
-  ]);
-
-  const handleRecoveryPhraseNavigation = useCallback(() => {
-    if (recoveryNavigationStartedRef.current) return;
-    recoveryNavigationStartedRef.current = true;
-    txProgress.hideModal();
-    router.push({
-      pathname: "/recovery-phrase",
-      params: { username: `anon-${username}` },
-    });
-  }, [router, txProgress, username]);
-
-  const handleRetry = useCallback(() => {
-    txProgress.reset();
-    setTimeout(() => {
-      handleContinue();
-    }, 100);
-  }, [txProgress, handleContinue]);
-
-  const handleDismissError = useCallback(async () => {
-    txProgress.hideModal();
-    setIsSettingUp(false);
-    if (!walletConfirmedRef.current) {
-      await walletService.clearWallet();
-      clearRecoveryPhrase();
-    }
-  }, [txProgress, clearRecoveryPhrase]);
+  }, [isSettingUp, needsReconciliation, setCreateError]);
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
@@ -527,31 +243,10 @@ export default function UsernameScreen() {
     }
   };
 
-  const getInviteStatusIcon = () => {
-    switch (inviteStatus) {
-      case "checking":
-        return (
-          <ActivityIndicator size="small" color={theme.colors.text.subtle} />
-        );
-      case "valid":
-        return <Ionicons name="checkmark" size={20} color="rgb(34,197,94)" />;
-      case "used":
-      case "expired":
-      case "invalid":
-        return (
-          <Ionicons
-            name="close-circle"
-            size={20}
-            color={theme.colors.error[500]}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
   const getStatusMessage = useMemo(() => {
     switch (status) {
+      case "error":
+        return "Availability check failed. Retry before continuing.";
       case "checking":
         return "Checking availability...";
       case "available":
@@ -564,23 +259,6 @@ export default function UsernameScreen() {
         return "";
     }
   }, [status, minUsernameSize, maxUsernameSize]);
-
-  const getInviteStatusMessage = useMemo(() => {
-    switch (inviteStatus) {
-      case "checking":
-        return "Validating invite code...";
-      case "valid":
-        return "Invite code accepted!";
-      case "used":
-        return "This invite code has already been used";
-      case "expired":
-        return "This invite code has expired";
-      case "invalid":
-        return "Invalid invite code";
-      default:
-        return "";
-    }
-  }, [inviteStatus]);
 
   const getStatusColor = () => {
     switch (status) {
@@ -595,27 +273,9 @@ export default function UsernameScreen() {
     }
   };
 
-  const getInviteStatusColor = () => {
-    switch (inviteStatus) {
-      case "valid":
-        return "rgb(34,197,94)";
-      case "used":
-      case "expired":
-      case "invalid":
-        return theme.colors.error[500];
-      default:
-        return theme.colors.text.subtle;
-    }
-  };
-
   const isButtonEnabled =
-    status === "available" &&
-    nodeConfigLoaded &&
-    (inviteCodeRequired ? (isReferralMode || inviteCode.trim().length > 0) : true) &&
-    !isCreatingWallet &&
-    !isSettingUp &&
-    inviteStatus !== "checking" &&
-    precheckStatus !== "loading";
+    (needsReconciliation || (status === "available" && registrationEnabled)) &&
+    !isCreatingWallet && !isSettingUp;
 
   return (
     <Box flex background="base">
@@ -640,8 +300,8 @@ export default function UsernameScreen() {
       <UsernameHeader
         activeServer={activeServer}
         insetsTop={insets.top}
-        onClose={handleClose}
-        onOpenServerModal={() => setShowServerModal(true)}
+        onClose={() => { if (!isSettingUp) handleClose(); }}
+        onOpenServerModal={() => { if (!isSettingUp) setShowServerModal(true); }}
       />
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
@@ -669,142 +329,13 @@ export default function UsernameScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            {inviteCodeRequired
-              ? "Pick a username and enter your invite code to join"
-              : "Pick a username to join"}
+            Pick a username to join
           </Text>
 
-          {inviteCodeRequired && (
-            <>
-              {precheckStatus === "loading" ? (
-                <View style={styles.inviteInputWrapper}>
-                  <Input
-                    value="Checking referral..."
-                    editable={false}
-                    pointerEvents="none"
-                    size="lg"
-                    variant="filled"
-                    style={[styles.input, { opacity: 0.6 }]}
-                    rightAccessory={
-                      <View style={styles.statusIcon}>
-                        <ActivityIndicator size="small" color={theme.colors.text.subtle} />
-                      </View>
-                    }
-                  />
-                </View>
-              ) : isReferralMode ? (
-                <>
-                  <View style={styles.inviteInputWrapper}>
-                    <Input
-                      value="Invite code applied ✓"
-                      editable={false}
-                      pointerEvents="none"
-                      size="lg"
-                      variant="filled"
-                      style={[styles.input, { opacity: 0.6 }]}
-                      rightAccessory={
-                        <View style={styles.statusIcon}>
-                          <Ionicons name="checkmark-circle" size={20} color="rgb(34,197,94)" />
-                        </View>
-                      }
-                    />
-                  </View>
-                  {precheckAvailable != null && (
-                    <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
-                      <Text size="sm" style={{ color: theme.colors.warning[500] }}>
-                        Only {precheckAvailable} codes left
-                      </Text>
-                    </View>
-                  )}
-                </>
-              ) : precheckStatus === "error" ? (
-                <>
-                  <View style={styles.inviteInputWrapper}>
-                    <Input
-                      value={precheckError ?? "Referral link is not valid"}
-                      editable={false}
-                      pointerEvents="none"
-                      size="lg"
-                      variant="filled"
-                      style={[styles.input, { opacity: 0.6 }]}
-                      rightAccessory={
-                        <View style={styles.statusIcon}>
-                          <Ionicons name="close-circle" size={20} color={theme.colors.error[500]} />
-                        </View>
-                      }
-                    />
-                  </View>
-                  <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
-                    <Pressable onPress={handleEnterManually}>
-                      <Text size="sm" style={{ color: "#60A5FA" }}>
-                        Have an invite code? Enter it manually
-                      </Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.inviteInputWrapper}>
-                    <Input
-                      value={inviteCode}
-                      onChangeText={handleInviteCodeChange}
-                      placeholder="XXXX-XXXX"
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      size="lg"
-                      variant="filled"
-                      style={styles.input}
-                      maxLength={9}
-                      rightAccessory={
-                        inviteCode.length > 0 ? (
-                          <Pressable
-                            style={styles.statusIcon}
-                            onPress={() => {
-                              setInviteCode("");
-                              setInviteStatus("idle");
-                            }}
-                          >
-                            {inviteStatus !== "idle" ? (
-                              getInviteStatusIcon()
-                            ) : (
-                              <Ionicons
-                                name="close-circle"
-                                size={20}
-                                color={theme.colors.text.subtle}
-                              />
-                            )}
-                          </Pressable>
-                        ) : undefined
-                      }
-                    />
-                  </View>
-
-                  <View
-                    style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
-                  >
-                    {inviteStatus !== "idle" ? (
-                      <Text size="sm" style={{ color: getInviteStatusColor() }}>
-                        {getInviteStatusMessage}
-                      </Text>
-                    ) : (
-                      <Text
-                        size="sm"
-                        style={{ color: theme.colors.neutral[600] }}
-                      >
-                        Enter an invite code
-                      </Text>
-                    )}
-                  </View>
-                </>
-              )}
-            </>
-          )}
-
-          {!alreadyUsedCode && (
-            <>
-              <View style={styles.inputWrapper}>
+          <View style={styles.inputWrapper}>
                 <Input
                   value={username}
+                  editable={!isSettingUp && !needsReconciliation}
                   onChangeText={handleUsernameChange}
                   placeholder="Choose a username"
                   autoCapitalize="none"
@@ -835,6 +366,12 @@ export default function UsernameScreen() {
                     This is how people will find you on Mirage
                   </Text>
                 )}
+                {!needsReconciliation && (!registrationEnabled || availabilityError) && (
+                  <Button variant="ghost" onPress={() => { void refetchNodeConfig(); void refetchAvailability(); }}>
+                    <Button.Text>{nodeConfigError ? "Configuration unavailable - retry" : nodeConfigFetching ? "Loading configuration..." : nodeConfig?.registration_enabled === false ? "Registration disabled - check again" : "Retry availability"}</Button.Text>
+                  </Button>
+                )}
+                {needsReconciliation && <Text size="sm">Your signup key is retained. Check registration to resume; no transaction will be resent.</Text>}
                 {createError && (
                   <Text size="sm" style={{ color: theme.colors.error[500] }}>
                     {createError}
@@ -842,29 +379,22 @@ export default function UsernameScreen() {
                 )}
               </View>
 
-              {precheckStatus !== "loading" && (
-                <Button
-                  size="lg"
-                  rounded="full"
-                  onPress={handleContinue}
-                  disabled={!isButtonEnabled}
-                  loading={
-                    isCreatingWallet || isSettingUp || inviteStatus === "checking"
-                  }
-                  style={[styles.continueButton]}
-                >
-                  <Button.Text weight="medium">
-                    {inviteStatus === "checking"
-                      ? "Validating code..."
-                      : isCreatingWallet || isSettingUp
-                        ? "Creating account..."
-                        : "Continue"}
-                  </Button.Text>
-                </Button>
-              )}
-            </>
-          )}
+              <Button
+                size="lg"
+                rounded="full"
+                onPress={handleContinue}
+                disabled={!isButtonEnabled}
+                loading={isCreatingWallet || isSettingUp}
+                style={[styles.continueButton]}
+              >
+                <Button.Text weight="medium">
+                  {isCreatingWallet || isSettingUp
+                    ? "Creating account..."
+                    : needsReconciliation ? "Check registration / resume" : "Continue"}
+                </Button.Text>
+              </Button>
 
+          {pending?.pending && <PendingSignupRecovery busy={isSettingUp || isCreatingWallet} />}
           <Text style={styles.termsText}>
             By continuing, you agree to our{" "}
             <Text
@@ -905,7 +435,7 @@ export default function UsernameScreen() {
         onSwitchNode={handleSwitchNode}
       />
 
-      <UsernameFooter bottomInset={insets.bottom} onLogin={handleLogin} />
+      <UsernameFooter bottomInset={insets.bottom} onLogin={() => { if (!isSettingUp) handleLogin(); }} />
     </Box>
   );
 }

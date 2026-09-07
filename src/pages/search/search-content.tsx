@@ -6,15 +6,10 @@ import { useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { SearchResultsSections } from "./search-results-sections";
+import { SEARCH_TABS, SEARCH_TAB_LABELS } from "./search-state";
 import { styles } from "./search-styles";
-import { SCREEN_WIDTH, type SearchTab } from "./search-utils";
+import { SCREEN_WIDTH } from "./search-utils";
 import { useSearchController } from "./use-search-controller";
-
-const tabs: { key: SearchTab; label: string }[] = [
-  { key: "posts", label: "Posts" },
-  { key: "topics", label: "Topics" },
-  { key: "users", label: "Users" },
-];
 
 export function SearchScreen() {
   const insets = useSafeAreaInsets();
@@ -68,13 +63,13 @@ export function SearchScreen() {
           />
           <TextInput
             ref={controller.inputRef}
-            accessibilityLabel="Search posts, topics, and users"
+            accessibilityLabel="Search posts, communities, and users"
             value={controller.searchQuery}
             onChangeText={controller.handleQueryChange}
             onFocus={() => controller.setIsFocused(true)}
             onBlur={() => controller.setIsFocused(false)}
             onSubmitEditing={controller.handleSubmitEditing}
-            placeholder="Search posts, topics, users..."
+            placeholder="Search posts, communities, users..."
             placeholderTextColor={theme.colors.text.subtle}
             returnKeyType="search"
             autoCapitalize="none"
@@ -134,7 +129,8 @@ export function SearchScreen() {
             },
           ]}
         >
-          {tabs.map(({ key, label }) => {
+          {SEARCH_TABS.map((key) => {
+            const label = SEARCH_TAB_LABELS[key];
             const isActive = controller.activeTab === key;
             const count = controller.tabCounts[key];
 

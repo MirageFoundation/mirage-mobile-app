@@ -1,5 +1,6 @@
 export const INITIAL_PAGE_SIZE = 10;
-export const NEXT_PAGE_SIZE = 12;
+// The server uses (page - 1) * limit, so changing limit skips rows 11-12.
+export const NEXT_PAGE_SIZE = INITIAL_PAGE_SIZE;
 export const PREFETCH_THRESHOLD = 6;
 export const FOLLOWING_AUTO_FILL_MAX_PAGES = 4;
 

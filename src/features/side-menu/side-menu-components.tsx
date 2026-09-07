@@ -119,40 +119,40 @@ export function FollowedUsersSection({
   );
 }
 
-export function FollowedTopicsSection({
+export function JoinedCommunitiesSection({
   topics,
   loading,
   canShowMore,
   onShowMore,
-  onTopicPress,
+  onCommunityPress,
 }: {
   topics: string[];
   loading: boolean;
   canShowMore: boolean;
   onShowMore: () => void;
-  onTopicPress: (topic: string) => void;
+  onCommunityPress: (topic: string) => void;
 }) {
   const { theme } = useUnistyles();
   return (
     <>
-      <SectionHeader title="Followed Topics" onShowMore={canShowMore ? onShowMore : undefined} />
+      <SectionHeader title="Joined Communities" onShowMore={canShowMore ? onShowMore : undefined} />
       {loading ? (
         <View style={styles.loadingContainer}><ActivityIndicator size="small" color={theme.colors.text.subtle} /></View>
       ) : topics.length ? (
         topics.map((topic) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`View topic ${topic}`}
+            accessibilityLabel={`View community ${topic}`}
             key={topic}
-            onPress={() => onTopicPress(topic)}
+            onPress={() => onCommunityPress(topic)}
             style={({ pressed }) => [styles.topicListItem, pressed && { opacity: 0.7 }]}
           >
-            <Text style={{ color: theme.colors.text.default, flex: 1 }} size="md" weight="medium" numberOfLines={1}>#{topic}</Text>
+            <Text style={{ color: theme.colors.text.default, flex: 1 }} size="md" weight="medium" numberOfLines={1}>[{topic}]</Text>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.text.subtle} />
           </Pressable>
         ))
       ) : (
-        <Text style={{ color: theme.colors.text.subtle, paddingVertical: 8 }} size="sm">No followed topics yet</Text>
+        <Text style={{ color: theme.colors.text.subtle, paddingVertical: 8 }} size="sm">No joined communities yet</Text>
       )}
       <SectionFooter />
     </>

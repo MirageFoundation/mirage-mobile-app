@@ -1,17 +1,13 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import * as Sentry from "@sentry/react-native";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import {
   forwardRef,
   memo,
   useCallback,
-  useEffect,
   useImperativeHandle,
-  useMemo,
-  useRef,
 } from "react";
 import {
   ActivityIndicator,
@@ -24,10 +20,8 @@ import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { useVideoMuteStore } from "@/src/stores";
 import { markVideoFirstFrame } from "@/src/utils/video-ttff";
 import {
-  MEDIA_HORIZONTAL_PADDING,
   MEDIA_LOADED_CACHE,
   MEDIA_MAX_HEIGHT,
-  SCREEN_WIDTH,
 } from "./post-card-media-constants";
 import {
   MediaBlurRevealOverlay,
@@ -38,14 +32,14 @@ import {
 import { postMediaStyles as styles } from "./post-card-media-styles";
 import {
   useMediaAspectRatio,
-  useMediaLoadedState,
+  useMediaFrameWidth,
   useMediaPressTransition,
 } from "./post-card-media-shared";
 import { usePostCardVideoPlayback } from "./use-post-card-video-playback";
 import { usePostCardVideoListeners } from "./use-post-card-video-listeners";
 import { usePostCardVideoHealth } from "./use-post-card-video-health";
 import { getMediaImagePolicy, getMediaImageSource } from "./media-image-policy";
-import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
+import { VideoUnavailableOverlay } from "./video-unavailable-overlay";
 
 export type PostCardVideoRef = {
   pauseVideo: () => void;
@@ -134,13 +128,9 @@ export const PostCardVideo = memo(
       feedTappedToPlay,
       setFeedTappedToPlay,
       setRetainPlayerForDetail,
-      mediaRetryKey,
-      setMediaRetryKey,
       shouldMountNativeVideo,
-      mediaWasCached,
       videoPositionKey,
       currentVideoPositionRef,
-      hasRestoredVideoPositionRef,
       setPosition,
       saveVideoPosition,
       saveVideoPositionFresh,
@@ -148,10 +138,9 @@ export const PostCardVideo = memo(
       userInitiatedPlayRef,
     } = playback;
 
-    const { mediaLoaded, setMediaLoaded, clearLoadingFallback } =
-      useMediaLoadedState(resolvedMediaUri, () => setIsVideoLoading(false));
     const { effectiveAspectRatio, updateMediaAspectRatioFromSize } =
-      useMediaAspectRatio(media, { preserveFallback: !isPostDetail });
+      useMediaAspectRatio(media);
+    const { containerWidth, onMediaLayout } = useMediaFrameWidth();
     const { mediaFrameRef, runWithMediaTransition } = useMediaPressTransition({
       isPostDetail,
       postId,
@@ -161,76 +150,27 @@ export const PostCardVideo = memo(
       playback,
       resolvedMediaUri,
       isPostDetail,
-      setMediaLoaded,
       updateMediaAspectRatioFromSize,
     });
 
     const health = usePostCardVideoHealth({
       media,
-      isPostDetail,
-      isVisible: playback.isVisible,
-      isFocused: playback.isFocused,
-      isConnected,
-      screenActive,
-      shouldBlurContent,
-      feedTappedToPlay,
-      mediaWasCached,
+      adoptedLease: playback.adoptedLease,
+      enabled: playback.shouldPrepareNativeVideo && screenActive && isConnected && !shouldBlurContent,
+      shouldPlay: playback.shouldPlayNativeVideo,
       forceVideoProcessing,
       processingMediaUri,
       onVideoProcessingComplete,
       postId,
       videoPlayer,
-      stopNativeVideoPlayback,
-      videoReadyForDisplay,
-      setVideoReadyForDisplay,
-      setIsVideoLoading,
-      setMediaLoaded,
-      clearLoadingFallback,
-      mediaRetryKey,
-      setMediaRetryKey,
     });
     const {
       isRedgifsVideo,
       showVideoProcessing,
-      shouldHideOnError,
+      videoError,
       handleFirstFrameHealth,
     } = health;
-
-    // Manual retry (mediaRetryKey bumps) re-applies the source to the player.
-    const mediaSource = useMemo(
-      () => ({ uri: resolvedMediaUri ?? "" }),
-      [resolvedMediaUri],
-    );
-    const appliedVideoRetryKeyRef = useRef(mediaRetryKey);
-    useEffect(() => {
-      if (appliedVideoRetryKeyRef.current === mediaRetryKey) return;
-      appliedVideoRetryKeyRef.current = mediaRetryKey;
-      if (!shouldMountNativeVideo || !resolvedMediaUri) return;
-      hasRestoredVideoPositionRef.current = false;
-      let cancelled = false;
-      void replaceVideoPlayerSourceAsync(videoPlayer, mediaSource).catch((error) => {
-        if (cancelled) return;
-        Sentry.addBreadcrumb({
-          category: "post-media",
-          message: "Video source replacement failed",
-          level: "warning",
-          data: {
-            uri: resolvedMediaUri,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, [
-      mediaRetryKey,
-      mediaSource,
-      resolvedMediaUri,
-      shouldMountNativeVideo,
-      videoPlayer,
-      hasRestoredVideoPositionRef,
-    ]);
+    const mediaLoaded = health.phase === "playable";
 
     useImperativeHandle(ref, () => ({
       pauseVideo: async () => {
@@ -347,9 +287,6 @@ export const PostCardVideo = memo(
       [globalMuted, toggleMute, isPostDetail, allowAutoplay, playback.isFocused, videoReadyForDisplay, videoPlayer],
     );
 
-    if (shouldHideOnError) return null;
-
-    const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
     const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
     const mediaWrapperStyle = exceedsMaxHeight
@@ -361,6 +298,7 @@ export const PostCardVideo = memo(
       uri: videoThumbnailUri,
       surface: isPostDetail ? "detail" : "feed",
       mediaType: "poster",
+      contentFit: "contain",
       displayWidth: containerWidth,
       intrinsicWidth: media.width,
       intrinsicHeight: media.height,
@@ -374,12 +312,12 @@ export const PostCardVideo = memo(
 
     return (
       <View style={styles.mediaContainer}>
-        <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
+        <View ref={mediaFrameRef} onLayout={onMediaLayout} style={[styles.mediaWrapper, mediaWrapperStyle]}>
           <Pressable
             onPress={isPostDetail ? handleDetailMediaPress : handleFeedVideoTap}
             style={styles.media}
           >
-            {videoThumbnailUri && (!videoReadyForDisplay || !shouldMountNativeVideo) ? (
+            {videoThumbnailUri && (!mediaLoaded || !shouldMountNativeVideo) ? (
               <>
                 <Image
                   source={getMediaImageSource(videoThumbnailPolicy)}
@@ -390,11 +328,8 @@ export const PostCardVideo = memo(
                   allowDownscaling={videoThumbnailPolicy.allowDownscaling}
                   enforceEarlyResizing={videoThumbnailPolicy.enforceEarlyResizing}
                   priority={videoThumbnailPolicy.priority}
-                  onLoad={({ source }) => {
-                    updateMediaAspectRatioFromSize(source?.width, source?.height);
-                  }}
                 />
-                {showVideoPrepSpinner ? (
+                {showVideoPrepSpinner && !videoError ? (
                   <View style={styles.playOverlay} pointerEvents="none">
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator size="small" color="#fff" />
@@ -403,21 +338,22 @@ export const PostCardVideo = memo(
                 ) : null}
               </>
             ) : null}
-            {shouldMountNativeVideo ? (
+            {shouldMountNativeVideo && !playback.controlledElsewhere ? (
               <VideoView
+                key={`${resolvedMediaUri}:${health.revision}`}
                 player={videoPlayer}
                 style={styles.media}
-                contentFit="cover"
+                contentFit="contain"
                 nativeControls={false}
                 fullscreenOptions={{ enable: false }}
                 allowsPictureInPicture={false}
                 surfaceType={Platform.OS === "android" ? "textureView" : undefined}
                 onFirstFrameRender={() => {
+                  if (!handleFirstFrameHealth()) return;
                   if (resolvedMediaUri) {
                     markVideoFirstFrame(resolvedMediaUri, isPostDetail ? "detail" : "feed");
                   }
                   setVideoReadyForDisplay(true);
-                  setMediaLoaded(true);
                   if (resolvedMediaUri) {
                     MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   }
@@ -425,19 +361,18 @@ export const PostCardVideo = memo(
                     setIsVideoLoading(false);
                     userInitiatedPlayRef.current = false;
                   }
-                  handleFirstFrameHealth();
                 }}
               />
             ) : null}
           </Pressable>
 
-          {!mediaLoaded && !loadedCacheHit && !shouldBlurContent && isConnected && !showVideoProcessing && (
+          {!mediaLoaded && playback.shouldPlayNativeVideo && !loadedCacheHit && !shouldBlurContent && isConnected && !showVideoProcessing && !videoError && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
           )}
 
-          {!shouldBlurContent && !showVideoProcessing && (
+          {!shouldBlurContent && !showVideoProcessing && !videoError && (
             <View style={styles.playOverlay}>
               {isPostDetail ? (
                 <>
@@ -481,7 +416,7 @@ export const PostCardVideo = memo(
             </View>
           )}
 
-          {!shouldBlurContent && !showVideoProcessing && isPostDetail && (
+          {!shouldBlurContent && !showVideoProcessing && !videoError && isPostDetail && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open fullscreen video"
@@ -498,7 +433,7 @@ export const PostCardVideo = memo(
             </Pressable>
           )}
 
-          {!shouldBlurContent && !showVideoProcessing && (
+          {!shouldBlurContent && !showVideoProcessing && !videoError && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={globalMuted ? "Unmute video" : "Mute video"}
@@ -520,6 +455,7 @@ export const PostCardVideo = memo(
             visible={Boolean(isConnected && showVideoProcessing)}
             isRedgifsVideo={Boolean(isRedgifsVideo)}
           />
+          <VideoUnavailableOverlay visible={videoError && !shouldBlurContent} onRetry={health.retry} />
 
           <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />
 

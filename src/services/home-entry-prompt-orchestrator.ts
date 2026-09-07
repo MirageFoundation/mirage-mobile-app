@@ -1,10 +1,7 @@
 export const HAS_SEEN_ADULT_PROMPT_DEFAULT = false;
 
-export const MODERATION_REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-
 export const HOME_ENTRY_PROMPT_ORDER = [
   "adult",
-  "moderation",
   "analytics_consent",
   "notification_permission",
 ] as const;
@@ -17,14 +14,13 @@ export type HomeEntryOsPromptId = Extract<
 >;
 
 export type HomeEntryPromptState = {
+  preferencesHydrated: boolean;
   isInitializing: boolean;
   isAuthenticated: boolean;
   isAppActive: boolean;
   isHomeFocused: boolean;
   hasCurrentUser: boolean;
   hasSeenAdultPrompt: boolean;
-  moderationReminderUnderstood: boolean;
-  moderationReminderSnoozedUntil: number;
   nowMs: number;
   analyticsConsentAsked: boolean;
   canRequestOsPermissions: boolean;
@@ -32,6 +28,7 @@ export type HomeEntryPromptState = {
 };
 
 let homeFocused = false;
+const focusedHomeOwners = new Set<symbol>();
 const focusListeners = new Set<() => void>();
 const claimedOsPrompts = new Set<HomeEntryOsPromptId>();
 
@@ -43,26 +40,10 @@ export function resolvePersistedHasSeenAdultPrompt(
     : HAS_SEEN_ADULT_PROMPT_DEFAULT;
 }
 
-export function normalizeReminderUserKey(userId: string): string {
-  return userId.trim().toLowerCase();
-}
-
-export function selectModerationReminderState(
-  userId: string,
-  understoodByUser: Record<string, boolean>,
-  snoozedUntilByUser: Record<string, number>,
-): { understood: boolean; snoozedUntil: number } {
-  const key = normalizeReminderUserKey(userId);
-  if (!key) return { understood: false, snoozedUntil: 0 };
-  return {
-    understood: understoodByUser[key] === true,
-    snoozedUntil: snoozedUntilByUser[key] ?? 0,
-  };
-}
-
 export function isHomeEntrySurfaceReady(state: HomeEntryPromptState): boolean {
   return (
     !state.isInitializing &&
+    state.preferencesHydrated &&
     state.isAuthenticated &&
     state.isAppActive &&
     state.isHomeFocused &&
@@ -76,13 +57,7 @@ export function resolveHomeEntryPrompt(
   if (!isHomeEntrySurfaceReady(state)) return null;
 
   if (!state.hasSeenAdultPrompt) return "adult";
-
-  if (
-    !state.moderationReminderUnderstood &&
-    state.moderationReminderSnoozedUntil <= state.nowMs
-  ) {
-    return "moderation";
-  }
+  if (getAdultPromptActive()) return null;
 
   if (!state.canRequestOsPermissions) return null;
   if (!state.analyticsConsentAsked) return "analytics_consent";
@@ -97,7 +72,17 @@ export function setHomeEntryFocused(focused: boolean): void {
 }
 
 export function getHomeEntryFocused(): boolean {
-  return homeFocused;
+  return homeFocused || focusedHomeOwners.size > 0;
+}
+
+export function claimHomeEntryFocus(): () => void {
+  const owner = Symbol("home-focus");
+  focusedHomeOwners.add(owner);
+  focusListeners.forEach((listener) => listener());
+  return () => {
+    focusedHomeOwners.delete(owner);
+    focusListeners.forEach((listener) => listener());
+  };
 }
 
 export function subscribeHomeEntryFocused(listener: () => void): () => void {
@@ -118,7 +103,29 @@ export function resetHomeEntryOsPromptClaims(): void {
 }
 
 export function resetHomeEntryPromptOrchestrator(): void {
+  adultPromptOwner = null;
+  focusedHomeOwners.clear();
   homeFocused = false;
   focusListeners.clear();
   resetHomeEntryOsPromptClaims();
+}
+
+let adultPromptOwner: symbol | null = null;
+const adultPromptListeners = new Set<() => void>();
+
+export const getAdultPromptActive = () => adultPromptOwner !== null;
+export function subscribeAdultPromptActive(listener: () => void) {
+  adultPromptListeners.add(listener);
+  return () => { adultPromptListeners.delete(listener); };
+}
+export function claimAdultPrompt(owner: symbol): boolean {
+  if (adultPromptOwner !== null) return false;
+  adultPromptOwner = owner;
+  adultPromptListeners.forEach((listener) => listener());
+  return true;
+}
+export function releaseAdultPrompt(owner: symbol): void {
+  if (adultPromptOwner !== owner) return;
+  adultPromptOwner = null;
+  adultPromptListeners.forEach((listener) => listener());
 }

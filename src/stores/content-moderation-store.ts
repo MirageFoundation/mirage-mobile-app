@@ -1,7 +1,7 @@
 /**
  * Content Moderation Store
  *
- * Global state for tracking hidden posts, blocked users, blocked topics, and hidden comments.
+ * Global state for tracking hidden posts, blocked users, blocked communities, and hidden comments.
  * This allows content to disappear across all screens when blocked/reported.
  *
  * `hiddenPostIds` is persisted locally (wallet-scoped) so user-hidden posts
@@ -18,15 +18,15 @@ import {
 interface ContentModerationState {
   hiddenPostIds: Set<string>;
   blockedUserIds: Set<string>;
-  blockedTopicNames: Set<string>;
+  blockedCommunityNames: Set<string>;
   hiddenCommentIds: Set<string>;
 
   hidePost: (postId: string) => void;
   unhidePost: (postId: string) => void;
   blockUser: (userId: string) => void;
-  blockTopic: (topic: string) => void;
-  unblockTopic: (topic: string) => void;
-  isTopicBlocked: (topic: string) => boolean;
+  blockCommunity: (community: string) => void;
+  unblockCommunity: (community: string) => void;
+  isCommunityBlocked: (community: string) => boolean;
   hideComment: (commentId: string) => void;
   unhideComment: (commentId: string) => void;
   isPostHidden: (postId: string) => boolean;
@@ -49,7 +49,7 @@ export const useContentModerationStore = create<ContentModerationState>()(
     (set, get) => ({
       hiddenPostIds: new Set(),
       blockedUserIds: new Set(),
-      blockedTopicNames: new Set(),
+      blockedCommunityNames: new Set(),
       hiddenCommentIds: new Set(),
 
       hidePost: (postId: string) => {
@@ -72,22 +72,22 @@ export const useContentModerationStore = create<ContentModerationState>()(
         }));
       },
 
-      blockTopic: (topic: string) => {
+      blockCommunity: (community: string) => {
         set((state) => ({
-          blockedTopicNames: new Set(state.blockedTopicNames).add(topic.toLowerCase()),
+          blockedCommunityNames: new Set(state.blockedCommunityNames).add(community.toLowerCase()),
         }));
       },
 
-      unblockTopic: (topic: string) => {
+      unblockCommunity: (community: string) => {
         set((state) => {
-          const newSet = new Set(state.blockedTopicNames);
-          newSet.delete(topic.toLowerCase());
-          return { blockedTopicNames: newSet };
+          const newSet = new Set(state.blockedCommunityNames);
+          newSet.delete(community.toLowerCase());
+          return { blockedCommunityNames: newSet };
         });
       },
 
-      isTopicBlocked: (topic: string) => {
-        return get().blockedTopicNames.has(topic.toLowerCase());
+      isCommunityBlocked: (community: string) => {
+        return get().blockedCommunityNames.has(community.toLowerCase());
       },
 
       hideComment: (commentId: string) => {
@@ -120,7 +120,7 @@ export const useContentModerationStore = create<ContentModerationState>()(
         set({
           hiddenPostIds: new Set(),
           blockedUserIds: new Set(),
-          blockedTopicNames: new Set(),
+          blockedCommunityNames: new Set(),
           hiddenCommentIds: new Set(),
         });
       },

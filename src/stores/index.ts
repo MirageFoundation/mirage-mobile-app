@@ -14,6 +14,16 @@ export {
   getApiBaseUrl,
 } from "./preferences-store";
 export { useDraftStore, type PostDraft } from "./draft-store";
+export {
+  useLensPicksStore,
+  useEncodedLensPicks,
+  getEncodedLensPicks,
+  getSessionLensPick,
+  clearLensPick,
+  clearLensPickOnJoinSuccess,
+  clearViewerLensPicks,
+  clearAllLensPicks,
+} from "./lens-picks-store";
 export { useUIStore } from "./ui-store";
 export { storage, mmkvStorage } from "./mmkv-storage";
 export { useSearchStore, type RecentSearch } from "./search-store";
@@ -28,3 +38,8 @@ export { useVideoPositionStore, buildVideoPositionKey } from "./video-position-s
 export { useTimeTickStore } from "./time-tick-store";
 export { useFeedScrollStore, useIsFeedScrolling } from "./feed-scroll-store";
 export { useDeepLinkStore } from "./deep-link-store";
+export {
+  useDeferredCampaignStore,
+  DEFERRED_CAMPAIGN_STORAGE_VERSION,
+  type DeferredCampaignSnapshot,
+} from "./deferred-campaign-store";

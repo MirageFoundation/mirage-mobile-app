@@ -31,6 +31,13 @@ export interface WalletMetadata {
   hasUsername: boolean;
   /** Whether wallet creation is still pending (user hasn't confirmed recovery phrase) */
   pending?: boolean;
+  signup?: {
+    phase: "wallet_generated" | "registering" | "submitted" | "confirmed";
+    operationId: string;
+    username?: string;
+    server?: string;
+    txHash?: string;
+  };
 }
 
 /**

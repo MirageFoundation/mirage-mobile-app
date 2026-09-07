@@ -37,7 +37,8 @@ import type { usePostDetailCommentsLifecycle } from "./use-post-detail-comments-
 import type { usePostDetailFocusedThread } from "./use-post-detail-focused-thread";
 import { usePostDetailHighlightScroll } from "./use-post-detail-highlight-scroll";
 import { usePostDetailPendingCommentEdit } from "./use-post-detail-pending-comment-edit";
-import { usePostDetailStickyHeader } from "./use-post-detail-sticky-header";
+import { usePostDetailScroll } from "./use-post-detail-scroll";
+import { sortPostComments, type PostCommentSort } from "./post-comment-sort";
 
 type FocusedThread = ReturnType<typeof usePostDetailFocusedThread>;
 type CommentsLifecycle = ReturnType<typeof usePostDetailCommentsLifecycle>;
@@ -160,7 +161,8 @@ export function usePostDetailController({
   }, [comments, effectiveCommentsData?.children, focusedThread.focusedCommentId, focusedThread.optimisticThreadId, focusedThread.showFocusedThread, id, pruneCommentsPresentOnServer]);
 
   const commentVoting = usePostDetailCommentVoting();
-  const allComments = useMemo(
+  const [commentSort, setCommentSort] = useState<PostCommentSort>("best");
+  const mergedComments = useMemo(
     () =>
       mergePostDetailComments({
         blockedUserIds: globalBlockedUserIds,
@@ -174,6 +176,8 @@ export function usePostDetailController({
       }),
     [commentEditOverrides, commentVoting.commentVoteOverrides, comments, globalBlockedUserIds, globalHiddenCommentIds, optimisticReplyComments, optimisticTopLevelComments],
   );
+
+  const allComments = useMemo(() => sortPostComments(mergedComments, commentSort), [mergedComments, commentSort]);
 
   const fullBranchComments = useMemo(() => {
     const source = isViewingComment
@@ -230,7 +234,7 @@ export function usePostDetailController({
     lastCommentsFetchRef: commentsLifecycle.lastCommentsFetchRef,
     refetchCommentsRef: commentsLifecycle.refetchCommentsRef,
   });
-  const stickyHeader = usePostDetailStickyHeader({ currentScrollYRef: highlightScroll.currentScrollYRef });
+  const listScroll = usePostDetailScroll({ currentScrollYRef: highlightScroll.currentScrollYRef });
 
   const handleBack = useCallback(() => {
     if (resolvePostDetailExitAction(router.canGoBack()) === "back") router.back();
@@ -273,10 +277,12 @@ export function usePostDetailController({
       back: handleBack,
       unavailableBack: handleUnavailableBack,
       authorPress: (authorId: string) => router.push(`/user/${authorId}`),
-      topicPress: displayPost?.topic ? () => router.push(`/topic/${encodeURIComponent(displayPost.topic!)}`) : undefined,
+      communityPress: displayPost?.community ? () => router.push(`/c/${encodeURIComponent(displayPost.community!)}` as never) : undefined,
     },
     thread: {
       allComments,
+      commentSort,
+      setCommentSort,
       followLoadingUsers,
       hasFullThreadBeyondFocus,
       ...focusedContext,
@@ -296,7 +302,7 @@ export function usePostDetailController({
       moreOptions: handleMoreOptions,
       ...commentVoting,
     },
-    scroll: { ...highlightScroll, ...stickyHeader },
+    scroll: { ...highlightScroll, ...listScroll },
     composer: {
       addReplyOptimisticComment,
       addTopLevelOptimisticComment,

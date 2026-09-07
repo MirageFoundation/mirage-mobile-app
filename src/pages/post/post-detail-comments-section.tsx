@@ -1,6 +1,8 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { FlatList, NativeScrollEvent, NativeSyntheticEvent, RefreshControl } from "react-native";
-import { useUnistyles } from "react-native-unistyles";
+import { forwardRef, useCallback, useContext, useImperativeHandle, useRef } from "react";
+import { FlatList, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { runOnJS, useAnimatedScrollHandler, type SharedValue } from "react-native-reanimated";
+import { SwipeBackGestureContext, SwipeBackGuard } from "@/src/components/ui/swipe-back-guard";
 
 import { Comment, CommentThread } from "@/src/components/molecules";
 import { PostDetailEmptyComments } from "./post-detail-empty-comments";
@@ -32,7 +34,7 @@ type PostDetailCommentsSectionProps = {
   isLoadingContext: boolean;
   isLoadingFocusedComment: boolean;
   isLoadingFullThreadComments: boolean;
-  isRefetchingComments: boolean;
+  scrollY: SharedValue<number>;
   listHeader: React.ReactElement | null;
   onAuthorPress: (authorId: string) => void;
   onContentSizeChange: (contentHeight?: number) => void;
@@ -41,8 +43,9 @@ type PostDetailCommentsSectionProps = {
   onHighlightedLayout: (event: Parameters<NonNullable<React.ComponentProps<typeof CommentThread>["onHighlightedLayout"]>>[0]) => void;
   onLikeComment: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   onMoreOptions: (comment: Comment) => void;
-  onRefreshComments: () => void;
+  onRetryComments: () => void;
   onReplyToComment: (comment: Comment) => void;
+  repliesEnabled?: boolean;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onScrollBeginDrag?: () => void;
 };
@@ -67,7 +70,7 @@ export const PostDetailCommentsSection = forwardRef<
       isLoadingContext,
       isLoadingFocusedComment,
       isLoadingFullThreadComments,
-      isRefetchingComments: _isRefetchingComments,
+      scrollY,
       listHeader,
       onAuthorPress,
       onContentSizeChange,
@@ -76,29 +79,25 @@ export const PostDetailCommentsSection = forwardRef<
       onHighlightedLayout,
       onLikeComment,
       onMoreOptions,
-      onRefreshComments,
+      onRetryComments,
       onReplyToComment,
+      repliesEnabled = true,
       onScroll,
       onScrollBeginDrag,
     },
     ref,
   ) => {
-    const { theme } = useUnistyles();
+    const gestures = useContext(SwipeBackGestureContext)!;
     const flatListRef = useRef<FlatList<Comment>>(null);
     const commentsLengthRef = useRef(comments.length);
     commentsLengthRef.current = comments.length;
-    const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-
-    useEffect(() => {
-      if (!isFetchingComments && isManualRefreshing) {
-        setIsManualRefreshing(false);
-      }
-    }, [isFetchingComments, isManualRefreshing]);
-
-    const handleManualRefresh = useCallback(() => {
-      setIsManualRefreshing(true);
-      onRefreshComments();
-    }, [onRefreshComments]);
+    const forwardScroll = useCallback((event: NativeScrollEvent) => {
+      onScroll({ nativeEvent: event } as NativeSyntheticEvent<NativeScrollEvent>);
+    }, [onScroll]);
+    const handleScroll = useAnimatedScrollHandler((event) => {
+      scrollY.value = event.contentOffset.y;
+      runOnJS(forwardScroll)(event);
+    });
 
     useImperativeHandle(
       ref,
@@ -112,6 +111,7 @@ export const PostDetailCommentsSection = forwardRef<
 
     const renderComment = useCallback(
       ({ item }: { item: Comment }) => (
+        <SwipeBackGuard>
         <CommentThread
           comment={item}
           depth={item.depth ?? 0}
@@ -120,7 +120,7 @@ export const PostDetailCommentsSection = forwardRef<
           onAuthorPress={onAuthorPress}
           onLikePress={onLikeComment}
           onDislikePress={onDislikeComment}
-          onReplyPress={onReplyToComment}
+          onReplyPress={repliesEnabled ? onReplyToComment : undefined}
           onMorePress={onMoreOptions}
           followedUsers={followedUsers}
           followLoadingUsers={followLoadingUsers}
@@ -129,6 +129,7 @@ export const PostDetailCommentsSection = forwardRef<
           showDivider={true}
           focusedContextMode={focusedContextMode}
         />
+        </SwipeBackGuard>
       ),
       [
         currentUserId,
@@ -143,6 +144,7 @@ export const PostDetailCommentsSection = forwardRef<
         onLikeComment,
         onMoreOptions,
         onReplyToComment,
+        repliesEnabled,
       ],
     );
 
@@ -154,7 +156,8 @@ export const PostDetailCommentsSection = forwardRef<
     );
 
     return (
-      <FlatList
+      <GestureDetector gesture={gestures.native}>
+      <Animated.FlatList
         ref={flatListRef}
         data={comments}
         renderItem={renderComment}
@@ -169,7 +172,7 @@ export const PostDetailCommentsSection = forwardRef<
             isLoadingContext={isLoadingContext}
             isLoadingFocusedComment={isLoadingFocusedComment}
             isLoadingFullThreadComments={isLoadingFullThreadComments}
-            onRetry={onRefreshComments}
+            onRetry={onRetryComments}
             renderCommentSkeleton={renderCommentSkeleton}
           />
         }
@@ -177,17 +180,10 @@ export const PostDetailCommentsSection = forwardRef<
           paddingBottom: contentBottomPadding,
         }}
         showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
+        onScroll={handleScroll}
         onScrollBeginDrag={onScrollBeginDrag}
         scrollEventThrottle={16}
         onContentSizeChange={(_width, height) => onContentSizeChange(height)}
-        refreshControl={
-          <RefreshControl
-            refreshing={isManualRefreshing}
-            onRefresh={handleManualRefresh}
-            tintColor={theme.colors.primary[500]}
-          />
-        }
         onScrollToIndexFailed={(info) => {
           if (info.index < 0 || info.index >= commentsLengthRef.current) return;
           // averageItemLength x index is wildly wrong for variable-height
@@ -214,6 +210,7 @@ export const PostDetailCommentsSection = forwardRef<
         windowSize={10}
         initialNumToRender={5}
       />
+      </GestureDetector>
     );
   },
 );

@@ -9,9 +9,10 @@ import {
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { queryKeys } from "@/src/api/read/query-keys";
+import { getPostsFiltersFromKey, queryKeys } from "@/src/api/read/query-keys";
 import { getPosts } from "@/src/api/read/endpoints/posts";
-import { invalidateRewardSummaryForAction } from "@/src/api/cache/reward-summary-cache";
+import { withSessionLensPicks } from "@/src/api/read/request-params";
+
 import { removePostAliasesFromData } from "@/src/api/cache/remove-post-aliases";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {
@@ -20,7 +21,6 @@ import {
 } from "@/src/api/cache/transient-post-success";
 import type {
   CommentsResponse,
-  PostFilters,
   PostWithChildren,
   PostsResponse,
   Post as ApiPost,
@@ -39,10 +39,14 @@ import {
   type DeletePostInput,
 } from "../endpoints/posts";
 import { mutationKeys } from "../mutation-keys";
+import { getServerIdentity, StaleServerResponseError } from "@/src/api/server-runtime";
+import { assertReplyNotRejected, useReplyRejectionStore } from "@/src/stores/reply-rejection-store";
+import { isLegacyThreadReadOnlyError, LegacyThreadReadOnlyError } from "@/src/domain/subscriptions/errors";
 import { trackEvent } from "@/src/services/analytics";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
+import { UNSPECIFIED_SERVED_LENS } from "@/src/domain/communities";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
@@ -186,8 +190,8 @@ export const buildOptimisticPost = (
     user_id: address ?? "unknown",
     username: username ?? address ?? "you",
     timestamp: nowSeconds,
-    topic: input.topic,
-    root_topic: input.topic,
+    community: input.community,
+    root_community: input.community,
     root_post_id: postId,
     title: input.title,
     content: input.content,
@@ -200,6 +204,9 @@ export const buildOptimisticPost = (
     comments: 0,
     user_vote: 1,
     user_weight: 1,
+    lens: UNSPECIFIED_SERVED_LENS,
+    thread_locked: false,
+    protocol_version: 1,
     optimistic_status: status,
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
@@ -290,7 +297,7 @@ export const upsertHomePost = (
   const postQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
   postQueries.forEach(([queryKey, queryData]) => {
     if (!queryData) return;
-    const filters = queryKey[1] as PostFilters | undefined;
+    const filters = getPostsFiltersFromKey(queryKey);
     if (filters?.feed !== "home") return;
 
     if (
@@ -314,14 +321,14 @@ export const upsertHomePost = (
   if (!options) return;
 
   (["magic", "newest"] as const).forEach((by) => {
-    const queryKey = queryKeys.posts({
+    const queryKey = queryKeys.posts(withSessionLensPicks({
       limit: options.limit ?? 10,
-      feed: "home",
+      feed: "home" as const,
       by,
       allowed_tags: options.allowedTags || undefined,
       address: options.address,
       page: undefined,
-    });
+    }, options.address));
 
     queryClient.setQueryData(queryKey, (oldData: unknown) => {
       if (!oldData) return buildSeededHomeFeedData(optimisticPost, options.limit ?? 10);
@@ -349,9 +356,10 @@ const refreshHomeFeedsPreservingPost = (
   useHomePostCardStore.getState().triggerScrollToTop();
 
   const homeQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() })
-    .filter(([queryKey]) => (queryKey[1] as PostFilters | undefined)?.feed === "home");
+    .filter(([queryKey]) => getPostsFiltersFromKey(queryKey)?.feed === "home");
   void Promise.all(homeQueries.map(async ([queryKey, currentData]) => {
-    const filters = queryKey[1] as PostFilters;
+    const filters = getPostsFiltersFromKey(queryKey);
+    if (!filters) return;
     const refreshedFirstPage = await getPosts({ ...filters, page: 1 });
     const pendingPost = usePendingPostsStore.getState().getPost(post.post_id);
     const preserveProcessingPost = isPostVideoProcessing(pendingPost);
@@ -858,7 +866,7 @@ export const applyOptimisticPostEdit = (
       title: input.title,
       content: input.content,
       tag: input.tag ?? post.tag,
-      topic: input.topic ?? post.topic,
+      community: input.community ?? post.community,
       media: input.media ?? post.media,
       edited_at: nowSeconds,
       optimistic_status: status,
@@ -977,7 +985,7 @@ export function usePost(options: UsePostOptions = {}) {
         },
       });
       trackEvent("post_created", {
-        topic: input.topic,
+        topic: input.community,
         media_count: input.media?.length ?? 0,
         has_content_warning: !!input.tag,
         content_warning: input.tag || undefined,
@@ -1068,11 +1076,11 @@ export function usePost(options: UsePostOptions = {}) {
 
       // Invalidate topics cache to include newly created topics
       queryClient.invalidateQueries({
-        queryKey: queryKeys.topicsRoot(),
+        queryKey: queryKeys.communitiesRoot(),
         refetchType: "inactive",
       });
 
-      void invalidateRewardSummaryForAction(queryClient, address, "post");
+
     },
     onError: (error, input) => {
       Sentry.captureException(error, {
@@ -1128,9 +1136,19 @@ export function useComment(options: UsePostOptions = {}) {
 
   return useMutation({
     mutationKey: mutationKeys.post.comment(),
-    mutationFn: async (input: CreateCommentInput) => {
+    mutationFn: async (input: CreateCommentInput & { serverIdentity?: string }) => {
+      const server = input.serverIdentity ?? getServerIdentity();
+      assertReplyNotRejected(server, input.parentId);
       const wallet = await getWallet();
-      return createComment(wallet, input, options.onPoWProgress);
+      if (server !== getServerIdentity()) throw new StaleServerResponseError();
+      assertReplyNotRejected(server, input.parentId);
+      try {
+        return await createComment(wallet, input, options.onPoWProgress);
+      } catch (error) {
+        useReplyRejectionStore.getState().recordRejection(server, input.parentId, error);
+        if (isLegacyThreadReadOnlyError(error)) throw new LegacyThreadReadOnlyError();
+        throw error;
+      }
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
@@ -1186,10 +1204,14 @@ export function useComment(options: UsePostOptions = {}) {
       };
     },
     onError: (_error, _input, context) => {
-      Sentry.captureException(_error, {
-        tags: { feature: "posts", operation: "comment" },
-        extra: { parentId: _input.parentId },
-      });
+      if (isLegacyThreadReadOnlyError(_error)) {
+        Sentry.addBreadcrumb({ category: "comment", message: "Parent rejected reply", level: "info", data: { parentId: _input.parentId } });
+      } else {
+        Sentry.captureException(_error, {
+          tags: { feature: "posts", operation: "comment" },
+          extra: { parentId: _input.parentId },
+        });
+      }
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
@@ -1199,7 +1221,7 @@ export function useComment(options: UsePostOptions = {}) {
         is_reply: !!input.rootPostId && input.rootPostId !== input.parentId,
         has_media: (input.media?.length ?? 0) > 0,
       });
-      void invalidateRewardSummaryForAction(queryClient, address, "comment");
+
     },
     onSettled: () => {
       queryClient.invalidateQueries({

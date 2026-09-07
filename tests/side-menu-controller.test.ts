@@ -5,7 +5,7 @@ import {
   createSideMenuRouteDelegate,
   dismissThenNavigate,
   getBalanceDestination,
-  getFollowedTopicDestination,
+  getJoinedCommunityDestination,
   getFollowedUserDestination,
   SIDE_MENU_SECTIONS,
 } from "../src/features/side-menu/side-menu-model";
@@ -16,12 +16,12 @@ describe("side-menu controller model", () => {
       section.title,
       section.items.map((item) => item.action),
     ])).toEqual([
-      ["Rewards & Plans", ["subscription", "invite", "referrals", "quests"]],
       ["Content", ["saved", "history"]],
-      ["Social", ["following", "topics", "agents"]],
-      ["App", ["settings", "help", "about"]],
+      ["Social", ["following", "communities"]],
+      ["App", ["subscription", "settings", "help", "about"]],
     ]);
-    expect(SIDE_MENU_SECTIONS[0].items[0].hideOnIos).toBe(true);
+    expect(SIDE_MENU_SECTIONS.every((section) => section.items.length > 0)).toBe(true);
+    expect(SIDE_MENU_SECTIONS[2].items[0].hideOnIos).toBe(true);
   });
 
   test("delegates static, account, and external destinations", () => {
@@ -37,14 +37,10 @@ describe("side-menu controller model", () => {
 
     for (const action of [
       "subscription",
-      "invite",
-      "referrals",
-      "quests",
       "saved",
       "history",
       "following",
-      "topics",
-      "agents",
+      "communities",
       "settings",
       "help",
       "about",
@@ -52,14 +48,10 @@ describe("side-menu controller model", () => {
 
     expect(calls).toEqual([
       ["push", "/subscription"],
-      ["push", "/invite-and-earn"],
-      ["push", "/referrals"],
-      ["push", "/quests"],
       ["push", "/saved-posts"],
       ["push", "/history"],
       ["push", "/user-following/wallet-1"],
-      ["push", "/topics"],
-      ["push", "/agents"],
+      ["push", "/communities"],
       ["push", "/settings"],
       ["external", "https://mirage.foundation/faq"],
       ["external", "https://mirage.foundation"],
@@ -79,7 +71,7 @@ describe("side-menu controller model", () => {
 
   test("builds followed user and topic destinations", () => {
     expect(getFollowedUserDestination("address-1")).toBe("/user/address-1");
-    expect(getFollowedTopicDestination("news")).toBe("/topic/news");
+    expect(getJoinedCommunityDestination("news")).toBe("/c/news");
   });
 
   test("opens balance on profile after dismissing the overlay", () => {

@@ -5,6 +5,8 @@
  */
 
 import { apiClient } from "@/src/api/client";
+import { getMirageRequestHeaders } from "@/src/api/mirage-request-headers";
+import { StaleServerResponseError } from "@/src/api/server-runtime";
 import * as Sentry from "@sentry/react-native";
 import { AppState, Image as ReactNativeImage, Platform } from "react-native";
 import {
@@ -272,8 +274,11 @@ async function withRetry<T>(
       lastError = error;
       attemptsMade = attempt + 1;
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg === "Upload aborted") throw error;
+      if (error instanceof StaleServerResponseError || msg === "Upload aborted") {
+        throw error;
+      }
       const status = (error as { status?: number }).status;
+      if (status && status >= 300 && status < 400) throw error;
       if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) {
         Object.assign(error as object, { attemptsMade });
         throw error;
@@ -311,6 +316,20 @@ async function withRetry<T>(
 // Endpoints
 // ============================================
 
+export function createNativeMediaUploadOptions(
+  contentType: string,
+  parameters: Record<string, string>,
+) {
+  return {
+    uploadType: UploadType.MULTIPART,
+    fieldName: "file" as const,
+    mimeType: contentType,
+    parameters,
+    headers: { ...getMirageRequestHeaders() },
+    httpMethod: UploaderHttpMethod.POST,
+  };
+}
+
 export async function uploadMedia(
   localUri: string,
   mediaType: MediaType,
@@ -322,9 +341,12 @@ export async function uploadMedia(
   const startedAt = Date.now();
   const normalizedUri = normalizeFileUri(localUri);
   const timeoutMs = mediaType === "video" ? VIDEO_UPLOAD_TIMEOUT_MS : IMAGE_UPLOAD_TIMEOUT_MS;
-  const uploadUrl = `${apiClient.getApiUrl("/upload_media")}?kind=${encodeURIComponent(mediaType)}`;
+
+  return apiClient.runExternalWrite(async (serverContext) => {
+  const uploadUrl = `${serverContext.baseUrl}/api/upload_media?kind=${encodeURIComponent(mediaType)}`;
 
   const uploadWithNativeProgress = async (): Promise<UploadMediaResponse> => {
+    apiClient.assertCurrentServerContext(serverContext);
     const reportedMilestones = new Set<number>();
     const uploadController = new AbortController();
     const onAbort = () => uploadController.abort();
@@ -349,14 +371,10 @@ export async function uploadMedia(
         backgroundUpload(
           uploadUrl,
           normalizedUri,
-          {
-            uploadType: UploadType.MULTIPART,
-            fieldName: "file",
-            mimeType: contentType,
-            parameters: { kind: mediaType, ...parameters },
-            headers: {},
-            httpMethod: UploaderHttpMethod.POST,
-          },
+          createNativeMediaUploadOptions(contentType, {
+            kind: mediaType,
+            ...parameters,
+          }),
           (bytesWritten, totalBytes) => {
             if (totalBytes > 0) {
               const progress = Math.min(100, Math.round((bytesWritten / totalBytes) * 100));
@@ -382,7 +400,7 @@ export async function uploadMedia(
       console.log("[MediaUpload] upload_media complete", {
         status: result.status,
         mediaType,
-        transport: "native-background-upload",
+        transport: "native-upload",
       });
       if (result.status < 200 || result.status >= 300) {
         const errorCode = getUploadErrorCode(result.body);
@@ -407,23 +425,24 @@ export async function uploadMedia(
           mediaType,
           status: result.status,
           parameterCount: Object.keys(parameters).length,
-          transport: "native-background-upload",
+          transport: "native-upload",
           elapsedMs: Date.now() - startedAt,
         },
       });
-      return parseUploadMediaResponse(result.body);
+      const parsed = parseUploadMediaResponse(result.body);
+      apiClient.assertCurrentServerContext(serverContext);
+      return parsed;
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       signal?.removeEventListener("abort", onAbort);
     }
   };
 
-  const uploadFn = async (): Promise<UploadMediaResponse> => uploadWithNativeProgress();
-
-  return withRetry(uploadFn, {
+  return withRetry(uploadWithNativeProgress, {
     label: `${mediaType}-upload`,
     maxRetries: mediaType === "video" ? 0 : 2,
     signal,
+  });
   });
 }
 

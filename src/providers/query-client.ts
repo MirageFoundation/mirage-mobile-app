@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/react-native";
+import { isCompletedApiRead, shouldRetryApiQuery } from "@/src/api/read-retry-policy";
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import {
   buildMutationErrorMetadata,
@@ -21,8 +22,11 @@ function getErrorStatus(error: unknown): number | undefined {
 }
 
 function shouldCaptureReactQueryError(error: unknown): boolean {
+  if (isCompletedApiRead(error)) return false;
   const code = (error as any)?.code;
-  if (code === "ERR_NETWORK") return false;
+  if (code === "ERR_NETWORK" || code === "ERR_CANCELED" ||
+    (error as Error)?.name === "StaleServerResponseError" ||
+    (error as Error)?.name === "AbortError") return false;
   return getErrorStatus(error) === undefined;
 }
 
@@ -83,7 +87,7 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
       gcTime: 1000 * 60 * 60 * 24, // 24 hours (cacheTime renamed to gcTime in v5)
-      retry: 2,
+      retry: shouldRetryApiQuery,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     },

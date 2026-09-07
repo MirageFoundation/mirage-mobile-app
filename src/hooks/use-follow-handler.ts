@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 import {
  useToggleFollowUser,
- useToggleFollowTopic,
+ useToggleCommunityMembership,
 } from "@/src/api/write";
+import type { PersistedLensChoice } from "@/src/api/write/utils/community-membership-model";
 import {
  usePowQueueStore,
  generateActionId,
@@ -14,8 +15,8 @@ import { useAuthGuard } from "./use-auth-guard";
 export interface UseFollowHandlerOptions {
  onOptimisticFollowUser?: (userId: string, isFollowing: boolean) => void;
  onRollbackFollowUser?: (userId: string) => void;
- onOptimisticFollowTopic?: (topic: string, isFollowing: boolean) => void;
- onRollbackFollowTopic?: (topic: string) => void;
+ onOptimisticJoinCommunity?: (community: string, isJoined: boolean) => void;
+ onRollbackJoinCommunity?: (community: string) => void;
 }
 
 export interface UseFollowHandlerReturn {
@@ -24,9 +25,10 @@ export interface UseFollowHandlerReturn {
   username: string,
   isCurrentlyFollowing: boolean,
  ) => void;
- handleFollowTopic: (
-  topic: string,
-  isCurrentlyFollowing: boolean,
+ handleToggleCommunityMembership: (
+  community: string,
+  isCurrentlyJoined: boolean,
+  selection?: PersistedLensChoice,
  ) => void;
 }
 
@@ -36,15 +38,15 @@ export function useFollowHandler(
  const {
   onOptimisticFollowUser,
   onRollbackFollowUser,
-  onOptimisticFollowTopic,
-  onRollbackFollowTopic,
+  onOptimisticJoinCommunity,
+  onRollbackJoinCommunity,
  } = options;
 
  const { requireAuth } = useAuthGuard();
  const enqueue = usePowQueueStore((state) => state.enqueue);
 
  const { mutateAsync: toggleFollowUserAsync } = useToggleFollowUser();
- const { mutateAsync: toggleFollowTopicAsync } = useToggleFollowTopic();
+ const { mutateAsync: toggleCommunityMembershipAsync } = useToggleCommunityMembership();
 
  const handleFollowUser = useCallback(
   (
@@ -88,10 +90,14 @@ export function useFollowHandler(
   ],
  );
 
- const handleFollowTopic = useCallback(
-  (topic: string, isCurrentlyFollowing: boolean) => {
+ const handleToggleCommunityMembership = useCallback(
+  (
+   community: string,
+   isCurrentlyJoined: boolean,
+   selection?: PersistedLensChoice,
+  ) => {
    requireAuth(() => {
-    const actionType: PowActionType = isCurrentlyFollowing
+    const actionType: PowActionType = isCurrentlyJoined
      ? "unfollow"
      : "follow";
     const actionId = generateActionId();
@@ -101,18 +107,19 @@ export function useFollowHandler(
      type: actionType,
      label: getActionLabel(actionType),
      execute: async () => {
-      return toggleFollowTopicAsync({
-       topic,
-       isCurrentlyFollowing,
+      return toggleCommunityMembershipAsync({
+       community,
+       isCurrentlyJoined,
+       selection: isCurrentlyJoined ? undefined : selection,
       });
      },
      onOptimisticUpdate: () => {
-      onOptimisticFollowTopic?.(topic, !isCurrentlyFollowing);
+      onOptimisticJoinCommunity?.(community, !isCurrentlyJoined);
      },
      onSuccess: () => {},
      onError: () => {},
      onRollback: () => {
-      onRollbackFollowTopic?.(topic);
+      onRollbackJoinCommunity?.(community);
      },
     });
    });
@@ -120,14 +127,14 @@ export function useFollowHandler(
   [
    requireAuth,
    enqueue,
-   onOptimisticFollowTopic,
-   onRollbackFollowTopic,
-   toggleFollowTopicAsync,
+   onOptimisticJoinCommunity,
+   onRollbackJoinCommunity,
+   toggleCommunityMembershipAsync,
   ],
  );
 
  return {
   handleFollowUser,
-  handleFollowTopic,
+  handleToggleCommunityMembership,
  };
 }

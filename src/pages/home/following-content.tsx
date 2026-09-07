@@ -17,7 +17,7 @@ import {
   type Post,
 } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
-import { buildFollowedTopicSet } from "@/src/domain/topics";
+import { buildJoinedCommunitySet } from "@/src/domain/communities";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage ,
   useAuthStore,
@@ -72,16 +72,8 @@ export function FollowingScreen() {
     setNewPostCount(count);
   }, []);
 
-  const [isBannerLoading, setIsBannerLoading] = useState(false);
-
-  const handleNewPostsPress = useCallback(async () => {
-    setIsBannerLoading(true);
-    try {
-      await tabbedFeedRef.current?.handleNewPostsPress();
-      setHasNewPosts(false);
-    } finally {
-      setIsBannerLoading(false);
-    }
+  const handleNewPostsPress = useCallback(() => {
+    tabbedFeedRef.current?.handleNewPostsPress();
   }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
@@ -130,7 +122,7 @@ export function FollowingScreen() {
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
-  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
+  const blockCommunityOptimistic = useContentModerationStore((s) => s.blockCommunity);
 
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
@@ -138,8 +130,8 @@ export function FollowingScreen() {
     [followedData]
   );
 
-  const followedTopics = useMemo(
-    () => followedData?.followed_topics ?? [],
+  const joinedCommunities = useMemo(
+    () => followedData?.joined_communities ?? [],
     [followedData]
   );
   const [followUserOverrides, setFollowUserOverrides] = useState<Record<string, boolean>>({});
@@ -177,7 +169,7 @@ export function FollowingScreen() {
   const postActions = usePostActionController({
     currentUserId: currentUser?.id,
     followedUsers: displayFollowedUsers,
-    followedTopics,
+    joinedCommunities,
     savedPostIds,
     onFollowUserOptimistic: setFollowUserOverride,
     onFollowUserRollback: clearFollowUserOverride,
@@ -195,11 +187,11 @@ export function FollowingScreen() {
     onBlockConfirmed: useCallback((pending) => {
       if (pending.type === "user") blockUser(pending.id);
       else if (pending.type === "post") hidePost(pending.id);
-      else if (pending.type === "topic") {
-        blockTopicOptimistic(pending.id);
+      else if (pending.type === "community") {
+        blockCommunityOptimistic(pending.id);
         showBars();
       }
-    }, [blockTopicOptimistic, blockUser, hidePost, showBars]),
+    }, [blockCommunityOptimistic, blockUser, hidePost, showBars]),
     onDeleteConfirmed: hidePost,
     onDeleteRollback: unhidePost,
     onReportSubmitted: hidePost,
@@ -225,12 +217,12 @@ export function FollowingScreen() {
   const {
     openOptions: openPostOptions,
     followUser: handleFollowPress,
-    followTopic: handleFollowTopicFromCard,
+    toggleCommunityMembership: handleToggleCommunityMembershipFromCard,
     upvote: handleUpvote,
     downvote: handleDownvote,
     blockUser: handleBlockUserFromCard,
     blockPost: handleBlockPostFromCard,
-    blockTopic: handleBlockTopicFromCard,
+    blockCommunity: handleBlockCommunityFromCard,
     report: handleReportFromCard,
   } = postActions.cardActions;
 
@@ -253,8 +245,8 @@ export function FollowingScreen() {
     router.push(`/user/${authorId}`);
   }, [router]);
 
-  const handleTopicPress = useCallback((topic: string) => {
-    router.push(`/topic/${encodeURIComponent(topic)}`);
+  const handleCommunityPress = useCallback((topic: string) => {
+    router.push(`/c/${encodeURIComponent(topic)}` as never);
   }, [router]);
 
   const handleMorePress = useCallback((post: Post) => {
@@ -283,9 +275,9 @@ export function FollowingScreen() {
   }, []);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
-  const followedTopicsSet = useMemo(
-    () => buildFollowedTopicSet(followedTopics),
-    [followedTopics],
+  const joinedCommunitiesSet = useMemo(
+    () => buildJoinedCommunitySet(joinedCommunities),
+    [joinedCommunities],
   );
   const allowAutoplay = useMemo(
     () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
@@ -301,24 +293,24 @@ export function FollowingScreen() {
   const handlersRef = useLatestRef({
     handlePostPress,
     handleAuthorPress,
-    handleTopicPress,
+    handleCommunityPress,
     handleMorePress,
     handleUpvote,
     handleDownvote,
     handleCommentPress,
     handleFollowPress,
-    handleFollowTopicFromCard,
+    handleToggleCommunityMembershipFromCard,
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
-    handleBlockTopicFromCard,
+    handleBlockCommunityFromCard,
     handleReportFromCard,
   });
 
   const feedRuntimeConfig = useMemo(() => ({
     currentUserId: currentUser?.id,
     followedUsers: followedUsersSet,
-    followedTopics: followedTopicsSet,
+    joinedCommunities: joinedCommunitiesSet,
     followUserOverrides,
     revealedPosts,
     shareServer,
@@ -327,23 +319,23 @@ export function FollowingScreen() {
     handlers: {
       onPostPress: handlersRef.current.handlePostPress,
       onAuthorPress: handlersRef.current.handleAuthorPress,
-      onTopicPress: handlersRef.current.handleTopicPress,
+      onCommunityPress: handlersRef.current.handleCommunityPress,
       onMorePress: handlersRef.current.handleMorePress,
       onLikePress: handlersRef.current.handleUpvote,
       onDislikePress: handlersRef.current.handleDownvote,
       onCommentPress: handlersRef.current.handleCommentPress,
       onFollowUser: handlersRef.current.handleFollowPress,
-      onFollowTopic: handlersRef.current.handleFollowTopicFromCard,
+      onToggleCommunityMembership: handlersRef.current.handleToggleCommunityMembershipFromCard,
       onRevealContent: handlersRef.current.handleRevealContent,
       onBlockUser: handlersRef.current.handleBlockUserFromCard,
       onBlockPost: handlersRef.current.handleBlockPostFromCard,
-      onBlockTopic: handlersRef.current.handleBlockTopicFromCard,
+      onBlockCommunity: handlersRef.current.handleBlockCommunityFromCard,
       onReport: handlersRef.current.handleReportFromCard,
     },
   }), [
     allowAutoplay,
     currentUser?.id,
-    followedTopicsSet,
+    joinedCommunitiesSet,
     followedUsersSet,
     followUserOverrides,
     handlersRef,
@@ -383,7 +375,6 @@ export function FollowingScreen() {
         topOffset={insets.top + 44}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
-        loading={isBannerLoading}
       />
 
       <PostActionOverlays controller={postActions} />

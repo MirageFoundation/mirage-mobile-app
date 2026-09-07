@@ -4,9 +4,15 @@ import {
  registerWalletScopedStore,
  walletScopedStorage,
 } from "./wallet-scoped-storage";
-import { EMPTY_POST_DRAFT, type AttachmentType, type PostDraft } from "@/src/domain/content";
+import {
+  EMPTY_POST_DRAFT,
+  type AttachmentType,
+  type PostDraft,
+} from "@/src/domain/content";
+import { migrateDraftStateV0 } from "./draft-migration";
 
 export type { AttachmentType, Community, PostDraft } from "@/src/domain/content";
+export { migrateDraftStateV0 } from "./draft-migration";
 
 const MAX_MEDIA_ITEMS = 10;
 
@@ -102,6 +108,8 @@ export const useDraftStore = create<DraftState>()(
       name: "draft-storage",
       storage: createJSONStorage(() => walletScopedStorage),
       skipHydration: true,
+      version: 1,
+      migrate: (persistedState) => migrateDraftStateV0(persistedState),
     }
   )
 );

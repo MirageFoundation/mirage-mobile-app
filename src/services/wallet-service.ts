@@ -8,10 +8,13 @@
 import * as SecureStore from "expo-secure-store";
 import * as Sentry from "@sentry/react-native";
 import { storage } from "@/src/stores/mmkv-storage";
+import { authSessionCoordinator } from "./auth-session-coordinator";
+import { clearWalletStorage, verifyWalletIdentity, WalletCleanupError, WalletLocalSession } from "./wallet-local-session";
 import {
   migrateWalletAccessibility,
   recoverWalletReplacement,
   replaceWalletTransaction,
+  WalletRecoveryError,
   type SecureWalletStore,
 } from "@/src/services/wallet-secure-transactions";
 import {
@@ -20,8 +23,6 @@ import {
   createWalletFromMnemonic,
   getPublicKeyBase64,
   signCanonical,
-  derivePrivateKey,
-  getCompressedPublicKey,
   b64encode,
   hexToBytes,
   type MirageWallet,
@@ -49,6 +50,13 @@ const OLD_SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED,
 };
 
+const CLEANUP_KEY = "wallet_cleanup_pending_v1";
+const lifecycleSecureStore: SecureWalletStore = {
+  get: (key) => SecureStore.getItemAsync(key, key === STORAGE_KEYS.MNEMONIC ? OLD_SECURE_STORE_OPTIONS : SECURE_STORE_OPTIONS),
+  set: (key, value) => SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS),
+  remove: (key) => SecureStore.deleteItemAsync(key, key === STORAGE_KEYS.MNEMONIC ? OLD_SECURE_STORE_OPTIONS : SECURE_STORE_OPTIONS),
+};
+
 const secureWalletStore: SecureWalletStore = {
   get: (key) => SecureStore.getItemAsync(key, SECURE_STORE_OPTIONS),
   set: (key, value) => SecureStore.setItemAsync(key, value, SECURE_STORE_OPTIONS),
@@ -58,44 +66,85 @@ const secureWalletStore: SecureWalletStore = {
 class WalletService {
   private cachedMnemonic: string | null = null;
   private cachedWallet: MirageWallet | null = null;
+  private localSession = new WalletLocalSession<MirageWallet | null>();
+  private cleanupBlocked = false;
+  private generation = 0;
+  private operations: Promise<unknown> = Promise.resolve();
+  private startup: Promise<MirageWallet | null> | null = null;
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operations.then(operation, operation);
+    this.operations = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  invalidateSession(): void {
+    this.generation += 1;
+    this.cachedMnemonic = null;
+    this.cachedWallet = null;
+    this.localSession.invalidate();
+  }
+
+  prepareCleanup(): MirageWallet | null {
+    const wallet = this.cachedWallet;
+    this.cleanupBlocked = true;
+    this.invalidateSession();
+    try {
+      storage.set(CLEANUP_KEY, true);
+      if (storage.getBoolean(CLEANUP_KEY) !== true) throw new WalletCleanupError();
+    } catch {
+      throw new WalletCleanupError();
+    }
+    const metadata = this.getWalletMetadata();
+    return wallet && metadata?.address === wallet.address &&
+      metadata.publicKeyBase64 === getPublicKeyBase64(wallet) ? wallet : null;
+  }
 
   async migrateKeychainAccessibility(): Promise<void> {
-    try {
-      await recoverWalletReplacement({
-        deriveAddress: (value) => createWalletFromMnemonic(value).address,
-        secureStore: secureWalletStore,
-        metadataStore: { get: () => this.getWalletMetadata() },
-        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
-        candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
-        backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
-      });
-      const mnemonic = await migrateWalletAccessibility({
-        deriveAddress: (value) => createWalletFromMnemonic(value).address,
-        secureStore: {
-          get: (key) => SecureStore.getItemAsync(
-            key,
-            key === STORAGE_KEYS.MNEMONIC
-              ? OLD_SECURE_STORE_OPTIONS
-              : SECURE_STORE_OPTIONS,
-          ),
-          set: secureWalletStore.set,
-          remove: (key) => SecureStore.deleteItemAsync(
-            key,
-            key === STORAGE_KEYS.MNEMONIC
-              ? OLD_SECURE_STORE_OPTIONS
-              : SECURE_STORE_OPTIONS,
-          ),
-        },
-        legacyKey: STORAGE_KEYS.MNEMONIC,
-        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
-        setMigrated: () => storage.set("wallet_keychain_migrated_v2", true),
-      });
-      this.cachedMnemonic = mnemonic;
-    } catch (error) {
-      Sentry.captureException(error, {
-        tags: { action: "wallet_keychain_migration" },
-      });
+    await this.initializeLocalWallet();
+  }
+
+  async initializeLocalWallet(): Promise<MirageWallet | null> {
+    if (!this.startup) {
+      this.startup = (async () => {
+        if (this.cleanupBlocked || storage.getBoolean(CLEANUP_KEY)) {
+          await this.clearWallet();
+        }
+        return this.localSession.load(() => this.enqueue(() => this.restoreLocalWallet()));
+      })().finally(() => { this.startup = null; });
     }
+    return this.startup;
+  }
+
+  private async restoreLocalWallet(): Promise<MirageWallet | null> {
+    if (this.cleanupBlocked || storage.getBoolean(CLEANUP_KEY)) throw new WalletCleanupError();
+    const derived = new Map<string, MirageWallet>();
+    const derive = (value: string) => {
+      let wallet = derived.get(value);
+      if (!wallet) {
+        wallet = createWalletFromMnemonic(value);
+        derived.set(value, wallet);
+      }
+      return wallet;
+    };
+    await recoverWalletReplacement({
+      deriveAddress: (value) => derive(value).address,
+      secureStore: secureWalletStore,
+      metadataStore: { get: () => this.getWalletMetadata() },
+      primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+      candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
+      backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
+    });
+    const mnemonic = await migrateWalletAccessibility({
+      deriveAddress: (value) => derive(value).address,
+      secureStore: lifecycleSecureStore,
+      legacyKey: STORAGE_KEYS.MNEMONIC,
+      primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+      setMigrated: () => storage.set("wallet_keychain_migrated_v2", true),
+    });
+    const wallet = mnemonic ? derive(mnemonic) : null;
+    verifyWalletIdentity(wallet ? { address: wallet.address, publicKeyBase64: getPublicKeyBase64(wallet) } : null, this.getWalletMetadata());
+    return wallet;
   }
 
   // ============================================
@@ -113,16 +162,15 @@ class WalletService {
    * @throws WalletError if wallet already exists or storage fails
    */
   async createWallet(): Promise<WalletMetadata> {
-    // Check if wallet already exists (but allow overwriting pending wallets)
-    const existingMetadata = this.getWalletMetadata();
-    if (existingMetadata && !existingMetadata.pending) {
-      throw new WalletError("Wallet already exists. Clear existing wallet first.", WalletErrorCode.WALLET_ALREADY_EXISTS);
-    }
+    return this.enqueue(() => this.createWalletExclusive());
+  }
 
-    // If there's a pending wallet, clear it first
-    if (existingMetadata?.pending) {
-      console.log("[WalletService] Clearing pending wallet before creating new one");
-      await this.clearWallet();
+  private async createWalletExclusive(): Promise<WalletMetadata> {
+    await this.restoreLocalWallet();
+    this.invalidateSession();
+    const existingMetadata = this.getWalletMetadata();
+    if (existingMetadata) {
+      throw new WalletError("Wallet already exists. Clear existing wallet first.", WalletErrorCode.WALLET_ALREADY_EXISTS);
     }
 
     try {
@@ -132,9 +180,6 @@ class WalletService {
       // Create wallet from mnemonic
       const wallet = createWalletFromMnemonic(mnemonic);
 
-      // Store mnemonic securely
-      await this.storeMnemonic(mnemonic);
-
       // Create and store metadata - marked as pending
       const metadata: WalletMetadata = {
         address: wallet.address,
@@ -142,17 +187,19 @@ class WalletService {
         createdAt: Date.now(),
         hasUsername: false,
         pending: true, // Wallet is pending until user confirms recovery phrase
+        signup: { phase: "wallet_generated", operationId: `${wallet.address}:${Date.now()}` },
       };
 
-      this.storeMetadata(metadata);
+      await this.persistWallet(wallet, metadata);
       console.log("[WalletService] Created pending wallet:", wallet.address);
 
       // Cache mnemonic for session
       this.cachedMnemonic = mnemonic;
+      this.cachedWallet = wallet;
 
       return metadata;
     } catch (error) {
-      if (error instanceof WalletError) throw error;
+      if (error instanceof WalletError || error instanceof WalletRecoveryError || error instanceof WalletCleanupError) throw error;
       Sentry.captureException(error, {
         tags: { action: "wallet_create" },
       });
@@ -164,17 +211,20 @@ class WalletService {
    * Confirm wallet creation after user has backed up recovery phrase
    * This removes the "pending" flag from the wallet metadata.
    */
-  confirmWallet(): void {
+  confirmWallet(expectedAddress: string): void {
     const metadata = this.getWalletMetadata();
-    if (metadata) {
-      this.storeMetadata({ ...metadata, pending: false });
-      console.log("[WalletService] Wallet confirmed:", metadata.address);
+    if (!metadata?.pending || metadata.address !== expectedAddress ||
+        !metadata.hasUsername || metadata.signup?.phase !== "confirmed" ||
+        !metadata.signup.username || !metadata.signup.operationId ||
+        this.cachedWallet?.address !== expectedAddress) {
+      throw new Error("Username registration must be verified before confirming this wallet");
     }
+    this.storeMetadata({ ...metadata, pending: false });
+    if (this.getWalletMetadata()?.pending !== false) throw new WalletRecoveryError();
   }
   
   /**
-   * Check if there's a pending (incomplete) wallet
-   * Used to clean up on app startup
+   * Check if there's a pending (incomplete) wallet.
    */
   hasPendingWallet(): boolean {
     const metadata = this.getWalletMetadata();
@@ -182,32 +232,33 @@ class WalletService {
   }
   
   /**
-   * Clean up pending wallets on app startup
-   * Returns true if a pending wallet was cleaned up
+   * Legacy callers must never silently discard an interrupted signup key.
    */
   async cleanupPendingWallet(): Promise<boolean> {
-    if (this.hasPendingWallet()) {
-      console.log("[WalletService] Cleaning up pending wallet from incomplete signup");
-      await this.clearWallet();
-      return true;
-    }
     return false;
   }
 
   /**
    * Import wallet from existing mnemonic
    *
-   * @param mnemonic - 12 or 24 word BIP39 mnemonic
+   * @param mnemonic - English BIP39 mnemonic (12, 15, 18, 21 or 24 words)
    * @returns Wallet metadata
    * @throws WalletError if mnemonic is invalid or replacement fails
    */
   async importWallet(mnemonic: string): Promise<WalletMetadata> {
+    return this.enqueue(() => this.importWalletExclusive(mnemonic));
+  }
+
+  private async importWalletExclusive(mnemonic: string): Promise<WalletMetadata> {
     // Validate mnemonic first
-    const normalizedMnemonic = mnemonic.trim().toLowerCase();
+    const normalizedMnemonic = mnemonic.trim().toLowerCase().split(/\s+/).join(" ");
 
     if (!isValidMnemonic(normalizedMnemonic)) {
       throw new WalletError("Invalid mnemonic phrase", WalletErrorCode.INVALID_MNEMONIC);
     }
+
+    await this.restoreLocalWallet();
+    this.invalidateSession();
 
     try {
       const wallet = createWalletFromMnemonic(normalizedMnemonic);
@@ -218,35 +269,14 @@ class WalletService {
         hasUsername: false,
       };
 
-      await replaceWalletTransaction({
-        prepare: () => ({
-          mnemonic: normalizedMnemonic,
-          address: wallet.address,
-          metadata,
-        }),
-        deriveAddress: (value) => createWalletFromMnemonic(value).address,
-        secureStore: secureWalletStore,
-        metadataStore: {
-          get: () => this.getWalletMetadata(),
-          set: (value) => this.storeMetadata(value),
-          remove: () => storage.remove(STORAGE_KEYS.WALLET_META),
-        },
-        primaryKey: STORAGE_KEYS.MNEMONIC_V2,
-        candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
-        backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
-        onCleanupError: (cleanupError) => {
-          Sentry.captureException(cleanupError, {
-            tags: { action: "wallet_import_cleanup" },
-          });
-        },
-      });
+      await this.persistWallet(wallet, metadata);
 
       this.cachedMnemonic = normalizedMnemonic;
       this.cachedWallet = wallet;
 
       return metadata;
     } catch (error) {
-      if (error instanceof WalletError) throw error;
+      if (error instanceof WalletError || error instanceof WalletRecoveryError || error instanceof WalletCleanupError) throw error;
       Sentry.captureException(error, {
         tags: { action: "wallet_import" },
       });
@@ -267,39 +297,25 @@ class WalletService {
    * @returns Full wallet or null if no wallet exists
    */
   async getWallet(): Promise<MirageWallet | null> {
-    try {
-      const mnemonic = await this.getMnemonic();
-      if (!mnemonic) return null;
-
-      if (this.cachedWallet && this.cachedWallet.mnemonic === mnemonic) {
-        return this.cachedWallet;
-      }
-
-      const wallet = createWalletFromMnemonic(mnemonic);
-      this.cachedWallet = wallet;
-      return wallet;
-    } catch {
-      return null;
+    const session = authSessionCoordinator.current();
+    const generation = this.generation;
+    if (this.cleanupBlocked || storage.getBoolean(CLEANUP_KEY)) throw new WalletCleanupError();
+    const wallet = await (this.cachedWallet ?? this.initializeLocalWallet());
+    if (generation !== this.generation || !authSessionCoordinator.isCurrent(session) || this.cleanupBlocked || storage.getBoolean(CLEANUP_KEY)) {
+      throw new WalletRecoveryError("Wallet session changed; retry the action.");
     }
+    verifyWalletIdentity(wallet ? { address: wallet.address, publicKeyBase64: getPublicKeyBase64(wallet) } : null, this.getWalletMetadata());
+    if (wallet && session.walletAddress && session.walletAddress !== wallet.address) throw new WalletRecoveryError();
+    this.cachedWallet = wallet;
+    this.cachedMnemonic = wallet?.mnemonic ?? null;
+    return wallet;
   }
 
   /**
    * Check if a wallet exists in storage
    */
   async hasWallet(): Promise<boolean> {
-    try {
-      const mnemonic = await SecureStore.getItemAsync(
-        STORAGE_KEYS.MNEMONIC_V2,
-        SECURE_STORE_OPTIONS,
-      );
-      if (mnemonic) return true;
-      return !!(await SecureStore.getItemAsync(
-        STORAGE_KEYS.MNEMONIC,
-        OLD_SECURE_STORE_OPTIONS,
-      ));
-    } catch {
-      return false;
-    }
+    return !!(await this.getWallet());
   }
 
   /**
@@ -338,14 +354,15 @@ class WalletService {
    * @throws WalletError if no wallet or signing fails
    */
   async signData(data: Uint8Array): Promise<string> {
-    const mnemonic = await this.getMnemonic();
-    if (!mnemonic) {
+    const session = authSessionCoordinator.current();
+    const wallet = await this.getWallet();
+    if (!authSessionCoordinator.isCurrent(session) || this.cleanupBlocked) throw new WalletRecoveryError("Wallet session changed; retry the action.");
+    if (!wallet) {
       throw new WalletError("No wallet found", WalletErrorCode.WALLET_NOT_FOUND);
     }
 
     try {
-      const privateKey = derivePrivateKey(mnemonic);
-      const signature = signCanonical(privateKey, data);
+      const signature = signCanonical(wallet.privateKey, data);
       return b64encode(signature);
     } catch (error) {
       if (error instanceof WalletError) throw error;
@@ -371,16 +388,17 @@ class WalletService {
     powDifficulty = 0,
     powNonce = 0
   ): Promise<SignedEnvelope> {
-    const mnemonic = await this.getMnemonic();
-    if (!mnemonic) {
+    const session = authSessionCoordinator.current();
+    const wallet = await this.getWallet();
+    if (!authSessionCoordinator.isCurrent(session) || this.cleanupBlocked) throw new WalletRecoveryError("Wallet session changed; retry the action.");
+    if (!wallet) {
       throw new WalletError("No wallet found", WalletErrorCode.WALLET_NOT_FOUND);
     }
 
     const timestamp = Date.now();
     const envelopeNonce = (BigInt(timestamp) * 1000000n + BigInt(Math.floor(Math.random() * 0x100000000)))
       .toString();
-    const privateKey = derivePrivateKey(mnemonic);
-    const publicKey = getCompressedPublicKey(privateKey);
+    const { privateKey, publicKey } = wallet;
 
     // Build signing payload: messageHash + timestamp + blockHash + pow
     const timestampBytes = new Uint8Array(8);
@@ -431,29 +449,31 @@ class WalletService {
    * Removes mnemonic from secure store and metadata from MMKV.
    */
   async clearWallet(): Promise<void> {
-    try {
-      // Clear secure store
-      await Promise.all([
-        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_V2, SECURE_STORE_OPTIONS),
-        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_CANDIDATE, SECURE_STORE_OPTIONS),
-        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC_BACKUP, SECURE_STORE_OPTIONS),
-        SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC, OLD_SECURE_STORE_OPTIONS),
-      ]);
+    this.prepareCleanup();
+    return this.enqueue(() => this.clearWalletExclusive());
+  }
 
-      // Clear MMKV data
-      storage.remove(STORAGE_KEYS.WALLET_META);
-      storage.remove(STORAGE_KEYS.USER_LEVEL);
-      storage.remove(STORAGE_KEYS.HAS_ONBOARDED);
-
-      // Clear cached mnemonic
-      this.cachedMnemonic = null;
-      this.cachedWallet = null;
-    } catch (error) {
-      Sentry.captureException(error, {
-        tags: { action: "wallet_clear" },
-      });
-      throw new WalletError(`Failed to clear wallet: ${error}`, WalletErrorCode.SECURE_STORE_ERROR);
-    }
+  private async clearWalletExclusive(): Promise<void> {
+    this.cleanupBlocked = true;
+    await clearWalletStorage({
+      invalidate: () => this.invalidateSession(),
+      markCleanup: () => {
+        this.prepareCleanup();
+      },
+      clearCleanup: () => {
+        storage.remove(CLEANUP_KEY);
+        if (storage.getBoolean(CLEANUP_KEY)) throw new WalletCleanupError();
+      },
+      secureStore: lifecycleSecureStore,
+      keys: [STORAGE_KEYS.MNEMONIC_V2, STORAGE_KEYS.MNEMONIC_CANDIDATE, STORAGE_KEYS.MNEMONIC_BACKUP, STORAGE_KEYS.MNEMONIC],
+      removeMetadata: () => {
+        for (const key of [STORAGE_KEYS.WALLET_META, STORAGE_KEYS.USER_LEVEL, STORAGE_KEYS.HAS_ONBOARDED]) {
+          storage.remove(key);
+          if (storage.contains(key)) throw new WalletCleanupError();
+        }
+      },
+    });
+    this.cleanupBlocked = false;
   }
 
   /**
@@ -476,41 +496,29 @@ class WalletService {
    * Get mnemonic from cache or secure store
    */
   private async getMnemonic(): Promise<string | null> {
-    // Return cached mnemonic if available
-    if (this.cachedMnemonic) {
-      return this.cachedMnemonic;
-    }
-
-    try {
-      const currentMnemonic = await SecureStore.getItemAsync(
-        STORAGE_KEYS.MNEMONIC_V2,
-        SECURE_STORE_OPTIONS,
-      );
-      const mnemonic = currentMnemonic ?? await SecureStore.getItemAsync(
-        STORAGE_KEYS.MNEMONIC,
-        OLD_SECURE_STORE_OPTIONS,
-      );
-
-      if (mnemonic) {
-        // Cache for future use
-        this.cachedMnemonic = mnemonic;
-      }
-
-      return mnemonic;
-    } catch (error) {
-      console.error("[WalletService] Failed to get mnemonic:", error);
-      Sentry.captureException(error, {
-        tags: { action: "wallet_get_mnemonic" },
-      });
-      return null;
-    }
+    const session = authSessionCoordinator.current();
+    const wallet = await this.getWallet();
+    if (!authSessionCoordinator.isCurrent(session) || this.cleanupBlocked) throw new WalletRecoveryError("Wallet session changed; retry the action.");
+    return wallet?.mnemonic ?? null;
   }
 
-  /**
-   * Store mnemonic in secure store
-   */
-  private async storeMnemonic(mnemonic: string): Promise<void> {
-    await SecureStore.setItemAsync(STORAGE_KEYS.MNEMONIC_V2, mnemonic, SECURE_STORE_OPTIONS);
+  private async persistWallet(wallet: MirageWallet, metadata: WalletMetadata): Promise<void> {
+    await replaceWalletTransaction({
+      prepare: () => ({ mnemonic: wallet.mnemonic, address: wallet.address, metadata }),
+      deriveAddress: (value) => createWalletFromMnemonic(value).address,
+      secureStore: secureWalletStore,
+      metadataStore: {
+        get: () => this.getWalletMetadata(),
+        set: (value) => this.storeMetadata(value),
+        remove: () => storage.remove(STORAGE_KEYS.WALLET_META),
+      },
+      primaryKey: STORAGE_KEYS.MNEMONIC_V2,
+      candidateKey: STORAGE_KEYS.MNEMONIC_CANDIDATE,
+      backupKey: STORAGE_KEYS.MNEMONIC_BACKUP,
+      onCleanupError: (error) => {
+        Sentry.captureException(error, { tags: { action: "wallet_persistence_cleanup" } });
+      },
+    });
   }
 
   /**

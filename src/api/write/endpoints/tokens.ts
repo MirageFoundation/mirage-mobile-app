@@ -12,12 +12,15 @@ import type { MirageWallet } from "@/src/wallet";
 import {
   buildSignedEnvelope,
   canonBaseSendTokens,
-  canonBaseUpgradeLevel,
+  canonBaseSubscribe,
   canonBaseSetAutoRenewal,
-  canonBaseGiftSubscription,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
+import {
+  assertPeriodCount,
+  PURCHASABLE_SUBSCRIPTION_LEVEL,
+} from "@/src/domain/subscriptions";
 
 // ============================================
 // Types
@@ -30,7 +33,9 @@ export interface SendTokensInput {
   amount: number;
 }
 
-export type SubscriptionLevel = 1 | 10;
+export type SubscriptionLevel = 1;
+
+const SUBSCRIPTION_LEVEL = PURCHASABLE_SUBSCRIPTION_LEVEL;
 
 function addSubscriptionBreadcrumb(
   message: string,
@@ -85,29 +90,37 @@ export async function sendTokens(
  */
 export async function upgradeLevel(
   wallet: MirageWallet,
-  level: SubscriptionLevel
+  periodCount: number
 ): Promise<WriteResponse> {
+  const validatedPeriodCount = assertPeriodCount(periodCount);
   addSubscriptionBreadcrumb("Subscription request started", {
     action: "subscribe",
     endpoint: "/core/subscribe",
     messageType: "MsgSubscribe",
-    level,
+    level: SUBSCRIPTION_LEVEL,
+    period_count: validatedPeriodCount,
   });
 
   const payload = await buildSignedEnvelope({
     wallet,
-    baseBuilder: canonBaseUpgradeLevel,
+    baseBuilder: canonBaseSubscribe,
     payloadFields: {
-      level,
+      level: SUBSCRIPTION_LEVEL,
+      periodCount: validatedPeriodCount,
     },
     skipPoW: true, // Paid operations don't need PoW
   });
 
-  const response = await api.post<WriteResponse>("/core/subscribe", payload);
+  const { periodCount: _periodCount, ...rest } = payload;
+  const response = await api.post<WriteResponse>("/core/subscribe", {
+    ...rest,
+    period_count: validatedPeriodCount,
+  });
   addSubscriptionBreadcrumb("Subscription request submitted", {
     action: "subscribe",
     endpoint: "/core/subscribe",
-    level,
+    level: SUBSCRIPTION_LEVEL,
+    period_count: validatedPeriodCount,
     txHash: response.tx_hash,
   });
   return response;
@@ -155,38 +168,46 @@ export async function setAutoRenewal(
 
 export interface GiftSubscriptionInput {
   recipient: string;
-  level: SubscriptionLevel;
+  periodCount: number;
 }
 
 export async function giftSubscription(
   wallet: MirageWallet,
   input: GiftSubscriptionInput
 ): Promise<WriteResponse> {
-  const { recipient, level } = input;
+  const { recipient } = input;
+  const validatedPeriodCount = assertPeriodCount(input.periodCount);
 
   addSubscriptionBreadcrumb("Gift subscription request started", {
     action: "gift_subscription",
     endpoint: "/core/subscribe",
     messageType: "MsgSubscribe",
-    level,
+    level: SUBSCRIPTION_LEVEL,
+    period_count: validatedPeriodCount,
     hasRecipient: Boolean(recipient),
   });
 
   const payload = await buildSignedEnvelope({
     wallet,
-    baseBuilder: canonBaseGiftSubscription,
+    baseBuilder: canonBaseSubscribe,
     payloadFields: {
-      level,
+      level: SUBSCRIPTION_LEVEL,
       target: recipient,
+      periodCount: validatedPeriodCount,
     },
     skipPoW: true,
   });
 
-  const response = await api.post<WriteResponse>("/core/subscribe", payload);
+  const { periodCount: _periodCount, ...rest } = payload;
+  const response = await api.post<WriteResponse>("/core/subscribe", {
+    ...rest,
+    period_count: validatedPeriodCount,
+  });
   addSubscriptionBreadcrumb("Gift subscription request submitted", {
     action: "gift_subscription",
     endpoint: "/core/subscribe",
-    level,
+    level: SUBSCRIPTION_LEVEL,
+    period_count: validatedPeriodCount,
     hasRecipient: Boolean(recipient),
     txHash: response.tx_hash,
   });

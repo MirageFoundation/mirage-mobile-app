@@ -13,6 +13,11 @@ import {
   usePowQueueStore,
 } from "@/src/services/pow-queue";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
+import { isLegacyThreadReadOnlyError } from "@/src/domain/subscriptions";
+import { getServerIdentity, StaleServerResponseError } from "@/src/api/server-runtime";
+import { assertReplyNotRejected, isReplyRejected, useReplyRejectionStore } from "@/src/stores/reply-rejection-store";
+import { LEGACY_THREAD_NOTICE } from "@/src/domain/content";
+import { Text } from "@/src/components/ui/primitives";
 
 type CurrentUser = {
   id: string;
@@ -82,6 +87,11 @@ export const PostDetailCommentComposer = forwardRef<
   ) => {
     const commentInputRef = useRef<CommentInputRef>(null);
     const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
+    const [rejectedReply, setRejectedReply] = useState<{ server: string; threadId: string } | null>(null);
+    const serverIdentity = getServerIdentity();
+    const parentRejected = useReplyRejectionStore((state) =>
+      isReplyRejected(state, serverIdentity, replyingTo?.id ?? (isViewingComment ? implicitReplyRoot?.post_id : null) ?? id),
+    );
     const commentMutation = useComment({});
     const commentMutateAsyncRef = useRef(commentMutation.mutateAsync);
     const enqueue = usePowQueueStore((state) => state.enqueue);
@@ -98,6 +108,11 @@ export const PostDetailCommentComposer = forwardRef<
       () => ({
         startReply: (comment) => {
           requireAuth(() => {
+            if (isReplyRejected(useReplyRejectionStore.getState(), getServerIdentity(), comment.id)) {
+              setRejectedReply({ server: getServerIdentity(), threadId: id });
+              return;
+            }
+            setRejectedReply(null);
             setReplyingTo(comment);
             setTimeout(() => {
               commentInputRef.current?.activate();
@@ -105,7 +120,7 @@ export const PostDetailCommentComposer = forwardRef<
           });
         },
       }),
-      [requireAuth],
+      [id, requireAuth],
     );
 
     const handleCancelReply = useCallback(() => {
@@ -127,6 +142,13 @@ export const PostDetailCommentComposer = forwardRef<
             : null;
         const replyTargetId = explicitReplyToId ?? replyingTo?.id ?? implicitReplyTarget?.id ?? null;
         const parentId = replyTargetId ?? id;
+        const capturedServer = getServerIdentity();
+        if (isReplyRejected(useReplyRejectionStore.getState(), capturedServer, parentId)) {
+          setRejectedReply({ server: capturedServer, threadId: id });
+          useCommentComposeStore.getState().saveDraft(id, replyTargetId, { text, imageUri, gifUrl });
+          return;
+        }
+        setRejectedReply(null);
         const optimisticMediaUrl = imageUri || gifUrl || null;
         const optimisticContent = composeCommentContent(text, optimisticMediaUrl);
         const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -172,6 +194,8 @@ export const PostDetailCommentComposer = forwardRef<
           type: "comment",
           label: getActionLabel("comment"),
           execute: async () => {
+            if (capturedServer !== getServerIdentity()) throw new StaleServerResponseError();
+            assertReplyNotRejected(capturedServer, parentId);
             const mediaUrl = await resolveCommentMediaUrl(capturedImageUri, capturedGifUrl);
             const finalContent = composeCommentContent(capturedText, mediaUrl);
 
@@ -179,6 +203,7 @@ export const PostDetailCommentComposer = forwardRef<
               parentId,
               content: finalContent,
               rootPostId: id,
+              serverIdentity: capturedServer,
             });
           },
           onOptimisticUpdate: () => {
@@ -234,6 +259,21 @@ export const PostDetailCommentComposer = forwardRef<
             }, 2000);
           },
           onError: (err) => {
+            if (isLegacyThreadReadOnlyError(err)) {
+              setRejectedReply({ server: capturedServer, threadId: id });
+              Sentry.addBreadcrumb({
+                category: "comment",
+                message: "Legacy thread rejected reply",
+                level: "info",
+                data: { postId: id, parentId },
+              });
+              useCommentComposeStore.getState().saveDraft(id, replyTargetId, {
+                text: capturedText,
+                imageUri: capturedImageUri,
+                gifUrl: capturedGifUrl,
+              });
+              return;
+            }
             Sentry.captureException(err, {
               tags: { feature: "comment", operation: "submit_comment" },
               extra: {
@@ -315,21 +355,32 @@ export const PostDetailCommentComposer = forwardRef<
       );
     }, [pendingComment, id, handleSubmitComment]);
 
+    if (!post && !implicitReplyRoot) return null;
+
     return (
-      <CommentInput
-        ref={commentInputRef}
-        isLoggedIn={isLoggedIn}
-        onAuthRequired={onAuthRequired}
-        replyingTo={replyingTo?.author.username}
-        replyingToId={replyingTo?.id}
-        replyingToContent={replyingTo?.content}
-        onCancelReply={handleCancelReply}
-        postId={id}
-        postTitle={post?.title}
-        postAuthorUsername={post?.author.username}
-        postThumbnail={post?.media?.[0]?.uri}
-        postContent={post?.body}
-      />
+      <>
+        {parentRejected ? (
+          <Text size="sm">{LEGACY_THREAD_NOTICE}</Text>
+        ) : (
+          <>
+            {rejectedReply?.server === serverIdentity && rejectedReply.threadId === id && <Text size="sm">That reply target is read-only.</Text>}
+            <CommentInput
+              ref={commentInputRef}
+              isLoggedIn={isLoggedIn}
+              onAuthRequired={onAuthRequired}
+              replyingTo={replyingTo?.author.username}
+              replyingToId={replyingTo?.id}
+              replyingToContent={replyingTo?.content}
+              onCancelReply={handleCancelReply}
+              postId={id}
+              postTitle={post?.title}
+              postAuthorUsername={post?.author.username}
+              postThumbnail={post?.media?.[0]?.uri}
+              postContent={post?.body}
+            />
+          </>
+        )}
+      </>
     );
   },
 );

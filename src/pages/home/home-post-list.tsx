@@ -12,11 +12,11 @@ import {
 import {
   Platform,
   Dimensions,
-  type ListRenderItem,
   type ViewToken,
 } from "react-native";
-import { AnimatedLegendList } from "@legendapp/list/reanimated";
+import { AnimatedLegendList, type AnimatedLegendListProps } from "@legendapp/list/reanimated";
 import type { Post } from "@/src/components/molecules";
+import { ModerationProvider } from "@/src/features/moderation/moderation-provider";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
@@ -61,10 +61,10 @@ type HomePostListProps = {
   ListHeaderComponent?: ComponentType<any> | ReactElement | null;
   ListEmptyComponent?: ComponentType<any> | ReactElement | null;
   ListFooterComponent?: ComponentType<any> | ReactElement | null;
-  refreshControl?: ReactElement | null;
+  refreshControl?: AnimatedLegendListProps<Post>["refreshControl"] | null;
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
-  feedScreen: "home" | "following" | "topic";
+  feedScreen: "home" | "following" | "community";
   feedContext: string;
   onItemVisible?: (index: number) => void;
 };
@@ -494,7 +494,7 @@ const HomePostListInner = function HomePostListInner(
     },
   });
 
-  const renderItem = useCallback<ListRenderItem<Post>>(
+  const renderItem = useCallback<NonNullable<AnimatedLegendListProps<Post>["renderItem"]>>(
     ({ item }) => (
       <HomePostCardItem
         post={item}
@@ -554,6 +554,7 @@ const HomePostListInner = function HomePostListInner(
   }, [cancelDeferredFlush, cancelScrollStop, flushViewability, setFeedScrolling]);
 
   return (
+    <ModerationProvider>
     <AnimatedLegendList
       key={feedDensity}
       ref={setListRef}
@@ -571,7 +572,7 @@ const HomePostListInner = function HomePostListInner(
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
       ListFooterComponent={ListFooterComponent}
-      refreshControl={refreshControl}
+      refreshControl={refreshControl ?? undefined}
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
       maintainVisibleContentPosition={maintainVisibleContentPosition}
@@ -584,6 +585,7 @@ const HomePostListInner = function HomePostListInner(
       onMomentumScrollBegin={handleMomentumScrollBegin}
       onMomentumScrollEnd={handleMomentumScrollEnd}
     />
+    </ModerationProvider>
   );
 };
 

@@ -1,26 +1,34 @@
 {
-	"references": {
-		"mirage-node": {
-			"description": "Use this when you want to check backend/node codebase for mirage and it’s web app implementation as well",
-			"enabled": true,
-			"source": {
-				"type": "local",
-				"path": "/Users/bat/dev/mirage/mirage-node"
-			}
-		}
-	},
-	"mcp": {
-		"servers": [
-			{
-				"name": "expo",
-				"transport": "http",
-				"url": "https://mcp.expo.dev/mcp"
-			},
-			{
-				"name": "mirage",
-				"transport": "http",
-				"url": "http://127.0.0.1:8787/mcp"
-			}
-		]
-	}
+  "references": {
+    "mirage-node": {
+      "description": "Use this when you want to check backend/node codebase for mirage and it’s web app implementation as well",
+      "enabled": true,
+      "source": {
+        "type": "local",
+        "path": "/Users/bat/dev/mirage/mirage-node"
+      }
+    },
+    "riven-cash": {
+      "description": "Use this when refering on how to build ui components with unistyles.",
+      "enabled": true,
+      "source": {
+        "type": "local",
+        "path": "/Users/bat/dev/slashforge/riven-cash"
+      }
+    }
+  },
+  "mcp": {
+    "servers": [
+      {
+        "name": "expo",
+        "transport": "http",
+        "url": "https://mcp.expo.dev/mcp"
+      },
+      {
+        "name": "mirage",
+        "transport": "http",
+        "url": "http://127.0.0.1:8787/mcp"
+      }
+    ]
+  }
 }

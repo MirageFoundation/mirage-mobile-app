@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { EMPTY_POST_DRAFT, isClearedPostDraft } from "../src/domain/content";
 
 describe("create form reset after publish", () => {
-  test("empty draft clears title, topic, and category fields", () => {
+  test("empty draft clears title, community, and category fields", () => {
     expect(isClearedPostDraft(EMPTY_POST_DRAFT)).toBe(true);
     expect(isClearedPostDraft({
       ...EMPTY_POST_DRAFT,

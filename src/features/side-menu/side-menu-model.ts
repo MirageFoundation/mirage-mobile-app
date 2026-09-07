@@ -1,13 +1,9 @@
 export type SideMenuAction =
   | "subscription"
-  | "invite"
-  | "referrals"
-  | "quests"
   | "saved"
   | "history"
   | "following"
-  | "topics"
-  | "agents"
+  | "communities"
   | "settings"
   | "help"
   | "about";
@@ -26,36 +22,6 @@ export type SideMenuSection = {
 };
 
 export const SIDE_MENU_SECTIONS: readonly SideMenuSection[] = [
-  {
-    title: "Rewards & Plans",
-    items: [
-      {
-        action: "subscription",
-        iconName: "diamond-outline",
-        title: "Perks",
-        subtitle: "Update subscription",
-        hideOnIos: true,
-      },
-      {
-        action: "invite",
-        iconName: "gift-outline",
-        title: "Invite a Friend",
-        subtitle: "Get rewards",
-      },
-      {
-        action: "referrals",
-        iconName: "people-outline",
-        title: "Referrals",
-        subtitle: "Share your link & track signups",
-      },
-      {
-        action: "quests",
-        iconName: "trophy-outline",
-        title: "Daily Quests",
-        subtitle: "Complete tasks for rewards",
-      },
-    ],
-  },
   {
     title: "Content",
     items: [
@@ -80,25 +46,26 @@ export const SIDE_MENU_SECTIONS: readonly SideMenuSection[] = [
         action: "following",
         iconName: "people-outline",
         title: "Following",
-        subtitle: "Users and topics you follow",
+        subtitle: "Users and communities you follow",
       },
       {
-        action: "topics",
+        action: "communities",
         iconName: "pricetags-outline",
-        title: "Topics",
-        subtitle: "Explore all topics",
-      },
-      {
-        action: "agents",
-        iconName: "shield-checkmark-outline",
-        title: "Agents",
-        subtitle: "Browse and enable agents",
+        title: "Communities",
+        subtitle: "Explore all communities",
       },
     ],
   },
   {
     title: "App",
     items: [
+      {
+        action: "subscription",
+        iconName: "diamond-outline",
+        title: "Perks",
+        subtitle: "Update subscription",
+        hideOnIos: true,
+      },
       {
         action: "settings",
         iconName: "settings-outline",
@@ -137,13 +104,9 @@ type RouteDelegateOptions = {
 
 const STATIC_DESTINATIONS: Partial<Record<SideMenuAction, string>> = {
   subscription: "/subscription",
-  invite: "/invite-and-earn",
-  referrals: "/referrals",
-  quests: "/quests",
   saved: "/saved-posts",
   history: "/history",
-  topics: "/topics",
-  agents: "/agents",
+  communities: "/communities",
   settings: "/settings",
 };
 
@@ -175,8 +138,8 @@ export function getFollowedUserDestination(address: string) {
   return `/user/${address}`;
 }
 
-export function getFollowedTopicDestination(topic: string) {
-  return `/topic/${topic}`;
+export function getJoinedCommunityDestination(community: string) {
+  return `/c/${encodeURIComponent(community)}`;
 }
 
 export function getBalanceDestination() {

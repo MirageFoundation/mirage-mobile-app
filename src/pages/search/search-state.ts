@@ -1,15 +1,27 @@
-import type { TopicInfo } from "@/src/api/types";
+import type { SearchCommunityInfo } from "@/src/api/types";
+import { communityLabel, isRoutableCommunitySlug } from "@/src/domain/communities";
 import type { RecentSearch } from "@/src/stores";
 import type { SearchTab } from "./search-utils";
 
-export const SEARCH_TABS: readonly SearchTab[] = ["posts", "topics", "users"];
+export const SEARCH_TABS: readonly SearchTab[] = ["posts", "communities", "users"];
+export const SEARCH_TAB_LABELS: Record<SearchTab, string> = {
+  posts: "Posts",
+  communities: "Communities",
+  users: "Users",
+};
+
+export function recentSearchLabel(query: string): string {
+  const match = query.trim().match(/^(?:#([a-z0-9-]+)|\[([a-z0-9-]+)\])$/i);
+  const slug = match?.[1] ?? match?.[2];
+  return slug && isRoutableCommunitySlug(slug) ? communityLabel(slug) : query;
+}
 
 export type SearchDiscoverySection =
   | { key: "recent"; items: RecentSearch[] }
-  | { key: "trending"; items: TopicInfo[]; isLoading: boolean };
+  | { key: "trending"; items: SearchCommunityInfo[]; isLoading: boolean };
 
 export function resolveSearchTab(tab?: string): SearchTab {
-  return tab === "topics" || tab === "users" ? tab : "posts";
+  return tab === "communities" || tab === "users" ? tab : "posts";
 }
 
 export function searchTabToIndex(tab: SearchTab): number {
@@ -31,22 +43,26 @@ export function shouldShowSearchResults(
   return normalizeSearchQuery(query).length > 0 && !!debouncedQuery;
 }
 
-export function selectTrendingTopics(
-  topics: TopicInfo[] | undefined,
+export function selectTrendingCommunities(
+  communities: { community: string; post_count?: number }[] | undefined,
   limit = 10,
-): TopicInfo[] {
-  return [...(topics ?? [])]
-    .filter((topic) => (topic.post_count ?? 0) > 0)
+): SearchCommunityInfo[] {
+  return [...(communities ?? [])]
+    .filter((item) => (item.post_count ?? 0) > 0)
     .sort((left, right) =>
       (right.post_count ?? 0) - (left.post_count ?? 0),
     )
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((item) => ({
+      community: item.community,
+      post_count: item.post_count,
+    }));
 }
 
 export function buildSearchDiscoverySections(
   recentSearches: RecentSearch[],
-  trendingTopics: TopicInfo[],
-  isLoadingTopics: boolean,
+  trendingCommunities: SearchCommunityInfo[],
+  isLoadingCommunities: boolean,
 ): SearchDiscoverySection[] {
   const sections: SearchDiscoverySection[] = [];
 
@@ -56,8 +72,8 @@ export function buildSearchDiscoverySections(
 
   sections.push({
     key: "trending",
-    items: trendingTopics,
-    isLoading: isLoadingTopics,
+    items: trendingCommunities,
+    isLoading: isLoadingCommunities,
   });
 
   return sections;
@@ -65,20 +81,20 @@ export function buildSearchDiscoverySections(
 
 export function getSearchTabCounts({
   postCount,
-  topicCount,
-  topicPostCount,
+  communityCount,
+  communityPostCount,
   userCount,
-  hasSelectedTopic,
+  hasSelectedCommunity,
 }: {
   postCount: number;
-  topicCount: number;
-  topicPostCount: number;
+  communityCount: number;
+  communityPostCount: number;
   userCount: number;
-  hasSelectedTopic: boolean;
+  hasSelectedCommunity: boolean;
 }): Record<SearchTab, number> {
   return {
     posts: postCount,
-    topics: hasSelectedTopic ? topicPostCount : topicCount,
+    communities: hasSelectedCommunity ? communityPostCount : communityCount,
     users: userCount,
   };
 }

@@ -8,6 +8,7 @@
 import { useCallback, useState } from "react";
 import { useAuthStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
+import { authSessionCoordinator } from "@/src/services/auth-session-coordinator";
 import type { MirageWallet } from "@/src/wallet";
 
 // ============================================
@@ -63,13 +64,19 @@ export function useWallet(): UseWalletResult {
    * The wallet should only be used for signing and not stored.
    */
   const getWallet = useCallback(async (): Promise<MirageWallet> => {
-    if (!address) {
+    const session = authSessionCoordinator.current();
+    if (!address || useAuthStore.getState().walletAddress !== address ||
+        !authSessionCoordinator.matches(session, address)) {
       throw new Error("No wallet connected");
     }
 
     setIsLoading(true);
     try {
       const wallet = await walletService.getWallet();
+      if (!authSessionCoordinator.matches(session, address) ||
+          useAuthStore.getState().walletAddress !== address || wallet?.address !== address) {
+        throw new Error("Wallet session changed; retry the action.");
+      }
       if (!wallet) {
         throw new Error("Failed to load wallet from secure store");
       }

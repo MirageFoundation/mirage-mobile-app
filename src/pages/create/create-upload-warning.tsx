@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { Platform } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -32,7 +33,9 @@ export function CreateUploadWarning({ visible, kind }: CreateUploadWarningProps)
     >
       <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
       <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
-        Please do not leave the app while {kind === "image" ? "images are" : "the video is"} uploading
+        {Platform.OS === "ios"
+          ? "Keep Mirage open until the upload finishes. Uploads may stop if you lock or leave the app."
+          : `Please do not leave the app while ${kind === "image" ? "images are" : "the video is"} uploading`}
       </Text>
     </Animated.View>
   );

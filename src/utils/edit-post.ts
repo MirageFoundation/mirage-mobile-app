@@ -28,7 +28,7 @@ export function navigateToEditPost(router: Router, post: Post) {
   const createdAtSeconds = getCreatedAtSeconds(post.createdAt);
   const editParams: Record<string, string> = {
     editPostId: post.id,
-    editTopic: override?.topic ?? post.topic ?? "general",
+    editCommunity: override?.community ?? post.community ?? "general",
     editTitle: override?.title ?? post.title,
     editBody: override?.content ?? post.body ?? "",
     editTag: override?.tag ?? "",

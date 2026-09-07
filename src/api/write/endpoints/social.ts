@@ -1,9 +1,8 @@
 /**
  * Social Write Endpoints
  *
- * Follow/Unfollow users, topics
- * Enable/Disable/Set agents
- * Block/Unblock users, posts, topics
+ * Follow/Unfollow users
+ * Block/Unblock users, posts
  */
 
 import { api } from "@/src/api/client";
@@ -12,17 +11,10 @@ import {
   buildSignedEnvelope,
   canonBaseFollowUser,
   canonBaseUnfollowUser,
-  canonBaseFollowTopic,
-  canonBaseUnfollowTopic,
-  canonBaseEnableAgent,
-  canonBaseDisableAgent,
-  canonBaseSetAgents,
   canonBaseBlockUser,
   canonBaseUnblockUser,
   canonBaseBlockPost,
   canonBaseUnblockPost,
-  canonBaseBlockTopic,
-  canonBaseUnblockTopic,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
@@ -69,114 +61,6 @@ export async function unfollowUser(
 
     return api.post<WriteResponse>("/core/unfollow_user", payload);
   }, "unfollowUser");
-}
-
-// ============================================
-// Follow Topic
-// ============================================
-
-export async function followTopic(
-  wallet: MirageWallet,
-  topic: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseFollowTopic,
-      payloadFields: {
-        target: wallet.address,
-        topic: topic.toLowerCase(),
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/follow_topic", payload);
-  }, "followTopic");
-}
-
-export async function unfollowTopic(
-  wallet: MirageWallet,
-  topic: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseUnfollowTopic,
-      payloadFields: {
-        target: wallet.address,
-        topic: topic.toLowerCase(),
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/unfollow_topic", payload);
-  }, "unfollowTopic");
-}
-
-// ============================================
-// Enable/Disable Agent
-// ============================================
-
-export async function enableAgent(
-  wallet: MirageWallet,
-  agentAddress: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseEnableAgent,
-      payloadFields: {
-        target: wallet.address,
-        agent: agentAddress,
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/enable_agent", payload);
-  }, "enableAgent");
-}
-
-export async function disableAgent(
-  wallet: MirageWallet,
-  agentAddress: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseDisableAgent,
-      payloadFields: {
-        target: wallet.address,
-        agent: agentAddress,
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/disable_agent", payload);
-  }, "disableAgent");
-}
-
-export async function setAgents(
-  wallet: MirageWallet,
-  agents: string[],
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseSetAgents,
-      payloadFields: {
-        target: wallet.address,
-        agents,
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/set_agents", payload);
-  }, "setAgents");
 }
 
 // ============================================
@@ -261,48 +145,4 @@ export async function unblockPost(
 
     return api.post<WriteResponse>("/core/unblock_post", payload);
   }, "unblockPost");
-}
-
-// ============================================
-// Block Topic
-// ============================================
-
-export async function blockTopic(
-  wallet: MirageWallet,
-  topic: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseBlockTopic,
-      payloadFields: {
-        target: "",
-        topic: topic.toLowerCase(),
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/block_topic", payload);
-  }, "blockTopic");
-}
-
-export async function unblockTopic(
-  wallet: MirageWallet,
-  topic: string,
-  onPoWProgress?: PoWProgressCallback
-): Promise<WriteResponse> {
-  return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseUnblockTopic,
-      payloadFields: {
-        target: "",
-        topic: topic.toLowerCase(),
-      },
-      onPoWProgress,
-    });
-
-    return api.post<WriteResponse>("/core/unblock_topic", payload);
-  }, "unblockTopic");
 }

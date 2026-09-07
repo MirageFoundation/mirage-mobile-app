@@ -1,3 +1,4 @@
+import { useVideoPlaybackIntent } from "./use-video-playback-intent";
 import {
   useCallback,
   useEffect,
@@ -101,7 +102,6 @@ export function usePostCardVideoPlayback({
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [videoReadyForDisplay, setVideoReadyForDisplay] = useState(false);
   const [showVideoPrepSpinner, setShowVideoPrepSpinner] = useState(false);
-  const [mediaRetryKey, setMediaRetryKey] = useState(0);
   const [retainPlayerForDetail, setRetainPlayerForDetail] = useState(false);
   const retainedPlayerWasInactiveRef = useRef(false);
   const userInitiatedPlayRef = useRef(false);
@@ -166,7 +166,7 @@ export function usePostCardVideoPlayback({
       : "feedWarm";
   const videoHandoffKey =
     resolvedMediaUri && !isLocalFileMedia
-      ? canonicalVideoAssetId(resolvedMediaUri)
+      ? `${postId ? `${postId}:` : ""}${canonicalVideoAssetId(resolvedMediaUri)}`
       : null;
 
   // Detail screens adopt the feed card's already-buffered player for this
@@ -208,6 +208,7 @@ export function usePostCardVideoPlayback({
   // this surface re-asserts its state.
   const leaseVersion = useVideoPlayerLeaseVersion();
   const controlledElsewhere = isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease);
+  const returningIntent = useVideoPlaybackIntent(videoPlayer, isVideoPlaying, screenActive, controlledElsewhere, setIsVideoPlaying);
 
   // An adopted player bypasses the controller's option effects, so detail
   // applies its settings directly.
@@ -246,26 +247,6 @@ export function usePostCardVideoPlayback({
     }
   }, [adoptedPlayer, adoptedLease, shouldPlayNativeVideo, leaseVersion]);
 
-  // When a newer lease holder (fullscreen) releases our player, nudge the
-  // surface: re-attaching video output can leave this view blank even though
-  // the player is playing, and playback state may have changed while we were
-  // suppressed.
-  const wasControlledElsewhereRef = useRef(false);
-  useEffect(() => {
-    const was = wasControlledElsewhereRef.current;
-    wasControlledElsewhereRef.current = controlledElsewhere;
-    if (!was || controlledElsewhere) return;
-    if (!shouldPlayNativeVideo) return;
-    try {
-      if (videoPlayer.status === "readyToPlay") {
-        const position = videoPlayer.currentTime;
-        videoPlayer.currentTime = position;
-        videoPlayer.play();
-      }
-    } catch {
-      // Player already released; the mount gates will recreate it.
-    }
-  }, [controlledElsewhere, shouldPlayNativeVideo, videoPlayer]);
 
   useEffect(() => {
     if (!resolvedMediaUri) return;
@@ -438,6 +419,12 @@ export function usePostCardVideoPlayback({
 
   // Viewability/blur/screen-state driven play/pause orchestration.
   useEffect(() => {
+    if (controlledElsewhere) return;
+    if (screenActive && returningIntent.current !== null) {
+      setIsVideoPlaying(returningIntent.current);
+      returningIntent.current = null;
+      return;
+    }
     const canAutoPlayFeedMedia = allowAutoplay && (isPostDetail || isFocused);
     const canAutoPlayCurrentMedia =
       isLocalFileMedia || canAutoPlayFeedMedia || feedTappedToPlay;
@@ -481,6 +468,8 @@ export function usePostCardVideoPlayback({
     isPostDetail,
     isFocused,
     stopNativeVideoPlayback,
+    controlledElsewhere,
+    returningIntent,
   ]);
 
   useEffect(() => {
@@ -499,15 +488,13 @@ export function usePostCardVideoPlayback({
       saveVideoPositionFresh();
     } else if (wasScreenInactiveForVideoRef.current) {
       wasScreenInactiveForVideoRef.current = false;
+      if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease) || returningIntent.current !== null) return;
       const saved = getPosition(videoPositionKey);
       if (saved > 0.5) {
         videoPlayer.currentTime = saved;
       }
-      if (!videoReadyForDisplay) {
-        setMediaRetryKey((k) => k + 1);
-      }
     }
-  }, [screenActive, videoPositionKey, getPosition, saveVideoPositionFresh, videoReadyForDisplay, videoPlayer]);
+  }, [screenActive, videoPositionKey, getPosition, saveVideoPositionFresh, videoPlayer, adoptedLease, returningIntent]);
 
   // Returning from background/lock can leave the video frozen (the OS pauses
   // the native player and blocks play() while locked) or blank (surface needs
@@ -519,12 +506,7 @@ export function usePostCardVideoPlayback({
     shouldPlay: shouldPlayNativeVideo,
     videoPlayer,
     adoptedLease,
-    retryKey: mediaRetryKey,
-    onReload: () => setMediaRetryKey((k) => k + 1),
-    onRecoveryExhausted: () => {
-      setIsVideoPlaying(false);
-      setIsVideoLoading(false);
-    },
+    maxReloadAttempts: 0,
   });
 
   return {
@@ -547,9 +529,8 @@ export function usePostCardVideoPlayback({
     feedTappedToPlay,
     setFeedTappedToPlay,
     setRetainPlayerForDetail,
-    mediaRetryKey,
-    setMediaRetryKey,
     // Mount gates.
+    shouldPrepareNativeVideo,
     shouldMountNativeVideo,
     shouldPlayNativeVideo,
     isLocalFileMedia,

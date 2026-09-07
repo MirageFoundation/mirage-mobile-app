@@ -27,7 +27,7 @@ type PostOptionsSheetProps = {
   /** Whether the current user is the author */
   isOwnPost?: boolean;
   /** Whether the topic is currently followed */
-  isTopicFollowed?: boolean;
+  isCommunityJoined?: boolean;
   /** Whether the user is currently followed */
   isFollowingUser?: boolean;
   /** Whether the post is currently saved */
@@ -37,7 +37,7 @@ type PostOptionsSheetProps = {
   /** Callback when follow/unfollow user is pressed */
   onFollowUser?: () => void;
   /** Callback when follow/unfollow topic is pressed */
-  onFollowTopic?: () => void;
+  onToggleCommunityMembership?: () => void;
   /** Callback when save is pressed */
   onSave?: () => void;
   /** Callback when copy text is pressed */
@@ -60,8 +60,6 @@ type PostOptionsSheetProps = {
   onGiftMirage?: () => void;
   /** Callback when gift subscription is pressed */
   onGiftSubscription?: () => void;
-  /** Callback when annotate is pressed (agent only) */
-  onAnnotate?: () => void;
   /** Callback when sheet is dismissed */
   onDismiss?: () => void;
 };
@@ -210,12 +208,12 @@ export const PostOptionsSheet = forwardRef<
     {
       post,
       isOwnPost = false,
-      isTopicFollowed = false,
+      isCommunityJoined = false,
       isFollowingUser = false,
       isSaved = false,
       onShowFewer,
       onFollowUser,
-      onFollowTopic,
+      onToggleCommunityMembership,
       onSave,
       onCopyText,
       onBlockPost,
@@ -227,7 +225,6 @@ export const PostOptionsSheet = forwardRef<
       onGiveAward,
       onGiftMirage,
       onGiftSubscription,
-      onAnnotate,
       onDismiss,
     },
     ref,

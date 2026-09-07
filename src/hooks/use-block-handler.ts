@@ -6,17 +6,18 @@
 
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useBlockUser, useBlockPost, useBlockTopic } from "@/src/api/write";
+import { useBlockUser, useBlockPost, useBlockCommunity } from "@/src/api/write";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { UserBlockedResponse } from "@/src/api/types";
 import {
   usePowQueueStore,
   generateActionId,
 } from "@/src/services/pow-queue";
+import { communityLabel } from "@/src/domain/communities";
 import { useAuthGuard } from "./use-auth-guard";
 import { useAuthStore } from "@/src/stores";
 
-export type BlockType = "user" | "post" | "comment" | "topic";
+export type BlockType = "user" | "post" | "comment" | "community";
 
 export interface BlockTarget {
   id: string;
@@ -31,8 +32,8 @@ export interface BlockTarget {
  */
 export function getBlockConfirmationMessage(type: BlockType): string {
   switch (type) {
-    case "topic":
-      return "Posts tagged with this topic will stop appearing in your Home and discovery feeds. You can unblock them later from settings.";
+    case "community":
+      return "Posts from this community will stop appearing in your Home and discovery feeds. You can unblock them later from settings.";
     case "user":
       return "Posts and replies from this user will be hidden from your feeds, comments, and inbox. You can unblock them later from settings.";
     case "post":
@@ -51,7 +52,7 @@ export interface UseBlockHandlerReturn {
   requestBlockUser: (userAddress: string, username?: string) => void;
   requestBlockPost: (postId: string) => void;
   requestBlockComment: (commentId: string) => void;
-  requestBlockTopic: (topic: string) => void;
+  requestBlockCommunity: (community: string) => void;
   confirmBlock: () => void;
   cancelBlock: () => void;
   isBlocking: boolean;
@@ -75,7 +76,7 @@ export function useBlockHandler(
 
   const blockUserMutation = useBlockUser();
   const blockPostMutation = useBlockPost();
-  const blockTopicMutation = useBlockTopic();
+  const blockCommunityMutation = useBlockCommunity();
 
   const requestBlockUser = useCallback(
     (userAddress: string, username?: string) => {
@@ -119,13 +120,13 @@ export function useBlockHandler(
     [requireAuth]
   );
 
-  const requestBlockTopic = useCallback(
-    (topic: string) => {
+  const requestBlockCommunity = useCallback(
+    (community: string) => {
       requireAuth(() => {
         setPendingBlock({
-          id: topic,
-          type: "topic",
-          label: `#${topic}`,
+          id: community,
+          type: "community",
+          label: communityLabel(community) || "this community",
         });
         setShowConfirmation(true);
       });
@@ -146,17 +147,17 @@ export function useBlockHandler(
       const current: UserBlockedResponse = prev ?? {
         blocked_users: [],
         blocked_posts: [],
-        blocked_topics: [],
+        blocked_communities: [],
       };
       const updated = { ...current };
       if (blockType === "user") {
         if (!current.blocked_users.includes(targetId)) {
           updated.blocked_users = [...current.blocked_users, targetId];
         }
-      } else if (blockType === "topic") {
-        const topics = current.blocked_topics ?? [];
-        if (!topics.includes(targetId)) {
-          updated.blocked_topics = [...topics, targetId];
+      } else if (blockType === "community") {
+        const communities = current.blocked_communities ?? [];
+        if (!communities.includes(targetId)) {
+          updated.blocked_communities = [...communities, targetId];
         }
       } else {
         if (!current.blocked_posts.includes(targetId)) {
@@ -194,8 +195,8 @@ export function useBlockHandler(
         let result;
         if (blockType === "user") {
           result = await blockUserMutation.mutateAsync(targetId);
-        } else if (blockType === "topic") {
-          result = await blockTopicMutation.mutateAsync(targetId);
+        } else if (blockType === "community") {
+          result = await blockCommunityMutation.mutateAsync(targetId);
         } else {
           result = await blockPostMutation.mutateAsync(targetId);
         }
@@ -226,13 +227,13 @@ export function useBlockHandler(
         }
       },
     });
-  }, [pendingBlock, enqueue, blockUserMutation, blockPostMutation, blockTopicMutation, onSuccess, onError, optimisticallyAddToBlockedList, walletAddress, queryClient]);
+  }, [pendingBlock, enqueue, blockUserMutation, blockPostMutation, blockCommunityMutation, onSuccess, onError, optimisticallyAddToBlockedList, walletAddress, queryClient]);
 
   return {
     requestBlockUser,
     requestBlockPost,
     requestBlockComment,
-    requestBlockTopic,
+    requestBlockCommunity,
     confirmBlock,
     cancelBlock,
     isBlocking,

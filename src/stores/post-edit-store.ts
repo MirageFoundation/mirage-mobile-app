@@ -3,7 +3,7 @@ import { create } from "zustand";
 export interface PostEditOverride {
   title: string;
   content: string;
-  topic?: string;
+  community?: string;
   tag?: string;
   media?: string[];
   editedAt: number;

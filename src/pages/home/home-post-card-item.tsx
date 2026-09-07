@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/src/components/molecules";
 import { PostCard, PostCardCompact } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
-import { isTopicFollowed as isTopicFollowedByViewer } from "@/src/domain/topics";
+import { isCommunityJoined as isCommunityJoinedByViewer } from "@/src/domain/communities";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
 import { getShareBaseUrl, useFeedDensity } from "@/src/stores";
@@ -28,7 +28,7 @@ import {
 
 type HomePostCardItemProps = {
  post: Post;
-  feedScreen: 'home' | 'following' | 'topic';
+  feedScreen: 'home' | 'following' | 'community';
   feedContext: string;
   onLayout?: (postId: string, event: LayoutChangeEvent) => void;
 };
@@ -61,16 +61,16 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const isFollowing = useFeedPostCardSelector((state) =>
    state.followUserOverrides[post.author.id] ?? state.followedUsers.has(post.author.id),
  );
- // `followedTopics` is normalized (lowercase); post topics keep display casing.
- const isTopicFollowed = useFeedPostCardSelector((state) =>
-   isTopicFollowedByViewer(state.followedTopics, post.topic),
+ // `joinedCommunities` is normalized (lowercase); post topics keep display casing.
+ const isCommunityJoined = useFeedPostCardSelector((state) =>
+   isCommunityJoinedByViewer(state.joinedCommunities, post.community),
  );
  const contentRevealed = useFeedPostCardSelector((state) => state.revealedPosts.has(post.id));
  const voteOverride = useVoteOverride(post.id);
  const commentCountOverride = useCommentCountOverride(post.id);
  const isOwnPost = useFeedPostCardSelector((state) => state.currentUserId === post.author.id);
- const isTopicDisabled = useFeedPostCardSelector((state) =>
-   post.topic ? state.disabledTopicName === post.topic : false,
+ const isCommunityDisabled = useFeedPostCardSelector((state) =>
+   post.community ? state.disabledCommunityName === post.community : false,
  );
  const shareServer = useFeedPostCardSelector((state) => state.shareServer);
  const allowAutoplay = useFeedPostCardSelector((state) => state.allowAutoplay);
@@ -93,13 +93,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
  const isFollowingRef = useRef(isFollowing);
- const isTopicFollowedRef = useRef(isTopicFollowed);
+ const isCommunityJoinedRef = useRef(isCommunityJoined);
   const voteOverrideRef = useRef(voteOverride);
  
  useEffect(() => {
    postRef.current = post;
    isFollowingRef.current = isFollowing;
-   isTopicFollowedRef.current = isTopicFollowed;
+   isCommunityJoinedRef.current = isCommunityJoined;
    voteOverrideRef.current = voteOverride;
  });
 
@@ -153,11 +153,11 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     feedRuntime.getState().handlers.onAuthorPress?.(postRef.current.author.id);
   }, [feedRuntime]);
 
-  const handleTopicPress = useCallback(() => {
+  const handleCommunityPress = useCallback(() => {
     const p = postRef.current;
-    if (!p.topic) return;
-    if (feedRuntime.getState().disabledTopicName === p.topic) return;
-    feedRuntime.getState().handlers.onTopicPress?.(p.topic);
+    if (!p.community) return;
+    if (feedRuntime.getState().disabledCommunityName === p.community) return;
+    feedRuntime.getState().handlers.onCommunityPress?.(p.community);
   }, [feedRuntime]);
 
   const handleMorePress = useCallback(() => {
@@ -206,11 +206,11 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     feedRuntime.getState().handlers.onFollowUser?.(p.author.id, p.author.username, isFollowingRef.current);
   }, [feedRuntime]);
 
-  const handleFollowTopic = useCallback(() => {
+  const handleToggleCommunityMembership = useCallback(() => {
     const p = postRef.current;
-    if (!p.topic) return;
+    if (!p.community) return;
     logPress({ name: "post_follow_topic", postId: p.id });
-    feedRuntime.getState().handlers.onFollowTopic?.(p.topic, isTopicFollowedRef.current);
+    feedRuntime.getState().handlers.onToggleCommunityMembership?.(p.community, isCommunityJoinedRef.current);
   }, [feedRuntime]);
 
   const handleRevealContent = useCallback(() => {
@@ -235,11 +235,11 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     feedRuntime.getState().handlers.onBlockPost?.(p.id);
   }, [feedRuntime]);
 
-  const handleBlockTopic = useCallback(() => {
+  const handleBlockCommunity = useCallback(() => {
     const p = postRef.current;
-    if (!p.topic) return;
+    if (!p.community) return;
     logPress({ name: "post_block_topic", postId: p.id });
-    feedRuntime.getState().handlers.onBlockTopic?.(p.id, p.topic);
+    feedRuntime.getState().handlers.onBlockCommunity?.(p.id, p.community);
   }, [feedRuntime]);
 
   const handleReport = useCallback(() => {
@@ -288,7 +288,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
         ...result,
         title: editOverride.title,
         body: editOverride.content || undefined,
-        topic: editOverride.topic ?? result.topic,
+        community: editOverride.community ?? result.community,
         media: editOverride.media
           ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
           : result.media,
@@ -302,23 +302,23 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       <PostCardCompact
         post={displayPost}
         isOwnPost={isOwnPost}
-        isTopicFollowed={isTopicFollowed}
-        topicDisabled={isTopicDisabled}
+        isCommunityJoined={isCommunityJoined}
+        communityDisabled={isCommunityDisabled}
         contentRevealed={contentRevealed}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
         onPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
-        onTopicPress={handleTopicPress}
+        onCommunityPress={handleCommunityPress}
         onMorePress={handleMorePress}
         onLikePress={handleLikePress}
         onDislikePress={handleDislikePress}
         onCommentPress={handleCommentPress}
         onFollowUser={handleFollowUser}
-        onFollowTopic={handleFollowTopic}
+        onToggleCommunityMembership={handleToggleCommunityMembership}
         onRevealContent={handleRevealContent}
         onBlockUser={handleBlockUser}
         onBlockPost={handleBlockPost}
-        onBlockTopic={handleBlockTopic}
+        onBlockCommunity={handleBlockCommunity}
         onReport={handleReport}
         onMediaPress={handlePostPress}
         onLayout={handleLayout}
@@ -338,7 +338,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      isVisible={isVisible}
      isFocused={isFocused}
      isNearVisible={isNearVisible}
-     isTopicFollowed={isTopicFollowed}
+     isCommunityJoined={isCommunityJoined}
       showFollowButton={true}
      showUrlCard={false}
      allowAutoplay={allowAutoplay}
@@ -348,19 +348,19 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       videoSyncScope={feedContext}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
-      onTopicPress={handleTopicPress}
-      topicDisabled={isTopicDisabled}
+      onCommunityPress={handleCommunityPress}
+      communityDisabled={isCommunityDisabled}
       onMorePress={handleMorePress}
-     directFollowUser={feedScreen === 'topic'}
+     directFollowUser={feedScreen === 'community'}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
      onFollowUser={handleFollowUser}
-     onFollowTopic={handleFollowTopic}
+     onToggleCommunityMembership={handleToggleCommunityMembership}
      onRevealContent={handleRevealContent}
      onBlockUser={handleBlockUser}
      onBlockPost={handleBlockPost}
-     onBlockTopic={handleBlockTopic}
+     onBlockCommunity={handleBlockCommunity}
      onReport={handleReport}
     onMediaPress={handlePostPress}
     onLayout={handleLayout}

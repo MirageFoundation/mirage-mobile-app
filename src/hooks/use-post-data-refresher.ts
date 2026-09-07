@@ -6,11 +6,13 @@ import {
   getUserPosts,
   normalizeUserPostsQueryParams,
 } from "@/src/api/read/endpoints/posts";
+import { withSessionLensPicks } from "@/src/api/read/request-params";
 import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
 import {
   getUserPostsQueryParamsFromKey,
   queryKeys,
 } from "@/src/api/read/query-keys";
+import type { LensRequest } from "@/src/domain/communities";
 import { getVisiblePostIds } from "@/src/services/seen-posts-tracker";
 import { useAppState } from "./use-app-state";
 
@@ -21,8 +23,9 @@ const METADATA_KEYS = [
   "user_weight",
   "edited_at",
   "awards",
-  "agent_edited",
-  "appendices",
+  "lens",
+  "thread_locked",
+  "protocol_version",
 ] as const;
 
 function mergeMetadata(existing: ApiPost, fresh: ApiPost): ApiPost {
@@ -60,25 +63,28 @@ function mergePageMetadata(
 export type FeedRefreshParams = {
   feed?: "home" | "following";
   by?: "magic" | "newest";
-  topic?: string;
+  community?: string;
   allowed_tags?: string;
   limit?: number;
   address?: string;
-};
+} & LensRequest;
 
 export type UserPostsRefreshParams = {
   owner: string;
   address?: string;
   type?: "submissions" | "comments";
   limit?: number;
-};
+} & LensRequest;
 
 async function refreshFeedQuery(
   queryClient: QueryClient,
   feedParams: FeedRefreshParams,
 ) {
+  const resolved = feedParams.community
+    ? feedParams
+    : withSessionLensPicks(feedParams, feedParams.address);
   const queryKey = queryKeys.posts({
-    ...feedParams,
+    ...resolved,
     page: undefined,
   });
 
@@ -88,9 +94,9 @@ async function refreshFeedQuery(
   const freshPages = await Promise.all(
     existingData.pages.map((page, index) =>
       getPosts({
-        ...feedParams,
+        ...resolved,
         page: existingData.pageParams[index] as number,
-        limit: feedParams.limit,
+        limit: resolved.limit,
       }),
     ),
   );

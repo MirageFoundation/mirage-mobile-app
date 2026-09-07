@@ -25,8 +25,8 @@ import { withPowRetry } from "../utils/retry-pow";
 export type ContentTag = "" | ContentWarningId;
 
 export interface CreatePostInput {
-  /** Topic name (required for posts) */
-  topic: string;
+  /** Community slug (required for posts) */
+  community: string;
   /** Post title */
   title: string;
   /** Post content */
@@ -55,8 +55,8 @@ export interface CreateCommentInput {
 export interface EditPostInput {
   /** txhash of post being edited */
   postId: string;
-  /** Topic (required for posts, optional for comments) */
-  topic?: string;
+  /** Community (required for posts, empty for comments) */
+  community?: string;
   /** New title */
   title: string;
   /** New content */
@@ -88,7 +88,7 @@ export async function createPost(
   input: CreatePostInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { topic, title, content, tag = "", media } = input;
+  const { community, title, content, tag = "", media } = input;
 
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
@@ -96,11 +96,12 @@ export async function createPost(
       baseBuilder: canonBasePost,
       payloadFields: {
         target: "",
-        topic,
+        community,
         title,
         content,
         tag,
         media: media ?? [],
+        protocol_version: 1,
       },
       onPoWProgress,
     });
@@ -125,11 +126,12 @@ export async function createComment(
       baseBuilder: canonBasePost,
       payloadFields: {
         target: parentId,
-        topic: "",
+        community: "",
         title,
         content,
         tag,
         media: media ?? [],
+        protocol_version: 1,
       },
       onPoWProgress,
     });
@@ -146,7 +148,7 @@ export async function editPost(
   input: EditPostInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { postId, topic = "", title, content, tag = "", parentId = "", media } = input;
+  const { postId, community = "", title, content, tag = "", parentId = "", media } = input;
 
   if (!postId) {
     throw new Error("editPost: postId is required");
@@ -158,7 +160,7 @@ export async function editPost(
       baseBuilder: canonBaseEdit,
       payloadFields: {
         target: parentId,
-        topic,
+        community,
         title: title || "",
         content: content || "",
         tag,

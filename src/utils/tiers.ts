@@ -1,49 +1,48 @@
+import { parseUserLevel } from "@/src/domain/subscriptions";
+
 export const TIER_NAMES: Record<number, string> = {
   0: "Free",
   1: "Subscriber",
-  10: "Agent",
   100: "Admin",
 };
 
 export const getTierName = (level: number): string => {
-  if (level >= 100) return TIER_NAMES[100];
-  return TIER_NAMES[level] ?? "Free";
+  return parseUserLevel(level).name;
 };
 
 export const TIER_COLORS: Record<number, string> = {
   0: "#6B7280",
   1: "#F59E0B",
-  10: "#EF4444",
   100: "#EF4444",
 };
 
 export const getTierColor = (level: number): string => {
-  if (level >= 100) return TIER_COLORS[100];
-  return TIER_COLORS[level] ?? TIER_COLORS[0];
+  const parsed = parseUserLevel(level);
+  if (parsed.kind === "admin") return TIER_COLORS[100];
+  if (parsed.kind === "subscriber") return TIER_COLORS[1];
+  return TIER_COLORS[0];
 };
 
 export const TIER_USERNAME_COLORS: Record<number, string> = {
   1: "#F59E0B",
-  10: "#EF4444",
   100: "#EF4444",
 };
 
 export const getUsernameColor = (level: number): string | undefined => {
-  if (level >= 100) return TIER_USERNAME_COLORS[100];
-  return TIER_USERNAME_COLORS[level];
+  const parsed = parseUserLevel(level);
+  if (parsed.kind === "admin") return TIER_USERNAME_COLORS[100];
+  if (parsed.kind === "subscriber") return TIER_USERNAME_COLORS[1];
+  return undefined;
 };
 
 export const getTierIndex = (level: number): number => {
-  if (level >= 100) return 2;
-  if (level >= 10) return 2;
-  if (level >= 1) return 1;
-  return 0;
+  return parseUserLevel(level).index ?? -1;
 };
 
 export const TIER_LEVEL_FROM_INDEX: Record<number, number> = {
   0: 0,
   1: 1,
-  2: 10,
+  2: 100,
 };
 
 export type TierPostLimits = {
@@ -54,28 +53,28 @@ export type TierPostLimits = {
 const TIER_POST_LIMITS: Record<number, TierPostLimits> = {
   0: { maxTitleLength: 130, maxContentLength: 1000 },
   1: { maxTitleLength: 200, maxContentLength: 20000 },
-  10: { maxTitleLength: 200, maxContentLength: 20000 },
 };
 
 const DEFAULT_POST_LIMITS: TierPostLimits = TIER_POST_LIMITS[0];
 
 export const getTierPostLimits = (level: number): TierPostLimits => {
-  if (level >= 10) return TIER_POST_LIMITS[10];
-  if (level >= 1) return TIER_POST_LIMITS[1];
-  return TIER_POST_LIMITS[level] ?? DEFAULT_POST_LIMITS;
+  const parsed = parseUserLevel(level);
+  if (parsed.kind === "admin" || parsed.kind === "subscriber") {
+    return TIER_POST_LIMITS[1];
+  }
+  return DEFAULT_POST_LIMITS;
 };
 
 const TIER_EDIT_TIME_LIMITS_MINUTES: Record<number, number> = {
   0: 10,
   1: 60,
-  10: 60,
   100: Infinity,
 };
 
 export const getEditTimeLimitMinutes = (level: number): number => {
-  if (level >= 100) return TIER_EDIT_TIME_LIMITS_MINUTES[100];
-  if (level >= 10) return TIER_EDIT_TIME_LIMITS_MINUTES[10];
-  if (level >= 1) return TIER_EDIT_TIME_LIMITS_MINUTES[1];
+  const parsed = parseUserLevel(level);
+  if (parsed.kind === "admin") return TIER_EDIT_TIME_LIMITS_MINUTES[100];
+  if (parsed.kind === "subscriber") return TIER_EDIT_TIME_LIMITS_MINUTES[1];
   return TIER_EDIT_TIME_LIMITS_MINUTES[0];
 };
 

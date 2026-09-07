@@ -87,8 +87,8 @@ export function SettingsScreen() {
     setHideDownvotedPosts,
     autoCollapseThreshold,
     setAutoCollapseThreshold,
-   topicsBeforeShowMore,
-    setTopicsBeforeShowMore,
+   communitiesBeforeShowMore,
+    setCommunitiesBeforeShowMore,
     peopleBeforeShowMore,
     setPeopleBeforeShowMore,
     autoPlayVideos,
@@ -213,8 +213,8 @@ const handleApiServerChange = useCallback(
   };
 
   const getTopicsCountLabel = () => {
-    if (topicsBeforeShowMore === -1) return "All";
-    return String(topicsBeforeShowMore);
+    if (communitiesBeforeShowMore === -1) return "All";
+    return String(communitiesBeforeShowMore);
   };
 
   const getPeopleCountLabel = () => {
@@ -258,7 +258,30 @@ const handleApiServerChange = useCallback(
             />
           ),
         },
-
+        {
+          id: "curator-invitations",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="mail-outline"
+              title="Curator Invitations"
+              subtitle="Accept or decline team invites"
+              onPress={() => router.push("/curation-invitations" as never)}
+            />
+          ),
+        },
+        {
+          id: "creator-earnings",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="cash-outline"
+              title="Creator Earnings"
+              subtitle="Claim epoch rewards for your posts"
+              onPress={() => router.push("/creator-earnings" as never)}
+            />
+          ),
+        },
       ],
     },
     {
@@ -346,7 +369,7 @@ const handleApiServerChange = useCallback(
             <SettingRow
               type="value"
               icon="folder-outline"
-              title="Topics Before 'Show More'"
+              title="Communities Before 'Show More'"
               subtitle="Number of topics shown in sidebar"
               rightText={getTopicsCountLabel()}
               onPress={() => topicsCountSheetRef.current?.present()}
@@ -722,10 +745,10 @@ const handleApiServerChange = useCallback(
 
       <ValuePickerSheet
         ref={topicsCountSheetRef}
-        title="Topics Before 'Show More'"
+        title="Communities Before 'Show More'"
         options={sidebarCountOptions}
-        value={topicsBeforeShowMore}
-        onChange={setTopicsBeforeShowMore}
+        value={communitiesBeforeShowMore}
+        onChange={setCommunitiesBeforeShowMore}
       />
 
      <ValuePickerSheet

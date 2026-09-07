@@ -1,11 +1,11 @@
 import { Dimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-export type SearchTab = "posts" | "topics" | "users";
+export type SearchTab = "posts" | "communities" | "users";
 
 export const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-export const getTopicIcon = (
+export const getCommunityIcon = (
   topic: string,
 ): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
   const lowerTopic = topic.toLowerCase();

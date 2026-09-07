@@ -111,6 +111,7 @@ export const PostCardMedia = memo(
           <View ref={mediaFrameRef} style={styles.mediaWrapper}>
             <MediaGallery
               media={mediaList}
+              postId={postId}
               onMediaPress={handleGalleryMediaPressWithTransition}
               screenActive={screenActive}
               allowAutoplay={allowAutoplay}

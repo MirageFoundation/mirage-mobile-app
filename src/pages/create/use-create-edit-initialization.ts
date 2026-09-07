@@ -4,7 +4,7 @@ import type { ContentTag } from "@/src/api/write/endpoints/posts";
 import { useDraftStore, type Community, type PostDraft } from "@/src/stores/draft-store";
 
 type EditParams = {
-  editTopic?: string;
+  editCommunity?: string;
   editTitle?: string;
   editBody?: string;
   editTag?: string;
@@ -47,7 +47,7 @@ export function useCreateEditInitialization({
 
     clearDraft();
 
-    const topic = params.editTopic ?? "general";
+    const topic = params.editCommunity ?? "general";
     const community: Community = {
       id: topic,
       name: topic,
@@ -79,7 +79,7 @@ export function useCreateEditInitialization({
     params.editMedia,
     params.editTag,
     params.editTitle,
-    params.editTopic,
+    params.editCommunity,
     setSelectedContentWarning,
     setSelectedStickers,
     updateDraft,

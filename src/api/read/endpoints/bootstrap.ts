@@ -1,8 +1,13 @@
 import { api } from "../../client";
 import type {
+  CommunityPreference,
+  DailyQuota,
+  LensMode,
+  RenewalWarning,
+} from "@/src/domain/communities";
+import type {
   ConfigResponse,
   CommentsResponse,
-  GetInviteCodesResponse,
   InboxResponse,
   NodeConfigResponse,
   PostsResponse,
@@ -10,28 +15,31 @@ import type {
   UserFollowedResponse,
   UserStatusResponse,
 } from "../../types";
-import type { RewardSummaryResponse } from "./rewards";
-import { buildSimpleSignedPayload } from "@/src/api/signing/simple-sign";
-import type { MirageWallet } from "@/src/wallet";
+import { applyLensHttpParams } from "../request-params";
+import { withSignedContentReadParams } from "../signed-content-read";
 
 export interface BootstrapParams {
   address?: string;
   view?:
     | "feed:home"
     | "feed:following"
-    | `topic:${string}`
+    | `community:${string}`
     | `thread:${string}`
     | "inbox";
   by?: "magic" | "newest";
   allowed_tags?: string;
   limit?: number;
+  lens?: LensMode;
+  team_id?: number | null;
+  scope?: "current" | "legacy";
+  lens_picks?: string;
 }
 
 export type BootstrapView =
   | (PostsResponse & {
       kind: "feed";
       feed?: "home" | "following";
-      topic?: string;
+      community?: string;
     })
   | (CommentsResponse & { kind: "thread"; found: true })
   | { kind: "thread"; found: false }
@@ -43,31 +51,42 @@ export interface BootstrapResponse {
   user_status: UserStatusResponse | null;
   user_followed: UserFollowedResponse | null;
   user_blocked: UserBlockedResponse | null;
-  invite_codes?: GetInviteCodesResponse | null;
-  rewards_summary: RewardSummaryResponse | null;
+  community_preferences?: Record<string, CommunityPreference>;
+  daily_quota?: DailyQuota | null;
+  renewal_warning?: RenewalWarning | null;
   view: BootstrapView | null;
+}
+
+function bootstrapReadAction(
+  view: BootstrapParams["view"],
+): "get_posts" | "get_comments" {
+  return typeof view === "string" && view.startsWith("thread:")
+    ? "get_comments"
+    : "get_posts";
+}
+
+function bootstrapLensContext(view: BootstrapParams["view"]) {
+  const raw = typeof view === "string" ? view : "";
+  return {
+    community: raw.startsWith("community:") ? raw.slice("community:".length) : undefined,
+    allowTeamWithoutCommunity: raw.startsWith("thread:"),
+  };
 }
 
 export async function getBootstrap(
   params?: BootstrapParams,
-  wallet?: MirageWallet,
+  options?: { signal?: AbortSignal },
 ): Promise<BootstrapResponse> {
-  const requestParams = params ? { ...params } : {};
-  if (
-    wallet &&
-    params?.address &&
-    wallet.address.toLowerCase() === params.address.toLowerCase()
-  ) {
-    Object.assign(
-      requestParams,
-      buildSimpleSignedPayload(
-        wallet,
-        `get_invite_codes:${wallet.address.toLowerCase()}:{timestamp}:{nonce}`,
-      ),
-    );
-  }
+  const paramsFactory = () => withSignedContentReadParams(
+    applyLensHttpParams(
+      params as Record<string, unknown> | undefined,
+      bootstrapLensContext(params?.view),
+    ),
+    bootstrapReadAction(params?.view),
+  );
   return api.get<BootstrapResponse>(
     "/bootstrap",
-    Object.keys(requestParams).length > 0 ? requestParams : undefined,
+    undefined,
+    { ...options, paramsFactory },
   );
 }

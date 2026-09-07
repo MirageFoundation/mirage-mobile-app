@@ -48,7 +48,7 @@ export const ProfilePostActionSheets = forwardRef<
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
   const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
-  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
+  const blockCommunityOptimistic = useContentModerationStore((s) => s.blockCommunity);
 
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
@@ -128,14 +128,14 @@ export const ProfilePostActionSheets = forwardRef<
 
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "topic") {
-      blockTopicOptimistic(pending.id);
+    if (pending && pending.type === "community") {
+      blockCommunityOptimistic(pending.id);
     } else if (pending && pending.type === "post") {
       globalHidePost(pending.id);
     }
     setSelectedPost(null);
     blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
+  }, [blockHandler, globalHidePost, blockCommunityOptimistic]);
 
   const handleReportSubmit = useCallback(
     (reason: string) => {

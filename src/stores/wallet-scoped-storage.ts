@@ -7,6 +7,7 @@ const WALLET_STORAGE_SCHEMA_VERSION = 1;
 export const PERSISTED_STORE_OWNERSHIP = {
   "auth-storage": "device",
   "preferences-storage": "device",
+  "deferred-campaign-storage": "device",
   "pending-posts-storage": "wallet",
   "comment-compose-storage": "wallet",
   "inbox-store": "wallet",

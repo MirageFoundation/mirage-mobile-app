@@ -1,25 +1,25 @@
-import { normalizeTopicName } from "@/src/domain/topics";
+import {
+  normalizeCommunitySlug,
+  normalizeTypedCommunitySlug,
+} from "@/src/domain/communities";
 
 /**
- * Dedicated `/search_topics` query.
- * Topics are case-insensitive node identities; strip a leading `#` so
- * `#Bitcoin` and `Bitcoin` hit the same lowercase request.
+ * Dedicated community search query.
+ * Communities are case-insensitive identities; strip typed `[slug]`, leftover
+ * `c/`, or leftover `#` so `[Bitcoin]`, `Bitcoin`, and `#Bitcoin` match.
  */
-export function normalizeTopicSearchQuery(
+export function normalizeCommunitySearchQuery(
   query: string | null | undefined,
 ): string {
-  const trimmed = (query ?? "").trim();
-  if (trimmed.startsWith("#")) {
-    return normalizeTopicName(trimmed.slice(1));
-  }
-  return normalizeTopicName(trimmed);
+  return normalizeTypedCommunitySlug(query);
 }
 
 /**
  * Unified `/search` query as sent to the node and stored in the query key.
  *
- * Topic searches (`type === "topics"` or a `#topic` prefix) are lowercased.
- * User/post/general searches are only trimmed so full-text case is preserved.
+ * Community searches (`type === "communities"` or a `[slug]` / leftover
+ * `#community` prefix) are lowercased. User/post/general searches are only
+ * trimmed so full-text case is preserved.
  */
 export function normalizeSearchRequestQuery(
   query: string | null | undefined,
@@ -28,13 +28,17 @@ export function normalizeSearchRequestQuery(
   const trimmed = (query ?? "").trim();
   if (!trimmed) return "";
 
-  if (trimmed.startsWith("#")) {
-    const topic = normalizeTopicName(trimmed.slice(1));
-    return topic ? `#${topic}` : "";
+  if (trimmed.startsWith("[") && trimmed.endsWith("]") && trimmed.length > 2) {
+    return normalizeTypedCommunitySlug(trimmed);
   }
 
-  if (type === "topics") {
-    return normalizeTopicName(trimmed);
+  if (trimmed.startsWith("#")) {
+    const community = normalizeCommunitySlug(trimmed.slice(1));
+    return community ? `#${community}` : "";
+  }
+
+  if (type === "communities") {
+    return normalizeTypedCommunitySlug(trimmed);
   }
 
   return trimmed;

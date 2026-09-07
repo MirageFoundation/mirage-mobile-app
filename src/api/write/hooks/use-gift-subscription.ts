@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/src/api/read/query-keys";
+import { invalidateAccountSnapshot } from "@/src/api/cache/account-status-cache";
 import { useWallet } from "@/src/hooks/use-wallet";
 import {
   giftSubscription,
@@ -19,19 +19,9 @@ export function useGiftSubscription() {
     },
     onSuccess: (_data, { recipient }) => {
       if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userStatus(address),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.parameters(address),
-        });
+        void invalidateAccountSnapshot(queryClient, address);
       }
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.userStatus(recipient),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.profile(recipient),
-      });
+      void invalidateAccountSnapshot(queryClient, recipient);
     },
   });
 }

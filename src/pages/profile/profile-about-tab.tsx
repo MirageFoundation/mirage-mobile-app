@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTimeTickStore } from "@/src/stores";
 import { calculateAccountAgeDays, formatAccountAgeLong } from "@/src/utils/account-age";
-import { TIER_NAMES } from "@/src/utils/tiers";
+import { parseUserLevel } from "@/src/domain/subscriptions";
 
 import {
   usePreferences,
@@ -24,6 +24,7 @@ import {
   useUserBlocked,
   useProfile,
   useProfileByAddress,
+  useAccountStatus,
   useUserStatus,
   useUserStatusByAddress,
   useUsernameFromAddress,
@@ -34,6 +35,7 @@ import type {
   UserStatusResponse,
 } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
+import { AccountStatusNotices } from "@/src/components/molecules/subscription";
 import { Icon, Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 
@@ -243,7 +245,7 @@ function TopicPreferenceItem({
 
   return (
     <Pressable
-      onPress={() => router.push(`/topic/${encodeURIComponent(topic)}`)}
+      onPress={() => router.push(`/c/${encodeURIComponent(topic)}` as never)}
       style={[
         styles.preferenceRow,
         { borderBottomColor: theme.colors.border.subtle },
@@ -400,10 +402,14 @@ function ProfileDetailsSection({
   profile,
   userStatus,
   isLoading,
+  showQuota,
+  quota,
 }: {
   profile: ProfileResponse | undefined;
   userStatus: UserStatusResponse | undefined;
   isLoading: boolean;
+  showQuota?: boolean;
+  quota?: import("@/src/domain/communities").DailyQuota | null;
 }) {
   const { theme } = useUnistyles();
   useTimeTickStore((state) => state.tick);
@@ -428,8 +434,7 @@ function ProfileDetailsSection({
 
   const createdAt = profile?.created_at ?? userStatus?.profile_registered_at;
   const accountAgeDays = calculateAccountAgeDays(createdAt);
-  const tierName =
-    TIER_NAMES[userStatus?.user_level ?? profile?.level ?? 0] ?? "Free";
+  const tierName = parseUserLevel(userStatus?.user_level ?? profile?.level ?? 0).name;
   const balance = userStatus?.balance ?? 0;
   const reserve = userStatus?.reserve_funds ?? profile?.reserve_funds ?? 0;
   const subscriptionExpiry =
@@ -437,8 +442,7 @@ function ProfileDetailsSection({
   const autoRenew = profile?.auto_renew ?? userStatus?.auto_renew ?? false;
   const biography = profile?.biography ?? "";
   const followedUsers = profile?.followed_users?.length ?? 0;
-  const followedTopics = profile?.followed_topics?.length ?? 0;
-  const enabledAgents = profile?.enabled_agents?.length ?? 0;
+  const joinedCommunities = profile?.joined_communities?.length ?? 0;
 
   const details: {
     label: string;
@@ -492,16 +496,9 @@ function ProfileDetailsSection({
   }
   details.push({
     label: "Following",
-    value: `${followedUsers} users, ${followedTopics} topics`,
+    value: `${followedUsers} users, ${joinedCommunities} communities`,
     icon: "people-outline",
   });
-  if (enabledAgents > 0) {
-    details.push({
-      label: "Agents",
-      value: enabledAgents.toString(),
-      icon: "shield-checkmark-outline",
-    });
-  }
 
   return (
     <View style={styles.section}>
@@ -514,6 +511,13 @@ function ProfileDetailsSection({
           Profile Details
         </Text>
       </View>
+      {showQuota ? (
+        <AccountStatusNotices
+          quota={quota}
+          showQuota
+          showRenewal={false}
+        />
+      ) : null}
       {details.map((detail, index) => (
         <View
           key={detail.label}
@@ -578,6 +582,7 @@ export function ProfileAboutTab({
   isOwnProfile = false,
   onBlockedPress,
 }: ProfileAboutTabProps) {
+  const router = useRouter();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -597,6 +602,7 @@ export function ProfileAboutTab({
     useProfileByAddress(isOwnProfile ? null : userAddress);
 
   const { data: ownStatus, isLoading: isLoadingOwnStatus } = useUserStatus();
+  const { data: accountStatus } = useAccountStatus({ enabled: isOwnProfile });
   const { data: otherStatus, isLoading: isLoadingOtherStatus } =
     useUserStatusByAddress(isOwnProfile ? null : userAddress);
 
@@ -621,8 +627,8 @@ export function ProfileAboutTab({
     : isLoadingOtherStatus;
 
   const topics = useMemo(
-    () => [...(preferences?.topics ?? [])].sort((a, b) => b.weight - a.weight),
-    [preferences?.topics],
+    () => [...(preferences?.communities ?? [])].sort((a, b) => b.weight - a.weight),
+    [preferences?.communities],
   );
 
   const authors = useMemo(
@@ -640,7 +646,7 @@ export function ProfileAboutTab({
 
   const blockedUsersCount = blockedData?.blocked_users?.length ?? 0;
   const blockedPostsCount = blockedData?.blocked_posts?.length ?? 0;
-  const blockedTopicsCount = blockedData?.blocked_topics?.length ?? 0;
+  const blockedTopicsCount = blockedData?.blocked_communities?.length ?? 0;
   const shouldShowPreferenceSkeletons =
     isLoadingPrefs && topics.length === 0 && authors.length === 0;
   const shouldShowSimilarSkeleton =
@@ -698,6 +704,35 @@ export function ProfileAboutTab({
         },
       ]}
     >
+      {isOwnProfile && (
+        <Pressable
+          onPress={() => router.push("/curation-invitations" as never)}
+          style={[
+            styles.blockedButton,
+            { borderBottomColor: theme.colors.border.subtle },
+          ]}
+        >
+          <Icon
+            icon={Ionicons}
+            name="mail-outline"
+            size={18}
+            color={theme.colors.text.subtle}
+          />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text size="md" weight="medium" style={{ color: theme.colors.text.default }}>
+              Curator invitations
+            </Text>
+            <Text size="sm" mode="subtle">Accept or decline team invites</Text>
+          </View>
+          <Icon
+            icon={Ionicons}
+            name="chevron-forward"
+            size={18}
+            color={theme.colors.text.subtle}
+          />
+        </Pressable>
+      )}
+
       {isOwnProfile && (blockedUsersCount > 0 || blockedPostsCount > 0 || blockedTopicsCount > 0) && (
         <Pressable
           onPress={onBlockedPress}
@@ -752,8 +787,8 @@ export function ProfileAboutTab({
             <View>
               {topics.slice(0, visibleCount).map((t, i) => (
                 <TopicPreferenceItem
-                  key={t.topic}
-                  topic={t.topic}
+                  key={t.community}
+                  topic={t.community}
                   weight={t.weight}
                   rank={i + 1}
                 />
@@ -827,6 +862,8 @@ export function ProfileAboutTab({
         profile={profile}
         userStatus={userStatus}
         isLoading={isLoadingProfile || isLoadingStatus}
+        showQuota={isOwnProfile}
+        quota={accountStatus?.daily_quota}
       />
     </View>
   );

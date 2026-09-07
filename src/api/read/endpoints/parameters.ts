@@ -1,5 +1,3 @@
-import * as Sentry from "@sentry/react-native";
-
 import { api } from "../../client";
 import type { ParametersResponse, ConfigResponse, NodeConfigResponse } from "../../types";
 
@@ -35,9 +33,10 @@ export interface GetParametersParams {
 }
 
 export async function getParameters(
- params?: GetParametersParams
+ params?: GetParametersParams,
+ options?: { signal?: AbortSignal },
 ): Promise<ParametersResponse> {
- return api.get<ParametersResponse>("/get_parameters", params);
+ return api.get<ParametersResponse>("/get_parameters", params, options);
 }
 
 /** @deprecated Use getChainConfig instead */
@@ -45,47 +44,10 @@ export async function getConfig(): Promise<ConfigResponse> {
  return api.get<ConfigResponse>("/get_chain_config");
 }
 
-export async function getChainConfig(): Promise<ConfigResponse> {
- return api.get<ConfigResponse>("/get_chain_config");
+export async function getChainConfig(options?: { signal?: AbortSignal }): Promise<ConfigResponse> {
+ return api.get<ConfigResponse>("/get_chain_config", undefined, options);
 }
 
-export async function getNodeConfig(): Promise<NodeConfigResponse> {
- try {
-  const response = await api.get<NodeConfigResponse>("/get_node_config");
-  const autoEnabledAgentsCount = response.auto_enabled_agents?.length ?? 0;
-
-  if (__DEV__) {
-   console.log("[auto-enabled-agents] get_node_config", {
-    node_config_auto_enabled_agents: response.auto_enabled_agents ?? [],
-   });
-  }
-
-  Sentry.addBreadcrumb({
-   category: "auto-enabled-agents",
-   message: "Node config fetched",
-   level: autoEnabledAgentsCount > 0 ? "info" : "warning",
-   data: {
-    source: "get_node_config",
-    hasAutoEnabledAgents: Array.isArray(response.auto_enabled_agents),
-    autoEnabledAgentsCount,
-   },
-  });
-
-  return response;
- } catch (error) {
-  Sentry.addBreadcrumb({
-   category: "auto-enabled-agents",
-   message: "Node config fetch failed",
-   level: "error",
-   data: {
-    source: "get_node_config",
-    ...getSafeApiErrorContext(error),
-   },
-  });
-  Sentry.captureException(error, {
-   tags: { feature: "auto-enabled-agents", operation: "get-node-config" },
-   extra: getSafeApiErrorContext(error),
-  });
-  throw error;
- }
+export async function getNodeConfig(options?: { signal?: AbortSignal }): Promise<NodeConfigResponse> {
+  return api.get<NodeConfigResponse>("/get_node_config", undefined, options);
 }

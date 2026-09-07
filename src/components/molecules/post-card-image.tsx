@@ -10,10 +10,8 @@ import {
 } from "react-native";
 import type { ResolvedMedia } from "./post-card-utils";
 import {
-  MEDIA_HORIZONTAL_PADDING,
   MEDIA_LOADED_CACHE,
   MEDIA_MAX_HEIGHT,
-  SCREEN_WIDTH,
 } from "./post-card-media-constants";
 import {
   MediaBlurRevealOverlay,
@@ -23,6 +21,7 @@ import {
 import { postMediaStyles as styles } from "./post-card-media-styles";
 import {
   useMediaAspectRatio,
+  useMediaFrameWidth,
   useMediaLoadedState,
   useMediaPressTransition,
 } from "./post-card-media-shared";
@@ -66,7 +65,8 @@ export const PostCardImage = memo(function PostCardImage({
   const { mediaLoaded, setMediaLoaded, clearLoadingFallback } =
     useMediaLoadedState(resolvedMediaUri);
   const { effectiveAspectRatio, updateMediaAspectRatioFromSize } =
-    useMediaAspectRatio(media, { preserveFallback: !isPostDetail });
+    useMediaAspectRatio(media);
+  const { containerWidth, onMediaLayout } = useMediaFrameWidth();
   const { mediaFrameRef, runWithMediaTransition } = useMediaPressTransition({
     isPostDetail,
     postId,
@@ -106,7 +106,6 @@ export const PostCardImage = memo(function PostCardImage({
 
   if (imageError) return null;
 
-  const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
   const calculatedHeight = containerWidth / effectiveAspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
   const mediaWrapperStyle = exceedsMaxHeight
@@ -117,6 +116,7 @@ export const PostCardImage = memo(function PostCardImage({
     uri: resolvedMediaUri ?? "",
     surface: isPostDetail ? "detail" : "feed",
     mediaType: media.type === "gif" ? "gif" : "image",
+    contentFit: "contain",
     displayWidth: containerWidth,
     intrinsicWidth: media.width,
     intrinsicHeight: media.height,
@@ -125,7 +125,7 @@ export const PostCardImage = memo(function PostCardImage({
 
   return (
     <View style={styles.mediaContainer}>
-      <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
+      <View ref={mediaFrameRef} onLayout={onMediaLayout} style={[styles.mediaWrapper, mediaWrapperStyle]}>
         <Pressable onPress={handleMediaPress} style={styles.media}>
           <Image
             source={getMediaImageSource(imagePolicy)}

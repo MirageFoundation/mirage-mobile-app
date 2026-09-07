@@ -88,7 +88,7 @@ describe("startup route policy", () => {
 
   test("navigates tabs and pushes stack screens after all startup gates", () => {
     expect(resolveStartupRouteAction("/inbox", readyLoggedIn)).toBe("navigate_tab");
-    expect(resolveStartupRouteAction("/topic/mirage", readyLoggedIn)).toBe("push_screen");
+    expect(resolveStartupRouteAction("/c/mirage", readyLoggedIn)).toBe("push_screen");
     expect(resolveStartupRouteAction("/user/alice", readyLoggedIn)).toBe("push_screen");
     expect(resolveStartupRouteAction("/username?ref=alice", {
       ...readyLoggedIn,

@@ -6,7 +6,7 @@ import { createFeedPostCardRuntime } from "../src/pages/home/feed-post-card-runt
 const config = (name: string, revealedPosts = new Set<string>()) => ({
   currentUserId: `${name}-user`,
   followedUsers: new Set<string>(),
-  followedTopics: new Set<string>(),
+  joinedCommunities: new Set<string>(),
   followUserOverrides: {},
   revealedPosts,
   shareServer: "mirage.talk" as const,

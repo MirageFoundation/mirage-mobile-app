@@ -1,21 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "expo-router/react-navigation";
-import { getPosts, type PostsResponse } from "@/src/api";
+import { getPosts, queryKeys, type PostsResponse } from "@/src/api";
 import { consumeBootstrapFeedPreview } from "@/src/api/cache/bootstrap-cache";
-import { useAuthStore } from "@/src/stores";
+import { prepareReadyFeedUpdate, revealReadyFeedUpdate } from "@/src/api/cache/ready-feed-update";
+import { createFeedUpdateRequestGuard } from "@/src/api/cache/feed-update-request";
+import { apiClient } from "@/src/api/client";
+import { usePreferencesStore } from "@/src/stores/preferences-store";
+import { withSessionLensPicks } from "@/src/api/read/request-params";
+import { useAuthStore, useEncodedLensPicks } from "@/src/stores";
+import { getEncodedLensPicks } from "@/src/stores/lens-picks-store";
 import { prefetchFeedImages } from "@/src/utils/feed-image-prefetch";
 import { useAppState } from "./use-app-state";
 import { selectUnseenNewerPosts } from "./new-posts-check";
 
-export type NewPostAvatar = {
-  userId: string;
-  username: string;
-};
+export type NewPostAvatar = { userId: string; username: string };
 
 type UseNewPostsCheckerOptions = {
   feed?: "home" | "following";
   by?: "magic" | "newest";
-  topic?: string;
+  community?: string;
   allowed_tags?: string;
   enabled?: boolean;
   intervalMs?: number;
@@ -23,175 +27,172 @@ type UseNewPostsCheckerOptions = {
   knownPostIds?: Iterable<string> | null;
 };
 
+type ReadyUpdate = {
+  identity: string;
+  liveIdentity: string;
+  serverGeneration: number;
+  posts: PostsResponse["posts"];
+};
+
 export function useNewPostsChecker({
   feed,
   by = "magic",
-  topic,
+  community,
   allowed_tags,
   enabled = true,
   intervalMs = 30_000,
   latestPostTimestamp = null,
   knownPostIds = null,
 }: UseNewPostsCheckerOptions) {
-  const [hasNewPosts, setHasNewPosts] = useState(false);
-  const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
-  const [newPostCount, setNewPostCount] = useState(0);
-  const baselineTimestampRef = useRef<number | null>(null);
-  const latestPostTimestampRef = useRef<number | null>(latestPostTimestamp);
-  latestPostTimestampRef.current = latestPostTimestamp;
-  const hasNewPostsRef = useRef(false);
-  const checkGenerationRef = useRef(0);
-  const lastCheckedAtRef = useRef(Number.NEGATIVE_INFINITY);
-  const prefetchedNewPostsResponseRef = useRef<PostsResponse | null>(null);
+  const queryClient = useQueryClient();
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.walletAddress);
-  const knownPostIdsRef = useRef(knownPostIds);
-  knownPostIdsRef.current = knownPostIds;
-
-  const clearNewPosts = useCallback(() => {
-    hasNewPostsRef.current = false;
-    setHasNewPosts(false);
-    setNewPostAvatars([]);
-    setNewPostCount(0);
-    prefetchedNewPostsResponseRef.current = null;
+  const apiServer = usePreferencesStore((s) => s.apiServer);
+  const encodedPicks = useEncodedLensPicks(walletAddress);
+  const feedParams = useMemo(() => withSessionLensPicks({
+    limit: 10,
+    feed: community ? undefined : feed,
+    by,
+    community: community || undefined,
+    allowed_tags: allowed_tags || undefined,
+    address: walletAddress ?? undefined,
+    lens_picks: community ? undefined : encodedPicks,
+    page: undefined,
+  }, walletAddress), [allowed_tags, by, community, encodedPicks, feed, walletAddress]);
+  const queryKey = queryKeys.posts(feedParams);
+  const identity = JSON.stringify([apiServer, queryKey]);
+  const currentRef = useRef({ identity, enabled, isFocused, latestPostTimestamp, knownPostIds });
+  currentRef.current = { identity, enabled, isFocused, latestPostTimestamp, knownPostIds };
+  const getLiveIdentity = useCallback(() => {
+    const viewer = useAuthStore.getState().walletAddress;
+    const preferences = usePreferencesStore.getState();
+    return JSON.stringify([currentRef.current.identity,
+      apiClient.getCurrentServerContext().generation, viewer,
+      getEncodedLensPicks(viewer), preferences.apiServer,
+      preferences.selectedContentTypes, preferences.adultContentEnabled]);
   }, []);
+  const renderLiveIdentity = getLiveIdentity();
+  const requestGuard = useMemo(() => createFeedUpdateRequestGuard(getLiveIdentity), [getLiveIdentity]);
+  const lastCheckedAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const [ready, setReady] = useState<ReadyUpdate | null>(null);
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+
+  const dismiss = useCallback(() => {
+    requestGuard.cancel();
+    readyRef.current = null;
+    setReady(null);
+  }, [requestGuard]);
 
   useEffect(() => {
-    if (!hasNewPostsRef.current && latestPostTimestamp != null) {
-      baselineTimestampRef.current = latestPostTimestamp;
-    }
-  }, [latestPostTimestamp]);
-
-  const pendingBaselineRestore = useRef(false);
-
-  useEffect(() => {
-    if (pendingBaselineRestore.current && latestPostTimestamp != null) {
-      pendingBaselineRestore.current = false;
-      baselineTimestampRef.current = latestPostTimestamp;
-    }
-  });
-
-  useEffect(() => {
-    checkGenerationRef.current += 1;
-    clearNewPosts();
-    baselineTimestampRef.current = latestPostTimestampRef.current;
-  }, [by, clearNewPosts, feed, topic]);
+    dismiss();
+    lastCheckedAtRef.current = Number.NEGATIVE_INFINITY;
+    return dismiss;
+  }, [identity, dismiss]);
 
   const checkForNewPosts = useCallback(async () => {
-    if (baselineTimestampRef.current == null) return;
-    const checkGeneration = checkGenerationRef.current;
+    const current = currentRef.current;
+    if (!current.enabled || !current.isFocused || current.latestPostTimestamp == null ||
+      current.identity !== identity || getLiveIdentity() !== renderLiveIdentity ||
+      Date.now() - lastCheckedAtRef.current < 5_000) return;
+    const controller = requestGuard.start();
+    if (!controller) return;
+    const liveIdentity = getLiveIdentity();
+    const server = apiClient.getCurrentServerContext();
     lastCheckedAtRef.current = Date.now();
+    const isCurrent = () => requestGuard.isCurrent(controller) &&
+      currentRef.current.enabled && currentRef.current.isFocused &&
+      currentRef.current.identity === identity &&
+      apiClient.getCurrentServerContext().generation === server.generation &&
+      useAuthStore.getState().walletAddress === walletAddress;
     try {
-      const result = consumeBootstrapFeedPreview({
-        feed: topic ? undefined : feed,
+      const fetchPage = async (page: number) => {
+        if (!isCurrent()) throw new Error("Feed check superseded");
+        return getPosts({ ...feedParams, page }, { signal: controller.signal });
+      };
+      const firstPage = consumeBootstrapFeedPreview({
+        ...feedParams,
+        serverIdentity: server.identity,
+      }) ?? await fetchPage(1);
+      if (!isCurrent()) return;
+      const posts = await prepareReadyFeedUpdate({
+        firstPage,
+        fetchPage,
         by,
-        topic,
-        allowed_tags,
-        address: walletAddress ?? undefined,
-      }) ?? await getPosts({
-        limit: 10,
-        feed: topic ? undefined : feed,
-        by,
-        topic: topic || undefined,
-        allowed_tags: allowed_tags || undefined,
-        address: walletAddress ?? undefined,
-        page: 1,
+        baselineTimestamp: current.latestPostTimestamp,
+        knownPostIds: current.knownPostIds,
       });
+      if (!isCurrent()) return;
+      const update = posts.length ? { identity, liveIdentity, serverGeneration: server.generation, posts } : null;
+      readyRef.current = update;
+      setReady(update);
+      prefetchFeedImages(posts);
+    } catch {
+      // A failed/canceled poll must not disturb the visible feed or prior ready data.
+    } finally {
+      requestGuard.finish(controller);
+    }
+  }, [by, feedParams, getLiveIdentity, identity, renderLiveIdentity, requestGuard, walletAddress]);
 
-      if (checkGenerationRef.current !== checkGeneration) return;
-
-      const baseline = baselineTimestampRef.current;
-      if (baseline == null) return;
-      const newerPosts = selectUnseenNewerPosts(result.posts, {
-        baselineTimestamp: baseline,
-        knownPostIds: knownPostIdsRef.current,
-      });
-
-      if (newerPosts.length > 0) {
-        prefetchedNewPostsResponseRef.current = result;
-        prefetchFeedImages(newerPosts);
-        const avatars: NewPostAvatar[] = [];
-        const seen = new Set<string>();
-        for (const post of newerPosts) {
-          if (!seen.has(post.user_id) && avatars.length < 3) {
-            seen.add(post.user_id);
-            avatars.push({ userId: post.user_id, username: post.username });
-          }
-        }
-        setNewPostAvatars(avatars);
-        setNewPostCount(newerPosts.length);
-        if (!hasNewPostsRef.current) {
-          hasNewPostsRef.current = true;
-          setHasNewPosts(true);
-        }
-        return;
-      }
-      clearNewPosts();
-    } catch {}
-  }, [allowed_tags, by, clearNewPosts, feed, topic, walletAddress]);
-
-  useEffect(() => {
-    const prefetched = prefetchedNewPostsResponseRef.current;
-    const baseline = baselineTimestampRef.current;
-    if (!hasNewPostsRef.current || !prefetched || baseline == null) return;
-    const unseen = selectUnseenNewerPosts(prefetched.posts, {
-      baselineTimestamp: baseline,
-      knownPostIds,
-    });
-    if (unseen.length === 0) clearNewPosts();
-  }, [clearNewPosts, knownPostIds]);
-
-  // Feed queries never refetch themselves (see infinite-posts-policy), so this
-  // background poll discovers new posts without duplicating the aggregate cold-
-  // start request immediately after bootstrap hydration.
+  // Stable timer; request parameters are read from the latest render, without
+  // restarting the 30-second interval on every cache/viewability update.
+  const checkRef = useRef(checkForNewPosts);
+  checkRef.current = checkForNewPosts;
   useEffect(() => {
     if (!enabled || !isFocused) return;
-    const interval = setInterval(checkForNewPosts, intervalMs);
+    const interval = setInterval(() => void checkRef.current(), intervalMs);
     return () => clearInterval(interval);
-  }, [enabled, isFocused, checkForNewPosts, intervalMs]);
-
+  }, [enabled, isFocused, intervalMs]);
   useAppState({
-    onForeground: () => {
-      if (enabled) {
-        checkForNewPosts();
-      }
-    },
+    onForeground: () => { void checkRef.current(); },
     staleThreshold: 0,
   });
 
-  const dismiss = useCallback(() => {
-    checkGenerationRef.current += 1;
-    clearNewPosts();
-    // Re-arm against the current top of the feed rather than parking on null.
-    // A manual refresh that returns the same newest post leaves
-    // `latestPostTimestamp` unchanged, so the dependency-driven effect below
-    // would never fire again and the checker would stay dormant for the rest
-    // of the session.
-    pendingBaselineRestore.current = true;
-    baselineTimestampRef.current = latestPostTimestampRef.current;
-  }, [clearNewPosts]);
-
-  const resetBaseline = useCallback((newTimestamp: number | null) => {
-    checkGenerationRef.current += 1;
-    clearNewPosts();
-    if (newTimestamp == null) {
-      pendingBaselineRestore.current = true;
+  const serverGeneration = apiClient.getCurrentServerContext().generation;
+  const visiblePosts = useMemo(() => enabled && ready?.identity === identity &&
+    ready.liveIdentity === renderLiveIdentity &&
+    ready.serverGeneration === serverGeneration
+    ? selectUnseenNewerPosts(ready.posts, {
+      baselineTimestamp: latestPostTimestamp ?? 0,
+      knownPostIds,
+    }) : [], [enabled, ready, identity, renderLiveIdentity, serverGeneration, latestPostTimestamp, knownPostIds]);
+  const newPostAvatars = useMemo(() => {
+    const avatars: NewPostAvatar[] = [];
+    const seenUsers = new Set<string>();
+    for (const post of visiblePosts) {
+      if (avatars.length === 3) break;
+      if (seenUsers.has(post.user_id)) continue;
+      seenUsers.add(post.user_id);
+      avatars.push({ userId: post.user_id, username: post.username });
     }
-    baselineTimestampRef.current = newTimestamp;
-  }, [clearNewPosts]);
+    return avatars;
+  }, [visiblePosts]);
 
-  const getPrefetchedNewPostsResponse = useCallback(
-    () => prefetchedNewPostsResponseRef.current,
-    [],
-  );
+  const resetBaseline = useCallback((_timestamp: number | null) => dismiss(), [dismiss]);
+
+  const applyReadyPosts = useCallback(() => {
+    const update = readyRef.current;
+    if (!update || currentRef.current.identity !== identity || update.identity !== identity ||
+      update.liveIdentity !== getLiveIdentity() ||
+      !currentRef.current.enabled || !currentRef.current.isFocused ||
+      apiClient.getCurrentServerContext().generation !== update.serverGeneration ||
+      useAuthStore.getState().walletAddress !== walletAddress) return false;
+    const posts = selectUnseenNewerPosts(update.posts, {
+      baselineTimestamp: currentRef.current.latestPostTimestamp ?? 0,
+      knownPostIds: currentRef.current.knownPostIds,
+    });
+    const applied = posts.length > 0 && revealReadyFeedUpdate(queryClient, queryKey, posts);
+    dismiss();
+    return applied;
+  }, [dismiss, getLiveIdentity, identity, queryClient, queryKey, walletAddress]);
 
   return {
-    hasNewPosts,
+    hasNewPosts: visiblePosts.length > 0,
     newPostAvatars,
-    newPostCount,
+    newPostCount: visiblePosts.length,
     dismiss,
     resetBaseline,
     checkNow: checkForNewPosts,
-    getPrefetchedNewPostsResponse,
+    applyReadyPosts,
   };
 }

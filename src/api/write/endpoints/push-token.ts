@@ -67,11 +67,10 @@ export async function postUnregisterPushToken(
   baseUrl?: string,
 ): Promise<PushTokenResponse> {
   const response = baseUrl
-    ? (
-        await apiClient
-          .getInstance()
-          .post<PushTokenResponse>(`${baseUrl}/api/core/unregister_push_token`, request)
-      ).data
+    ? await apiClient.postTrustedAbsolute<PushTokenResponse>(
+        `${baseUrl}/api/core/unregister_push_token`,
+        request,
+      )
     : await api.post<PushTokenResponse>("/core/unregister_push_token", request);
 
   Sentry.addBreadcrumb({

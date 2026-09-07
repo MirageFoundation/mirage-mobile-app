@@ -4,22 +4,15 @@ import { useMemo } from "react";
 import {
   PostCardSkeleton,
   PostCardSkeletonList,
-  QuestsSummaryCard,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 
 type HeaderProps = {
   extra?: ReactNode;
-  showQuests: boolean;
 };
 
-export function HomeFeedListHeader({ extra, showQuests }: HeaderProps) {
-  return (
-    <>
-      {extra}
-      {showQuests && <QuestsSummaryCard />}
-    </>
-  );
+export function HomeFeedListHeader({ extra }: HeaderProps) {
+  return <>{extra}</>;
 }
 
 type EmptyProps = {

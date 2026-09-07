@@ -11,12 +11,12 @@ import {
   useLatestRef,
   useNetworkType,
 } from "@/src/hooks";
-import { buildFollowedTopicSet } from "@/src/domain/topics";
+import { buildJoinedCommunitySet } from "@/src/domain/communities";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { useToast } from "@/src/providers/toast-provider";
-import { setHomeEntryFocused } from "@/src/services/home-entry-prompt-orchestrator";
+import { claimHomeEntryFocus } from "@/src/services/home-entry-prompt-orchestrator";
 import { markSeen } from "@/src/services/seen-posts";
 import {
   storage,
@@ -30,9 +30,9 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostActionController } from "../post/use-post-action-controller";
 import type { HomeTabbedFeedRef } from "./home-tabbed-feed";
-import { useHomeEntryPrompts } from "./use-home-entry-prompts";
 import {
   applyFollowUserOverrides,
+  getHomeEntryState,
   getHomeFeedSyncContext,
   getHomeFeedTabIndex,
   getHomeFeedType,
@@ -58,7 +58,6 @@ export function useHomeScreenController() {
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
-  const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [followUserOverrides, setFollowUserOverrides] = useState<Record<string, boolean>>({});
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -68,7 +67,7 @@ export function useHomeScreenController() {
   const hidePost = useContentModerationStore((state) => state.hidePost);
   const unhidePost = useContentModerationStore((state) => state.unhidePost);
   const blockUser = useContentModerationStore((state) => state.blockUser);
-  const blockTopicOptimistic = useContentModerationStore((state) => state.blockTopic);
+  const blockCommunityOptimistic = useContentModerationStore((state) => state.blockCommunity);
   const shareServer = usePreferencesStore((state) => state.apiServer);
   const autoPlayVideos = usePreferencesStore((state) => state.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((state) => state.videoAutoplayNetwork);
@@ -84,21 +83,20 @@ export function useHomeScreenController() {
   void hiddenPostIds;
   void blockedUserIds;
 
-  const { data: nodeConfig } = useNodeConfig();
+  const nodeConfigQuery = useNodeConfig();
   const { data: followedData } = useUserFollowed();
   const networkType = useNetworkType();
   const isHomeFocused = useIsFocused();
-  const homeEntryPrompts = useHomeEntryPrompts();
   const followedUsers = useMemo(() => followedData?.followed_users ?? [], [followedData]);
-  const followedTopics = useMemo(() => followedData?.followed_topics ?? [], [followedData]);
+  const joinedCommunities = useMemo(() => followedData?.joined_communities ?? [], [followedData]);
   const displayFollowedUsers = useMemo(
     () => applyFollowUserOverrides(followedUsers, followUserOverrides),
     [followedUsers, followUserOverrides],
   );
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
-  const followedTopicsSet = useMemo(
-    () => buildFollowedTopicSet(followedTopics),
-    [followedTopics],
+  const joinedCommunitiesSet = useMemo(
+    () => buildJoinedCommunitySet(joinedCommunities),
+    [joinedCommunities],
   );
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
@@ -123,7 +121,7 @@ export function useHomeScreenController() {
   const postActions = usePostActionController({
     currentUserId: currentUser?.id,
     followedUsers: displayFollowedUsers,
-    followedTopics,
+    joinedCommunities,
     savedPostIds,
     onFollowUserOptimistic: setFollowUserOverride,
     onFollowUserRollback: clearFollowUserOverride,
@@ -139,11 +137,11 @@ export function useHomeScreenController() {
     onBlockConfirmed: useCallback((pending) => {
       if (pending.type === "user") blockUser(pending.id);
       else if (pending.type === "post") hidePost(pending.id);
-      else if (pending.type === "topic") {
-        blockTopicOptimistic(pending.id);
+      else if (pending.type === "community") {
+        blockCommunityOptimistic(pending.id);
         showBars();
       }
-    }, [blockTopicOptimistic, blockUser, hidePost, showBars]),
+    }, [blockCommunityOptimistic, blockUser, hidePost, showBars]),
     onDeleteConfirmed: hidePost,
     onDeleteRollback: unhidePost,
     onReportSubmitted: hidePost,
@@ -169,12 +167,12 @@ export function useHomeScreenController() {
   const {
     openOptions,
     followUser,
-    followTopic,
+    toggleCommunityMembership,
     upvote,
     downvote,
     blockUser: blockUserFromCard,
     blockPost,
-    blockTopic,
+    blockCommunity,
     report,
   } = postActions.cardActions;
 
@@ -191,8 +189,8 @@ export function useHomeScreenController() {
     (authorId: string) => router.push(`/user/${authorId}`),
     [router],
   );
-  const handleTopicPress = useCallback(
-    (topic: string) => router.push(`/topic/${encodeURIComponent(topic)}`),
+  const handleCommunityPress = useCallback(
+    (topic: string) => router.push(`/c/${encodeURIComponent(topic)}` as never),
     [router],
   );
   const handleMorePress = useCallback(
@@ -217,8 +215,8 @@ export function useHomeScreenController() {
     [followUser, requireAuth],
   );
   const guardedFollowTopic = useCallback(
-    (topic: string, isFollowed: boolean) => requireAuth(() => followTopic(topic, isFollowed)),
-    [followTopic, requireAuth],
+    (topic: string, isFollowed: boolean) => requireAuth(() => toggleCommunityMembership(topic, isFollowed)),
+    [toggleCommunityMembership, requireAuth],
   );
   const guardedUpvote = useCallback(
     (postId: string, liked: boolean, disliked: boolean, likes: number) =>
@@ -234,7 +232,7 @@ export function useHomeScreenController() {
   const handlersRef = useLatestRef({
     handlePostPress,
     handleAuthorPress,
-    handleTopicPress,
+    handleCommunityPress,
     handleMorePress,
     guardedUpvote,
     guardedDownvote,
@@ -244,13 +242,13 @@ export function useHomeScreenController() {
     handleRevealContent,
     blockUserFromCard,
     blockPost,
-    blockTopic,
+    blockCommunity,
     report,
   });
   const feedRuntimeConfig = useMemo(() => ({
     currentUserId: currentUser?.id,
     followedUsers: followedUsersSet,
-    followedTopics: followedTopicsSet,
+    joinedCommunities: joinedCommunitiesSet,
     followUserOverrides,
     revealedPosts,
     shareServer,
@@ -259,7 +257,7 @@ export function useHomeScreenController() {
     handlers: {
       onPostPress: (postId: string) => handlersRef.current.handlePostPress(postId),
       onAuthorPress: (authorId: string) => handlersRef.current.handleAuthorPress(authorId),
-      onTopicPress: (topic: string) => handlersRef.current.handleTopicPress(topic),
+      onCommunityPress: (topic: string) => handlersRef.current.handleCommunityPress(topic),
       onMorePress: (post: Post) => handlersRef.current.handleMorePress(post),
       onLikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) =>
         handlersRef.current.guardedUpvote(postId, liked, disliked, likes),
@@ -268,20 +266,20 @@ export function useHomeScreenController() {
       onCommentPress: (postId: string) => handlersRef.current.handleCommentPress(postId),
       onFollowUser: (authorId: string, username: string, isFollowing: boolean) =>
         handlersRef.current.guardedFollowUser(authorId, username, isFollowing),
-      onFollowTopic: (topic: string, isFollowed: boolean) =>
+      onToggleCommunityMembership: (topic: string, isFollowed: boolean) =>
         handlersRef.current.guardedFollowTopic(topic, isFollowed),
       onRevealContent: (postId: string) => handlersRef.current.handleRevealContent(postId),
       onBlockUser: (postId: string, authorId: string, username: string) =>
         handlersRef.current.blockUserFromCard(postId, authorId, username),
       onBlockPost: (postId: string) => handlersRef.current.blockPost(postId),
-      onBlockTopic: (postId: string, topic: string) =>
-        handlersRef.current.blockTopic(postId, topic),
+      onBlockCommunity: (postId: string, topic: string) =>
+        handlersRef.current.blockCommunity(postId, topic),
       onReport: (postId: string) => handlersRef.current.report(postId),
     },
   }), [
     allowAutoplay,
     currentUser?.id,
-    followedTopicsSet,
+    joinedCommunitiesSet,
     followedUsersSet,
     followUserOverrides,
     handlersRef,
@@ -341,8 +339,7 @@ export function useHomeScreenController() {
 
   useFocusEffect(useCallback(() => {
     useTimeTickStore.getState().bump();
-    setHomeEntryFocused(true);
-    return () => setHomeEntryFocused(false);
+    return claimHomeEntryFocus();
   }, []));
 
   const handleFeedTypeChange = useCallback((value: string) => {
@@ -357,17 +354,17 @@ export function useHomeScreenController() {
     setNewPostAvatars(avatars);
     setNewPostCount(count);
   }, []);
-  const handleNewPostsPress = useCallback(async () => {
-    setIsBannerLoading(true);
-    try {
-      await tabbedFeedRef.current?.handleNewPostsPress();
-      setHasNewPosts(false);
-    } finally {
-      setIsBannerLoading(false);
-    }
+  const handleNewPostsPress = useCallback(() => {
+    tabbedFeedRef.current?.handleNewPostsPress();
   }, []);
   return {
-    showLoggedOutHome: !isLoggedIn && !isInitializing && !(nodeConfig?.open_browsing_enabled ?? false),
+    entryState: getHomeEntryState({
+      isLoggedIn,
+      isInitializing,
+      openBrowsingEnabled: nodeConfigQuery.data?.open_browsing_enabled,
+      isConfigError: nodeConfigQuery.isError,
+    }),
+    retryNodeConfig: nodeConfigQuery.refetch,
     feedRuntimeConfig,
     tabbedFeedRef,
     shareServer,
@@ -378,8 +375,6 @@ export function useHomeScreenController() {
     handleFeedTypeChange,
     openSideMenu,
     openSearch: () => router.push("/search"),
-    showModerationReminder: homeEntryPrompts.showModerationReminder,
-    moderationReminderHeader: homeEntryPrompts.moderationReminderHeader,
     handleNewPostsChange,
     // Hide the banner whenever this screen isn't focused (e.g. a post detail
     // is open above the feed) so it can't render over or steal taps from
@@ -388,12 +383,7 @@ export function useHomeScreenController() {
     handleNewPostsPress,
     newPostAvatars,
     newPostCount,
-    isBannerLoading,
     easUpdate,
-    showAdultPopup: homeEntryPrompts.showAdultPopup,
-    enableAdultContent: homeEntryPrompts.enableAdultContent,
-    declineAdultContent: homeEntryPrompts.declineAdultContent,
-    openSettings: () => router.push("/settings"),
     postActions,
   };
 }

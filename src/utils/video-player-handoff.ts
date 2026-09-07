@@ -25,6 +25,15 @@ import type { VideoPlayer, VideoSource } from "expo-video";
  */
 
 const appliedSourceUris = new WeakMap<VideoPlayer, string | null>();
+const playbackIntents = new WeakMap<VideoPlayer, boolean>();
+
+export function getVideoPlaybackIntent(player: VideoPlayer): boolean {
+  return playbackIntents.get(player) ?? player.playing;
+}
+
+export function setVideoPlaybackIntent(player: VideoPlayer, playing: boolean): void {
+  playbackIntents.set(player, playing);
+}
 
 /**
  * The uri most recently applied to a controller-owned player via
@@ -156,9 +165,10 @@ export function releaseHandoffPlayer(lease: VideoPlayerLease): void {
   const stack = offerStacks.get(lease.key);
   const offerIndex = stack?.findIndex((entry) => entry.player === lease.player) ?? -1;
   const offer = offerIndex >= 0 ? stack![offerIndex] : undefined;
+  if (!offer || !offer.leases.includes(lease.token)) return;
   if (offer) {
     const tokenIndex = offer.leases.indexOf(lease.token);
-    if (tokenIndex !== -1) offer.leases.splice(tokenIndex, 1);
+    offer.leases.splice(tokenIndex, 1);
     if (offer.leases.length === 0 && offer.revoked) {
       stack!.splice(offerIndex, 1);
       if (stack!.length === 0) offerStacks.delete(lease.key);

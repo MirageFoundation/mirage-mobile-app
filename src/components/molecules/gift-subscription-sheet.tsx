@@ -13,9 +13,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Text } from "@/src/components/ui/primitives";
-import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
+import { SubscriptionPeriodPicker } from "@/src/components/molecules/subscription";
+import { useUserStatus, useUserStatusByAddress } from "@/src/api/read/hooks/use-user-status";
 import { useChainConfig } from "@/src/api/read/hooks/use-parameters";
 import { useGiftSubscription } from "@/src/api/write/hooks/use-gift-subscription";
+import {
+  clampPeriodCount,
+  hasInsufficientSubscriptionBalance,
+  parseModernTiers,
+  projectSubscriptionExpiry,
+  subscriptionDurationSeconds,
+  totalSubscriptionCost,
+  UMIRAGE_PER_MIRAGE,
+} from "@/src/domain/subscriptions";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   generateActionId,
@@ -48,9 +58,13 @@ export const GiftSubscriptionSheet = forwardRef<
   const toast = useToast();
   const [isPresented, setIsPresented] = useState(false);
 
+  const [periodCount, setPeriodCount] = useState(1);
   const { data: userStatus, isPending: isBalanceLoading } = useUserStatus({
     enabled: isPresented,
   });
+  const { data: recipientStatus } = useUserStatusByAddress(
+    isPresented ? recipientAddress : null,
+  );
   const { data: chainConfig } = useChainConfig({ enabled: isPresented });
   const giftSubMutation = useGiftSubscription();
   const giftAsyncRef = useRef(giftSubMutation.mutateAsync);
@@ -64,28 +78,43 @@ export const GiftSubscriptionSheet = forwardRef<
   const balance = userStatus?.balance ?? 0;
   const balanceMirage = balance / 1_000_000;
 
+  const selectedPeriodCount = clampPeriodCount(periodCount);
   const periodFee = useMemo(() => {
-    const tiers = chainConfig?.tiers;
-    if (!tiers || tiers.length < 2) return 0;
-    return Number(tiers[1].period_fee) || 0;
+    const tiers = parseModernTiers(chainConfig?.tiers);
+    return tiers ? Number(tiers[1].period_fee) || 0 : 0;
   }, [chainConfig]);
-
-  const periodFeeMirage = periodFee / 1_000_000;
-  // Only flag insufficient balance once the balance is actually known;
-  // an unresolved status query must not surface a false "Insufficient Balance".
-  const insufficientBalance = balanceKnown && periodFee > 0 && balance < periodFee;
+  const totalCost = totalSubscriptionCost(periodFee, selectedPeriodCount);
+  const periodFeeMirage = periodFee / UMIRAGE_PER_MIRAGE;
+  const totalCostMirage = totalCost / UMIRAGE_PER_MIRAGE;
+  const insufficientBalance = balanceKnown && hasInsufficientSubscriptionBalance({
+    balance,
+    periodFee,
+    periodCount: selectedPeriodCount,
+  });
   const canSend = periodFee > 0 && !insufficientBalance;
 
-  const expiryDate = useMemo(() => {
-    const periodSeconds = chainConfig?.subscription_period ?? 0;
-    if (!periodSeconds) return "";
-    const expiry = new Date(Date.now() + periodSeconds * 1000);
-    return expiry.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
+  const expiry = useMemo(() => {
+    const durationSeconds = subscriptionDurationSeconds(
+      chainConfig?.subscription_period ?? 0,
+      selectedPeriodCount,
+    );
+    if (!durationSeconds) return null;
+    const recipientExpiry = recipientStatus?.subscription_expiry;
+    const hasExactExpiry = typeof recipientExpiry === "number" && recipientExpiry > 0;
+    const expirySeconds = projectSubscriptionExpiry({
+      nowSeconds: Math.floor(Date.now() / 1000),
+      currentExpiry: hasExactExpiry ? recipientExpiry : 0,
+      durationSeconds,
     });
-  }, [chainConfig]);
+    return {
+      exact: hasExactExpiry,
+      label: new Date(expirySeconds * 1000).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    };
+  }, [chainConfig?.subscription_period, recipientStatus?.subscription_expiry, selectedPeriodCount]);
 
   const present = useCallback(() => {
     setIsPresented(true);
@@ -136,7 +165,7 @@ export const GiftSubscriptionSheet = forwardRef<
       execute: () =>
         giftAsyncRef.current({
           recipient: recipientAddress,
-          level: 1,
+          periodCount: selectedPeriodCount,
         }),
       onSuccess: () => {
         sendGuardRef.current.release();
@@ -156,7 +185,7 @@ export const GiftSubscriptionSheet = forwardRef<
         sendGuardRef.current.release();
       },
     });
-  }, [canSend, recipientAddress, recipientUsername, enqueue, toast, dismiss, onSuccess]);
+  }, [canSend, recipientAddress, recipientUsername, selectedPeriodCount, enqueue, toast, dismiss, onSuccess]);
 
   const footerHeight = Platform.OS === "ios" ? insets.bottom : insets.bottom + 30;
 
@@ -195,6 +224,11 @@ export const GiftSubscriptionSheet = forwardRef<
           )}
         </View>
 
+        <SubscriptionPeriodPicker value={selectedPeriodCount} onChange={setPeriodCount} />
+        <Text size="xs" mode="subtle" style={{ marginBottom: theme.spacing.md }}>
+          {formatCompactNumber(periodFeeMirage)} MIRAGE per period · {selectedPeriodCount} selected
+        </Text>
+
         <View
           style={[
             styles.card,
@@ -211,11 +245,11 @@ export const GiftSubscriptionSheet = forwardRef<
             Gift subscription to @{recipientUsername}?
           </Text>
           <Text size="xxl" weight="bold" style={{ color: getTierColor(1) }}>
-            {formatCompactNumber(periodFeeMirage)} MIRAGE
+            {formatCompactNumber(totalCostMirage)} MIRAGE
           </Text>
-          {expiryDate ? (
+          {expiry ? (
             <Text size="sm" mode="subtle">
-              Until {expiryDate}
+              {expiry.exact ? `Until ${expiry.label}` : `Estimated until ${expiry.label}`}
             </Text>
           ) : null}
         </View>

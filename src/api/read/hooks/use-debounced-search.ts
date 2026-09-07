@@ -6,8 +6,10 @@ import {
   isDebouncedSearchPending,
   normalizeSearchRequestQuery,
 } from "../search-query";
+import { withSessionLensPicks } from "../request-params";
 import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, useEncodedLensPicks } from "@/src/stores";
+import { shouldRetrySignedContentRead } from "../signed-content-read";
 
 /**
  * Debounced search hook for search-as-you-type functionality
@@ -22,11 +24,19 @@ export function useDebouncedSearch(
   params?: Omit<SearchParams, "q" | "address">
 ) {
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const encodedPicks = useEncodedLensPicks(walletAddress);
   const searchType = params?.type;
+  const lensParams = withSessionLensPicks({
+    lens: params?.lens,
+    team_id: params?.team_id,
+    scope: params?.scope,
+    lens_picks: params?.lens_picks ?? encodedPicks,
+    offset: params?.offset,
+  }, walletAddress);
 
   // Debounce the query
   useEffect(() => {
@@ -48,16 +58,26 @@ export function useDebouncedSearch(
 
   // Perform the search with debounced query
   const searchQuery = useQuery({
-    queryKey: queryKeys.search(debouncedQuery!, params?.type, params?.limit, allowedTags, walletAddress),
-    queryFn: () =>
+    queryKey: queryKeys.search(
+      debouncedQuery!,
+      params?.type,
+      params?.limit,
+      allowedTags,
+      walletAddress,
+      lensParams,
+    ),
+    queryFn: ({ signal }) =>
       search({
         q: debouncedQuery!,
         address: walletAddress ?? undefined,
         allowed_tags: allowedTags || undefined,
         ...params,
-      }),
+        ...lensParams,
+      }, { signal }),
     enabled: !!debouncedQuery && debouncedQuery.length >= 1,
     staleTime: 1000 * 60, // 1 minute
+    retry: (failureCount, error) =>
+      shouldRetrySignedContentRead(failureCount, error),
   });
 
   // Determine if we're waiting for debounce or fetching
@@ -79,14 +99,14 @@ export function useDebouncedSearch(
 }
 
 /**
- * Debounced search for topics only
+ * Debounced search for communities only
  */
-export function useDebouncedSearchTopics(
+export function useDebouncedSearchCommunities(
   query: string | undefined | null,
   delay = 300,
   limit?: number
 ) {
-  return useDebouncedSearch(query, delay, { type: "topics", limit });
+  return useDebouncedSearch(query, delay, { type: "communities", limit });
 }
 
 /**

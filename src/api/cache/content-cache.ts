@@ -1,5 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { readThreadAncestors } from "@/src/api/read/thread-ancestors";
+import type { CommentsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
 
 export function getPostQueries(queryClient: QueryClient) {
   return queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
@@ -7,6 +9,23 @@ export function getPostQueries(queryClient: QueryClient) {
 
 export function getCommentQueries(queryClient: QueryClient) {
   return queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() });
+}
+
+export function findCachedThreadRoot(
+  queryClient: QueryClient,
+  postId: string,
+): PostWithChildren | ApiPost | null {
+  const target = postId.toLowerCase();
+  for (const [, data] of getCommentQueries(queryClient)) {
+    const comments = data as CommentsResponse | undefined;
+    const thread = readThreadAncestors(comments);
+    const root = thread.rootPost ?? comments?.root;
+    if (root?.post_id?.toLowerCase() === target) return root;
+    if (thread.rootPostId?.toLowerCase() === target && thread.rootPost) {
+      return thread.rootPost;
+    }
+  }
+  return null;
 }
 
 export function cancelPostAndCommentQueries(queryClient: QueryClient): Promise<void[]> {

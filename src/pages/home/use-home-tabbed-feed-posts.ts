@@ -33,7 +33,7 @@ export function useHomeTabbedFeedPosts({
   const currentUser = useAuthStore((state) => state.user);
   const hiddenPostIds = useContentModerationStore((state) => state.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((state) => state.blockedUserIds);
-  const blockedTopicNames = useContentModerationStore((state) => state.blockedTopicNames);
+  const blockedCommunityNames = useContentModerationStore((state) => state.blockedCommunityNames);
   const hideDownvotedPosts = usePreferencesStore((state) => state.hideDownvotedPosts);
   const pendingApiPosts = usePendingPostsStore((state) => state.posts);
   const postEditOverrides = usePostEditStore((state) => state.overrides);
@@ -110,7 +110,7 @@ export function useHomeTabbedFeedPosts({
           ...post,
           title: override.title,
           content: override.content,
-          topic: override.topic ?? post.topic,
+          community: override.community ?? post.community,
           media: override.media ?? post.media,
         };
       });
@@ -122,7 +122,7 @@ export function useHomeTabbedFeedPosts({
     clearTransformedPageCache();
   }, [
     applyPostEditOverrides,
-    blockedTopicNames,
+    blockedCommunityNames,
     blockedUserIds,
     clearTransformedPageCache,
     currentUser?.id,
@@ -183,7 +183,7 @@ export function useHomeTabbedFeedPosts({
           (post) =>
             !hiddenPostIds.has(post.id) &&
             !blockedUserIds.has(post.author.id) &&
-            !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
+            !(post.community && blockedCommunityNames.has(post.community.toLowerCase())),
         );
       const pendingPosts = filterModeratedPosts(
         transformApiPosts(reconciledPendingApiPosts, {
@@ -233,7 +233,7 @@ export function useHomeTabbedFeedPosts({
     [
       applyPostEditOverrides,
       baseFeed,
-      blockedTopicNames,
+      blockedCommunityNames,
       blockedUserIds,
       currentUser?.id,
       currentUser?.username,

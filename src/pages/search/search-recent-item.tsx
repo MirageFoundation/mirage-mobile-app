@@ -4,6 +4,7 @@ import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { Text } from "@/src/components/ui/primitives";
 import type { RecentSearch } from "@/src/stores";
+import { recentSearchLabel } from "./search-state";
 import { styles } from "./search-styles";
 
 type SearchRecentItemProps = {
@@ -21,12 +22,15 @@ export function SearchRecentItem({
   onPress,
   onRemove,
 }: SearchRecentItemProps) {
+  const label = recentSearchLabel(item.query);
   return (
     <Animated.View
       entering={FadeInDown.delay(index * 50).duration(200)}
       layout={Layout.springify()}
     >
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Search ${label}`}
         onPress={() => onPress(item)}
         style={({ pressed }) => [
           styles.recentSearchItem,
@@ -36,10 +40,12 @@ export function SearchRecentItem({
         <View style={styles.recentSearchLeft}>
           <Ionicons name="time-outline" size={18} color={textSubtleColor} />
           <Text size="md" style={{ flex: 1 }}>
-            {item.query}
+            {label}
           </Text>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Remove recent search ${label}`}
           onPress={() => onRemove(item.id)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={({ pressed }) => [

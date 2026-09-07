@@ -4,7 +4,7 @@ import { memo } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
-import { hasHashtags, parseHashtags } from "@/src/utils/hashtag-parser";
+import { hasCommunityMentions, parseCommunityReferences } from "@/src/utils/community-reference-parser";
 
 type PostCardContentProps = {
   title: string;
@@ -41,8 +41,8 @@ export const PostCardContent = memo(function PostCardContent({
       >
         {hasSpoilers(title)
           ? parseSpoilers(title)
-          : hasHashtags(title)
-          ? parseHashtags(title)
+          : hasCommunityMentions(title)
+          ? parseCommunityReferences(title)
           : title}
       </Text>
 

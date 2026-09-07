@@ -1,22 +1,27 @@
+import { useEffect, useState } from "react";
+import { useIsFocused } from "expo-router/react-navigation";
+import { usePostDetailActionStateStore } from "@/src/stores/post-detail-action-state-store";
 import type { CommentsResponse } from "@/src/api/types";
 import type { Post } from "@/src/components/molecules";
-import { Box } from "@/src/components/ui/primitives";
+import { Box, Text } from "@/src/components/ui/primitives";
+import { ModerationProvider } from "@/src/features/moderation/moderation-provider";
+import { getThreadReplyPolicy } from "@/src/domain/content";
 import type { useAuthGuard } from "@/src/hooks";
 import type { useAuthStore } from "@/src/stores/auth-store";
-import type { ViewStyle } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import type { AnimatedStyle } from "react-native-reanimated";
-import { useUnistyles } from "react-native-unistyles";
+import { View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import { SwipeBackGestureContext } from "@/src/components/ui/swipe-back-guard";
+import { usePostDetailDismiss } from "./use-post-detail-dismiss";
 
 import { PostDetailActionSheets } from "./post-detail-action-sheets";
 import { PostDetailCommentComposer } from "./post-detail-comment-composer";
 import { PostDetailCommentsSection } from "./post-detail-comments-section";
-import { formatPostDetailCount } from "./post-detail-controller";
+import { PostCommentsHeading } from "./post-comments-heading";
 import type { PostDetailController } from "./use-post-detail-controller";
 import { PostDetailHeader } from "./post-detail-header";
 import { PostDetailNotFound } from "./post-detail-not-found";
 import { PostDetailPostSection } from "./post-detail-post-section";
-import { PostDetailStickySummary } from "./post-detail-sticky-summary";
 import { styles } from "./post-detail-styles";
 import type { usePostDetailFocusedThread } from "./use-post-detail-focused-thread";
 
@@ -37,17 +42,15 @@ type PostDetailSectionsProps = {
   isViewingComment: boolean;
   effectiveCommentsData?: CommentsResponse;
   focusedThread: FocusedThread;
-  followedTopics: string[];
+  joinedCommunities: string[];
   followedUsers: string[];
   isCommentsError: boolean;
   isFetchingComments: boolean;
   isLoadingComments: boolean;
-  isRefetchingComments: boolean;
   shouldUseOptimisticRootFallback: boolean;
   screenActive: boolean;
   shareServer: string;
   videoSyncScope?: string;
-  postEnteringStyle: AnimatedStyle<ViewStyle>;
   isLoggedIn: boolean;
   showAuthSheet: () => void;
   requireAuth: AuthGuard["requireAuth"];
@@ -67,30 +70,39 @@ export function PostDetailSections({
   isViewingComment,
   effectiveCommentsData,
   focusedThread,
-  followedTopics,
+  joinedCommunities,
   followedUsers,
   isCommentsError,
   isFetchingComments,
   isLoadingComments,
-  isRefetchingComments,
   shouldUseOptimisticRootFallback,
   screenActive,
   shareServer,
   videoSyncScope,
-  postEnteringStyle,
   isLoggedIn,
   showAuthSheet,
   requireAuth,
   refetchComments,
 }: PostDetailSectionsProps) {
-  const { theme } = useUnistyles();
+  const isFocused = useIsFocused();
+  const onBack = controller.availability.useUnavailableBack ? controller.navigation.unavailableBack : controller.navigation.back;
+  const dismissGestures = usePostDetailDismiss(controller.scroll.scrollY, isFocused && screenActive, onBack);
+  const [postHeaderHeight, setPostHeaderHeight] = useState(0);
+  const commentsRequestedFor = usePostDetailActionStateStore((state) => state.commentsRequestedFor);
+  const commentsRef = controller.refs.commentsSectionRef;
+  useEffect(() => {
+    if (!isFocused || commentsRequestedFor !== displayPost?.id || !displayPost || postHeaderHeight <= 0) return;
+    controller.scroll.suppressHighlightAutoScroll();
+    commentsRef.current?.scrollToOffset({ offset: postHeaderHeight, animated: true });
+    usePostDetailActionStateStore.getState().requestComments(null);
+  }, [commentsRef, commentsRequestedFor, controller.scroll, displayPost, isFocused, postHeaderHeight]);
   const header = (
     <PostDetailHeader
-      topic={displayPost?.topic}
+      topic={displayPost?.community}
       isLoadingTopic={!displayPost && isLoadingComments}
       insetsTop={insetsTop}
-      onBack={controller.availability.useUnavailableBack ? controller.navigation.unavailableBack : controller.navigation.back}
-      onTopicPress={controller.navigation.topicPress}
+      onBack={onBack}
+      onCommunityPress={controller.navigation.communityPress}
       onOptionsPress={displayPost ? () => requireAuth(() => controller.refs.actionSheetsRef.current?.presentPostOptions()) : undefined}
     />
   );
@@ -107,41 +119,42 @@ export function PostDetailSections({
   }
 
   const listHeader = (
+    <>
     <PostDetailPostSection
       actionSheetsRef={controller.refs.actionSheetsRef}
       contentInitiallyRevealed={reveal === "true"}
       currentUserId={currentUser?.id}
       focusedCommentId={focusedThread.focusedCommentId}
       focusedCommentNotFound={focusedThread.isFocusedCommentNotFound}
-      followedTopics={followedTopics}
+      joinedCommunities={joinedCommunities}
       hasFocusedRecentContext={controller.thread.hasRecentContext}
       hasFullThreadBeyondFocus={controller.thread.hasFullThreadBeyondFocus}
       id={id}
       isVideoVisible={controller.scroll.isVideoVisible}
       loadFocusedContext={controller.thread.loadFocusedContext}
-      onLayout={controller.scroll.handlePostHeaderLayout}
+      onMediaLayout={controller.scroll.handleMediaLayout}
+      onLayout={(event) => {
+        setPostHeaderHeight(event.nativeEvent.layout.height);
+      }}
       onShowFullThread={controller.thread.showFullThread}
       post={displayPost}
-      postEnteringStyle={postEnteringStyle}
       recentContextDone={controller.thread.recentContextDone}
       screenActive={screenActive}
       shareServer={shareServer}
       videoSyncScope={videoSyncScope}
     />
+    <PostCommentsHeading sort={controller.thread.commentSort} onSort={controller.thread.setCommentSort} />
+    </>
   );
 
   return (
+    <ModerationProvider root={{ postId: id, authorId: displayPost?.author.id ?? "", community: displayPost?.rootCommunity || displayPost?.community, lens: displayPost?.lens, rootHash: focusedThread.actualRootPostId }}>
     <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
       <Box flex background="base">
+        <SwipeBackGestureContext.Provider value={dismissGestures}>
+        <GestureDetector gesture={dismissGestures.pan}>
+        <View style={{ flex: 1 }} collapsable={false}>
         {header}
-        <PostDetailStickySummary
-          animatedStyle={controller.scroll.stickyHeaderAnimatedStyle}
-          formatCount={formatPostDetailCount}
-          insetsTop={insetsTop}
-          isInteractive={controller.scroll.isStickyInteractive}
-          post={displayPost}
-          theme={theme}
-        />
         <PostDetailCommentsSection
           ref={controller.refs.commentsSectionRef}
           comments={controller.thread.allComments}
@@ -157,7 +170,7 @@ export function PostDetailSections({
           isLoadingContext={focusedThread.isLoadingContext}
           isLoadingFocusedComment={focusedThread.isLoadingFocusedComment}
           isLoadingFullThreadComments={focusedThread.isLoadingFullThreadComments}
-          isRefetchingComments={isRefetchingComments}
+          scrollY={controller.scroll.scrollY}
           listHeader={listHeader}
           onAuthorPress={controller.navigation.authorPress}
           onContentSizeChange={controller.scroll.handleContentSizeChange}
@@ -166,11 +179,35 @@ export function PostDetailSections({
           onHighlightedLayout={controller.scroll.handleHighlightedCommentLayout}
           onLikeComment={controller.thread.handleLikeComment}
           onMoreOptions={controller.thread.moreOptions}
-          onRefreshComments={refetchComments}
+          onRetryComments={refetchComments}
           onReplyToComment={controller.thread.replyToComment}
+          repliesEnabled={getThreadReplyPolicy(
+            focusedThread.actualRootPost ?? effectiveCommentsData?.root ?? {
+              protocol_version: displayPost?.protocolVersion,
+              thread_locked: displayPost?.threadLocked,
+            },
+          ).canReply}
           onScroll={controller.scroll.handleScroll}
           onScrollBeginDrag={controller.scroll.handleUserScrollBeginDrag}
         />
+        </View>
+        </GestureDetector>
+        </SwipeBackGestureContext.Provider>
+        {(() => {
+          const replyPolicy = getThreadReplyPolicy(
+            focusedThread.actualRootPost ?? effectiveCommentsData?.root ?? {
+              protocol_version: displayPost?.protocolVersion,
+              thread_locked: displayPost?.threadLocked,
+            },
+          );
+          if (!replyPolicy.canReply) {
+            return (
+              <Box p="md" style={{ alignItems: "center" }}>
+                <Text size="sm" mode="subtle">{replyPolicy.notice}</Text>
+              </Box>
+            );
+          }
+          return (
         <PostDetailCommentComposer
           ref={controller.refs.commentComposerRef}
           addReplyOptimisticComment={controller.composer.addReplyOptimisticComment}
@@ -196,11 +233,13 @@ export function PostDetailSections({
           requireAuth={requireAuth}
           rootPostCommentCount={post?.comments ?? 0}
         />
+          );
+        })()}
         <PostDetailActionSheets
           ref={controller.refs.actionSheetsRef}
           actualRootPostId={focusedThread.actualRootPostId}
           currentUserId={currentUser?.id}
-          followedTopics={followedTopics}
+          joinedCommunities={joinedCommunities}
           followedUsers={followedUsers}
           highlight={highlight}
           id={id}
@@ -209,5 +248,6 @@ export function PostDetailSections({
         />
       </Box>
     </KeyboardAvoidingView>
+    </ModerationProvider>
   );
 }

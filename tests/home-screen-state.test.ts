@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   applyFollowUserOverrides,
+  getHomeEntryState,
   getHomeFeedSyncContext,
   getHomeFeedTabIndex,
   getHomeFeedType,
@@ -11,6 +12,44 @@ import {
 } from "../src/pages/home/home-screen-state";
 
 describe("home screen state", () => {
+  const guest = { isLoggedIn: false, isInitializing: false, isConfigError: false };
+
+  test("does not treat unresolved guest configuration as closed browsing", () => {
+    expect(getHomeEntryState({ ...guest, openBrowsingEnabled: undefined })).toBe("loading");
+    expect(getHomeEntryState({ ...guest, openBrowsingEnabled: true })).toBe("feed");
+    expect(getHomeEntryState({ ...guest, openBrowsingEnabled: false })).toBe("welcome");
+  });
+
+  test("waits for wallet initialization before selecting the guest welcome", () => {
+    expect(getHomeEntryState({
+      ...guest, isInitializing: true, openBrowsingEnabled: false,
+    })).toBe("loading");
+  });
+
+  test("keeps authenticated feeds available during startup and config failure", () => {
+    for (const openBrowsingEnabled of [undefined, false, true]) {
+      expect(getHomeEntryState({
+        ...guest, isLoggedIn: true, isInitializing: true,
+        isConfigError: true, openBrowsingEnabled,
+      })).toBe("feed");
+    }
+  });
+
+  test("failed guest config is an error, not a welcome or permanent loader", () => {
+    expect(getHomeEntryState({
+      ...guest, isConfigError: true, openBrowsingEnabled: undefined,
+    })).toBe("error");
+  });
+
+  test("retains authoritative cached browsing policy through background errors", () => {
+    expect(getHomeEntryState({
+      ...guest, isConfigError: true, openBrowsingEnabled: true,
+    })).toBe("feed");
+    expect(getHomeEntryState({
+      ...guest, isConfigError: true, openBrowsingEnabled: false,
+    })).toBe("welcome");
+  });
+
   test("maps header selections to tab and navigation context", () => {
     expect(HOME_FEED_OPTIONS).toEqual([
       { label: "Magic", value: "magic" },
@@ -34,8 +73,7 @@ describe("home screen state", () => {
     expect(applyFollowUserOverrides(followed, {})).toEqual(followed);
   });
 
-  test("maps reminder state to the header accent", () => {
-    expect(getHomeHeaderBorderColor(true, "#ff0000")).toBe("#ff000040");
-    expect(getHomeHeaderBorderColor(false, "#ff0000")).toBeUndefined();
+  test("does not accent the header for retired agent reminders", () => {
+    expect(getHomeHeaderBorderColor()).toBeUndefined();
   });
 });
